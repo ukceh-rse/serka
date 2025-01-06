@@ -1,0 +1,36 @@
+[project]
+name = "serka"
+version = "0.1.0"
+description = "Serka (serĉi ekologio) is a protoype search tool for the UKCEH NCUK project. It uses modern AI techniques (LLMs, RAG, Vector Stores) to enhance the EIDC catalogue's search functionality."
+readme = "README.md"
+authors = [
+    { name = "Matthew Coole", email = "matcoo@ceh.ac.uk" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=0.6.1",
+    "fastapi[standard]>=0.115.6",
+]
+
+[project.scripts]
+serka = "serka:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.14.1",
+    "pre-commit>=4.0.1",
+    "pytest>=8.3.4",
+    "ruff>=0.8.6",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "tab"
+
+[tool.mypy]
+files = ["src", "tests"]
+strict = true
