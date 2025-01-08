@@ -1,0 +1,26 @@
+version: '3.8'
+name: serka
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: serka-image
+    container_name: serka-container
+    ports:
+      - "8000:8000"
+    depends_on:
+      - chromadb
+    networks:
+      - internal
+
+  chromadb:
+    image: chromadb/chroma
+    container_name: chromadb-container
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge

@@ -1,0 +1,15 @@
+version: '3.8'
+name: serka
+
+services:
+  app:
+    volumes:
+      - ./src:/app/src
+    environment:
+      - PYTHONPATH=/app/src
+      - DEBUG=1
+    command: ["uv", "run", "fastapi", "dev", "src/serka/main.py", "--host", "0.0.0.0", "--port", "8000"]
+
+  chromadb:
+    ports:
+      - "8001:8000"
