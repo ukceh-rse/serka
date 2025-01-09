@@ -24,9 +24,9 @@ jobs:
         uv sync
     - name: Test with pytest
       id: tests
-      run: uv run pytest --cov==src
+      run: uv run pytest --cov==src --co-report=xml > pytest.log
     - id: coverage
-      run: echo "${{ steps.tests.outputs.data }}" | grep TOTAL | awk "{print $NF}"
+      run: cat pytest.log | grep TOTAL | awk "{print $NF}"
     - name: Generate coverage badge
       run: |
         pip install setuptools pybadges
@@ -36,11 +36,3 @@ jobs:
       with:
         name: coverage-badge
         path: coverage-badge.svg
-    - name: Setup Pages
-      uses: actions/configure-pages@v4
-    - name: Upload Pages artifact
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: coverage-badge.svg
-    - name: Deploy to GitHub Pages
-      uses: actions/deploy-pages@v4
