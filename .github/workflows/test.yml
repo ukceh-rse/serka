@@ -24,13 +24,13 @@ jobs:
         uv sync
     - name: Test with pytest
       id: tests
-      run: uv run pytest --cov==src --co-report=xml > pytest.log
+      run: uv run pytest --cov=src | tee pytest.log
     - id: coverage
-      run: cat pytest.log | grep TOTAL | awk "{print $NF}"
+      run: cat pytest.log | grep TOTAL | awk '{print $NF}' > coverage.txt
     - name: Generate coverage badge
       run: |
         pip install setuptools pybadges
-        python -m pybadges --left-text=coverage --right-text=${{ steps.coverage.outputs.data }} > coverage-badge.svg
+        python -m pybadges --left-text=coverage --right-text=$(cat coverage.txt) > coverage-badge.svg
     - name: Upload coverage badge
       uses: actions/upload-artifact@v4
       with:
