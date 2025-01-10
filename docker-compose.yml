@@ -1,5 +1,4 @@
 version: '3.8'
-name: serka
 
 services:
   app:
@@ -12,14 +11,34 @@ services:
       - "8000:8000"
     depends_on:
       - chromadb
+      - ollama
     networks:
       - internal
 
   chromadb:
     image: chromadb/chroma
     container_name: chromadb-container
+    volumes:
+      - ./.chromadb:/chroma/chroma
     networks:
       - internal
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama-container
+    volumes:
+      - ./.ollama:/root/.ollama
+      - ./ollama-entrypoint.sh:/ollama-entrypoint.sh
+    entrypoint: ["/usr/bin/bash", "/ollama-entrypoint.sh"]
+    networks:
+      - internal
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
 networks:
   internal:

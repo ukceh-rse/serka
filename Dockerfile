@@ -2,6 +2,7 @@ FROM python:3.12-slim
 WORKDIR /app
 RUN pip install uv
 COPY pyproject.toml uv.lock README.md /app/
+COPY docker.env /app/.env
 COPY src /app/src
 RUN uv sync
 EXPOSE 8000
