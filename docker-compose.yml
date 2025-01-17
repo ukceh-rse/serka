@@ -1,0 +1,45 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: serka-image
+    container_name: serka-container
+    ports:
+      - "8000:8000"
+    depends_on:
+      - chromadb
+      - ollama
+    networks:
+      - internal
+
+  chromadb:
+    image: chromadb/chroma
+    container_name: chromadb-container
+    volumes:
+      - ./.chromadb:/chroma/chroma
+    networks:
+      - internal
+
+  ollama:
+    image: ollama/ollama
+    env_file:
+      - docker.env
+    container_name: ollama-container
+    volumes:
+      - ./.ollama:/root/.ollama
+      - ./ollama-entrypoint.sh:/ollama-entrypoint.sh
+    entrypoint: ["/usr/bin/bash", "/ollama-entrypoint.sh"]
+    networks:
+      - internal
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+networks:
+  internal:
+    driver: bridge

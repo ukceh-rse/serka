@@ -1,0 +1,29 @@
+services:
+  app:
+    extends:
+      file: docker-compose.yml
+      service: app
+    volumes:
+      - ./src:/app/src
+    environment:
+      - PYTHONPATH=/app/src
+      - DEBUG=1
+    command: ["uv", "run", "fastapi", "dev", "src/serka/main.py", "--host", "0.0.0.0", "--port", "8000"]
+
+  chromadb:
+    extends:
+      file: docker-compose.yml
+      service: chromadb
+    ports:
+      - "8001:8000"
+
+  ollama:
+    extends:
+      file: docker-compose.yml
+      service: ollama
+    ports:
+      - "11435:11434"
+
+networks:
+  internal:
+    driver: bridge
