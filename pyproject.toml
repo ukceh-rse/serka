@@ -10,8 +10,12 @@ requires-python = ">=3.12"
 dependencies = [
     "chromadb>=0.6.1",
     "fastapi[standard]>=0.115.6",
+    "haystack-ai>=2.9.0",
+    "jq>=1.8.0",
+    "ollama-haystack>=2.2.0",
     "ollama>=0.4.5",
     "python-dotenv>=1.0.1",
+    "chroma-haystack>=2.0.0",
 ]
 
 [project.scripts]
