@@ -6,7 +6,7 @@ services:
     image: serka-image
     container_name: serka-container
     ports:
-      - "8000:8000"
+      - "8001:8000"
     depends_on:
       - chromadb
       - ollama

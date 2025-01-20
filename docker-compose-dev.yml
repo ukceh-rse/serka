@@ -15,14 +15,14 @@ services:
       file: docker-compose.yml
       service: chromadb
     ports:
-      - "8001:8000"
+      - "8000:8000"
 
   ollama:
     extends:
       file: docker-compose.yml
       service: ollama
     ports:
-      - "11435:11434"
+      - "11434:11434"
 
 networks:
   internal:

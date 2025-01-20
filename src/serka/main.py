@@ -5,7 +5,7 @@ import ollama
 from typing import Dict, Sequence
 from dotenv import load_dotenv
 import os
-
+from .eidc_fetcher import EIDCPipeline
 
 load_dotenv()
 
@@ -49,8 +49,30 @@ def query(
 	m: str = Query(
 		description="LLM model to query",
 		examples=["tinyllama"],
-		default=os.getenv("OLLAMA_MODEL", "tinyllama"),
+		default=os.getenv("OLLAMA_RAG_MODEL", "tinyllama"),
 	),
 ) -> Dict[str, str]:
 	response = get_ollama_client().generate(model=m, prompt=q)
 	return {"query": q, "response": response.response}
+
+
+@app.get("/fetch", summary="Fetch the latest metadata from the EIDC")
+def fetch(
+	url: str = Query(
+		description="URL to fetch metadata from.",
+		default=os.getenv("EIDC_URL", "https://catalogue.ceh.ac.uk/eidc/documents"),
+	),
+	collection: str = Query(
+		description="Name of the collection to store the fetched documents.",
+		default=os.getenv("DEFAULT_COLLECTION", "eidc"),
+	),
+) -> Dict[str, str]:
+	pipeline = EIDCPipeline(
+		chroma_host=os.getenv("CHROMADB_HOST", "chromadb-container"),
+		chroma_port=os.getenv("CHROMADB_PORT", "8000"),
+		chroma_collection=collection,
+		ollama_host=os.getenv("OLLAMA_HOST", "ollama-container"),
+		ollama_port=os.getenv("OLLAMA_PORT", "11434"),
+	)
+	result = pipeline.process(urls=[url])
+	return result
