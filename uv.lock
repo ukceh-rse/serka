@@ -1924,6 +1924,7 @@ dependencies = [
     { name = "ollama" },
     { name = "ollama-haystack" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -1945,6 +1946,7 @@ requires-dist = [
     { name = "ollama", specifier = ">=0.4.5" },
     { name = "ollama-haystack", specifier = ">=2.2.0" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 
 [package.metadata.requires-dev]
