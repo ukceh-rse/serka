@@ -1,78 +1,75 @@
-import chromadb.api
 from fastapi import FastAPI, Query
-import chromadb
-import ollama
-from typing import Dict, Sequence
-from dotenv import load_dotenv
-import os
-from .eidc_fetcher import EIDCPipeline
+from typing import Dict, Sequence, Any, List
+from .dao import DAO
+import yaml
 
-load_dotenv()
+
+def load_config():
+	with open("config.yaml", "r") as f:
+		return yaml.safe_load(f)
+
+
+config = load_config()
 
 app = FastAPI(
 	title="Serka", description="An API for expose advanced search functionality"
 )
 
-_db_instance: chromadb.api.ClientAPI | None = None
-_ollama_isntance: ollama.Client | None = None
+_dao_instance: DAO | None = None
 
 
-def get_db() -> chromadb.api.ClientAPI:
-	global _db_instance
-	if _db_instance is None:
-		host = os.getenv("CHROMADB_HOST", "chromadb-container")
-		port = int(os.getenv("CHROMADB_PORT", "8000"))
-		_db_instance = chromadb.HttpClient(host=host, port=port)
-	return _db_instance
-
-
-def get_ollama_client() -> ollama.Client:
-	global _ollama_isntance
-	if _ollama_isntance is None:
-		host = os.getenv("OLLAMA_HOST", "ollama-container")
-		port = os.getenv("OLLAMA_PORT", "11434")
-		_ollama_isntance = ollama.Client(host=f"http://{host}:{port}")
-	return _ollama_isntance
+def get_dao() -> DAO:
+	global _dao_instance
+	if _dao_instance is None:
+		_dao_instance = DAO(
+			ollama_host=config["ollama"]["host"],
+			ollama_port=config["ollama"]["port"],
+			chroma_host=config["chroma"]["host"],
+			chroma_port=config["chroma"]["port"],
+			default_embedding_model=config["ollama"]["embedding_models"][0],
+			default_rag_model=config["ollama"]["rag_models"][0],
+		)
+	return _dao_instance
 
 
 @app.get("/list", summary="List collections in the vector database")
 def list() -> Dict[str, Sequence[str]]:
-	return {"collections": get_db().list_collections()}
+	return {"collections": get_dao().list_collections()}
 
 
-@app.get("/query", summary="Query an LLM")
-def query(
+@app.get("/peek", summary="Peek into a collection in the vector database")
+def peek(
+	collection: str = Query(description="Name of the collection to peek."),
+) -> Dict[str, Sequence[Dict[str, str]]]:
+	return {"documents": get_dao().peek(collection)}
+
+
+@app.get("/search", summary="Perform a semantic search in the vector database")
+def semantic_search(
 	q: str = Query(
-		description="Prompt to query the LLM",
-		examples=["Tell me an interesting fact about the environment."],
+		description="Query to perform the semantic search with.",
+		examples=["Are there any pike in Windermere lake?"],
 	),
-	m: str = Query(
-		description="LLM model to query",
-		examples=["tinyllama"],
-		default=os.getenv("OLLAMA_RAG_MODEL", "tinyllama"),
+	collection: str = Query(
+		description="The name of the collection to query in the vector database.",
 	),
-) -> Dict[str, str]:
-	response = get_ollama_client().generate(model=m, prompt=q)
-	return {"query": q, "response": response.response}
+	n: int = Query(
+		description="Number of results to return.",
+		default=5,
+	),
+) -> List[Dict[str, Any]]:
+	return get_dao().query(collection, q, n)
 
 
 @app.get("/fetch", summary="Fetch the latest metadata from the EIDC")
 def fetch(
 	url: str = Query(
 		description="URL to fetch metadata from.",
-		default=os.getenv("EIDC_URL", "https://catalogue.ceh.ac.uk/eidc/documents"),
+		default=config["eidc"]["url"],
 	),
 	collection: str = Query(
 		description="Name of the collection to store the fetched documents.",
-		default=os.getenv("DEFAULT_COLLECTION", "eidc"),
+		default=config["chroma"]["default_collection"],
 	),
-) -> Dict[str, str]:
-	pipeline = EIDCPipeline(
-		chroma_host=os.getenv("CHROMADB_HOST", "chromadb-container"),
-		chroma_port=os.getenv("CHROMADB_PORT", "8000"),
-		chroma_collection=collection,
-		ollama_host=os.getenv("OLLAMA_HOST", "ollama-container"),
-		ollama_port=os.getenv("OLLAMA_PORT", "11434"),
-	)
-	result = pipeline.process(urls=[url])
-	return result
+) -> Dict[str, Any]:
+	return get_dao().insert(url, collection)

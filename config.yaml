@@ -1,0 +1,13 @@
+chroma:
+  host: chromadb-container
+  port: 8000
+  default_collection: eidc
+ollama:
+  host: ollama-container
+  port: 11434
+  embedding_models:
+    - nomic-embed-text
+  rag_models:
+    - tinyllama
+eidc:
+  url: https://catalogue.ceh.ac.uk/eidc/documents
