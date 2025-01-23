@@ -1,14 +1,14 @@
 import chromadb.api
 from haystack import Pipeline
 from haystack.components.fetchers import LinkContentFetcher
-from haystack.components.converters import JSONConverter
 from haystack.components.preprocessors import DocumentSplitter
 from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
 from haystack_integrations.document_stores.chroma import ChromaDocumentStore
 from haystack_integrations.components.retrievers.chroma import ChromaEmbeddingRetriever
 from haystack_integrations.components.embedders.ollama import OllamaTextEmbedder
 from haystack.components.writers import DocumentWriter
-from typing import List, Dict, Any, Set
+from .converters import EIDCConverter
+from typing import List, Dict, Any
 import logging
 from dataclasses import dataclass
 import chromadb
@@ -50,29 +50,28 @@ class DAO:
 	def query(
 		self, collection_name: str, query: str, n: int = 5
 	) -> List[Dict[str, Any]]:
-		p = self._eidc_metadata_query_pipeline(collection_name)
-		results = p.run({"embedder": {"text": query}})
-		sorted_results = sorted(
-			results["retriever"]["documents"], key=lambda x: x.score, reverse=False
-		)[:n]
-		return [
-			{
-				"doc": doc.content,
-				"dataset": doc.meta["title"],
-				"identifier": doc.meta["identifier"],
-				"score": doc.score,
-			}
-			for doc in sorted_results
-		]
+		p = self._eidc_metadata_query_pipeline(collection_name, n)
+		results = p.run({"embedder": {"text": query}})["retriever"]["documents"]
+		output = []
+		for doc in results:
+			d = {k: v for k, v in doc.meta.items()}
+			d["content"] = doc.content
+			d["score"] = doc.score
+			output.append(d)
+		return output
 
-	def peek(self, collection_name: str, n: int = 5) -> List[Dict[str, Any]]:
+	def peek(self, collection_name: str, n: int = 5) -> List[Dict[str, str]]:
 		result = self._chroma_client.get_collection(collection_name).peek(n)
-		return [
-			{"doc": doc, "dataset": meta["title"], "identifier": meta["identifier"]}
-			for doc, meta in zip(result["documents"], result["metadatas"])
-		]
+		output = []
+		for doc, meta in zip(result["documents"], result["metadatas"]):
+			d = {k: str(v) for k, v in meta.items()}
+			d["doc"] = doc
+			output.append(d)
+		return output
 
-	def _eidc_metadata_query_pipeline(self, collection_name: str) -> Pipeline:
+	def _eidc_metadata_query_pipeline(
+		self, collection_name: str, top_n: int = 5
+	) -> Pipeline:
 		doc_store = ChromaDocumentStore(
 			host=self.chroma_host,
 			port=self.chroma_port,
@@ -86,7 +85,7 @@ class DAO:
 				model=self.default_embedding_model,
 			),
 		)
-		p.add_component("retriever", ChromaEmbeddingRetriever(doc_store))
+		p.add_component("retriever", ChromaEmbeddingRetriever(doc_store, top_k=top_n))
 		p.connect("embedder.embedding", "retriever.query_embedding")
 		return p
 
@@ -94,8 +93,6 @@ class DAO:
 		self,
 		collection_name: str,
 		embedding_model: str | None = None,
-		content_field: str = "description",
-		meta_fields: Set[str] = {"identifier", "title"},
 		chunk_length: int = 150,
 		chunk_overlap: int = 50,
 	) -> Pipeline:
@@ -113,14 +110,7 @@ class DAO:
 		)
 		p = Pipeline()
 		p.add_component("fetcher", LinkContentFetcher())
-		p.add_component(
-			"converter",
-			JSONConverter(
-				jq_schema=".results[]",
-				content_key=content_field,
-				extra_meta_fields=meta_fields,
-			),
-		)
+		p.add_component("converter", EIDCConverter({"title", "description"}))
 		p.add_component(
 			"splitter",
 			DocumentSplitter(
