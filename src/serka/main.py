@@ -39,7 +39,10 @@ def list() -> Dict[str, Sequence[str]]:
 
 @app.get("/peek", summary="Peek into a collection in the vector database")
 def peek(
-	collection: str = Query(description="Name of the collection to peek."),
+	collection: str = Query(
+		description="Name of the collection to peek.",
+		default=config["chroma"]["default_collection"],
+	),
 ) -> Dict[str, Sequence[Dict[str, str]]]:
 	return {"documents": get_dao().peek(collection)}
 
@@ -52,6 +55,7 @@ def semantic_search(
 	),
 	collection: str = Query(
 		description="The name of the collection to query in the vector database.",
+		default=config["chroma"]["default_collection"],
 	),
 	n: int = Query(
 		description="Number of results to return.",
