@@ -5,6 +5,7 @@ services:
       service: app
     volumes:
       - ./src:/app/src
+      - ./static:/app/static
     environment:
       - PYTHONPATH=/app/src
       - DEBUG=1

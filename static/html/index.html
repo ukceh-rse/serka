@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serka</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        @keyframes flyIn {
+            from {
+                transform: translateY(200px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .animate-fly-in {
+            animation: flyIn 0.8s ease-out;
+        }
+
+        .transition-move {
+            transition: all 0.5s ease-in-out;
+        }
+
+        table a {
+            color: #0000EE;
+            text-decoration: underline;
+        }
+
+        table a:visited {
+            color: #551A8B;
+        }
+
+        table a:hover {
+            color: #0056b3;
+        }
+    </style>
+    <script>
+        async function performSearch(state) {
+            if (state.query.trim() === '') return;
+            const response = await fetch(`/search?q=${this.query}`);
+            state.results = await response.json();
+        }
+    </script>
+</head>
+
+<body class="flex flex-col items-center justify-center h-screen bg-gray-100" x-data="{
+    query: '',
+    results: [],
+    search() {
+        performSearch(this);
+    }
+}">
+    <img src="/static/img/ukceh-logo.png" alt="UKCEH logo"/>
+    <h1 x-show="!results.length" class="text-3xl font-bold mb-6 text-gray-800">Serka</h1>
+    <div id="searchBox"
+        :class="results.length ? 'fixed top-4 left-1/2 transform -translate-x-1/2 transition-move' : 'animate-fly-in'"
+        class="bg-white shadow-lg p-4 rounded-lg w-80 flex items-center">
+        <input @keydown.enter="search" x-model="query" type="text" placeholder="Search..." class="w-full p-2 border-none focus:outline-none" />
+        <button @click="search" class="bg-blue-500 text-white px-4 py-2 rounded-lg">Go</button>
+    </div>
+
+    <table x-show="results.length" class="table-auto w-3/4 border-collapse border border-gray-300 mt-6">
+        <thead>
+            <tr class="bg-gray-200">
+                <th class="border p-2">Dataset</th>
+                <th class="border p-2">Name</th>
+            </tr>
+        </thead>
+        <tbody>
+            <template x-for="item in results" :key="item.source_id">
+                <tr>
+                    <td class="border p-2">
+                        <a x-text="item.dataset" :href="item.url"></a>
+                    </td>
+                    <td class="border p-2" x-text="item.score"></td>
+                </tr>
+            </template>
+        </tbody>
+    </table>
+</body>
+
+</html>
