@@ -69,7 +69,7 @@ def semantic_search(
 	),
 	n: int = Query(
 		description="Number of results to return.",
-		default=5,
+		default=10,
 	),
 ) -> List[Dict[str, Any]]:
 	return get_dao().query(collection, q, n)
