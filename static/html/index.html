@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serka</title>
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @keyframes flyIn {
+            from {
+                transform: translateY(200px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .animate-fly-in {
+            animation: flyIn 0.8s ease-out;
+        }
+
+        table a {
+            color: #0000EE;
+            text-decoration: underline;
+        }
+
+        table a:visited {
+            color: #551A8B;
+        }
+
+        table a:hover {
+            color: #0056b3;
+        }
+    </style>
+    <script>
+        async function performSearch(state) {
+            state.thinking = true;
+            try {
+                const response = await fetch(`/search?q=${state.query}`);
+                state.results = await response.json();
+            } catch (e) {
+                console.error(e);
+            } finally {
+                state.thinking = false;
+            }
+        }
+        window.onload = function() {
+            document.getElementById('searchInput').focus();
+        };
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey && event.shiftKey && event.key === 'F') {
+                event.preventDefault();
+                document.getElementById('searchInput').focus();
+            }
+        });
+    </script>
+</head>
+
+<body class="flex flex-col items-center justify-center h-screen bg-gray-100" x-data="{
+    query: '',
+    results: [],
+    thinking: false,
+    async search() {
+        performSearch(this);
+    }
+}">
+    <div x-show="!results.length">
+        <img src="/static/img/ukceh-logo.png" alt="UKCEH logo" />
+        <h1 class="text-3xl font-bold mb-6 text-gray-800">Serka</h1>
+    </div>
+    <div id="searchBox"
+        :class="results.length ? 'fixed top-0 left-0 w-full shadow-md p-4 flex justify-center bg-white' : 'animate-fly-in rounded-lg w-80'"
+        class="bg-white shadow-lg p-4 flex items-center z-10">
+        <input id="searchInput" :disabled="thinking" @keydown.enter="search" x-model="query" type="text" placeholder="Search..."
+            class="w-full p-2 border-none focus:outline-none" />
+        <button :disabled="thinking" @click="search" class="bg-blue-500 text-white px-4 py-2 rounded-lg">
+            <i :class="thinking? 'fa-spinner fa-spin' : 'fa-search'" class="fas"></i>
+        </button>
+    </div>
+
+    <div class="absolute top-0 left-0 w-full mt-20 z-0">
+        <table x-show="results.length" class="table-auto w-full border-collapse">
+            <thead>
+                <tr class="bg-gray-100 text-left">
+                    <th class="p-2 w-6/10 pl-10">Content</th>
+                    <th class="p-2 w-1/10">Section</th>
+                    <th class="p-2 w-2/10">Dataset</th>
+                    <th class="p-2 w-1/10 pr-10">Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="item in results">
+                    <tr class="h-16 odd:bg-gray-200 even:bg-gray-100 align-text-top">
+                        <td class="p-2 italic pl-10" x-text="item.content"></td>
+                        <td class="p-2" x-text="item.section"></td>
+                        <td class="p-2">
+                            <a x-text="item.dataset" :href="item.url" target="_blank"></a>
+                        </td>
+                        <td class="p-2 overflow-hidden pr-10" x-text="item.score"></td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+</body>
+
+</html>

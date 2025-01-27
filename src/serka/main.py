@@ -2,6 +2,8 @@ from fastapi import FastAPI, Query
 from typing import Dict, Sequence, Any, List
 from .dao import DAO
 import yaml
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 
 def load_config():
@@ -16,6 +18,14 @@ app = FastAPI(
 )
 
 _dao_instance: DAO | None = None
+
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/")
+async def read_index():
+	return FileResponse("static/html/index.html")
 
 
 def get_dao() -> DAO:
@@ -59,7 +69,7 @@ def semantic_search(
 	),
 	n: int = Query(
 		description="Number of results to return.",
-		default=5,
+		default=10,
 	),
 ) -> List[Dict[str, Any]]:
 	return get_dao().query(collection, q, n)

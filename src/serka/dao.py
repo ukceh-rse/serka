@@ -48,7 +48,7 @@ class DAO:
 		return {"status": "success"}
 
 	def query(
-		self, collection_name: str, query: str, n: int = 5
+		self, collection_name: str, query: str, n: int = 10
 	) -> List[Dict[str, Any]]:
 		p = self._eidc_metadata_query_pipeline(collection_name, n)
 		results = p.run({"embedder": {"text": query}})["retriever"]["documents"]
@@ -58,7 +58,7 @@ class DAO:
 			d["content"] = doc.content
 			d["score"] = doc.score
 			output.append(d)
-		return output
+		return sorted(output, key=lambda x: x["score"])
 
 	def peek(self, collection_name: str, n: int = 5) -> List[Dict[str, str]]:
 		result = self._chroma_client.get_collection(collection_name).peek(n)
