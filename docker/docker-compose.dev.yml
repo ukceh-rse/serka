@@ -1,8 +1,5 @@
 services:
   app:
-    extends:
-      file: docker-compose.yml
-      service: app
     volumes:
       - ./src:/app/src
       - ./static:/app/static
@@ -24,7 +21,3 @@ services:
       service: ollama
     ports:
       - "11434:11434"
-
-networks:
-  internal:
-    driver: bridge
