@@ -31,13 +31,6 @@ services:
     entrypoint: ["/usr/bin/bash", "/ollama-entrypoint.sh"]
     networks:
       - internal
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
 networks:
   internal:
