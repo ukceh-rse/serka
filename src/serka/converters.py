@@ -2,11 +2,54 @@ from typing import Set, List, Union
 from pathlib import Path
 from haystack import component
 from haystack.dataclasses import ByteStream, Document
+from haystack.components.converters.utils import get_bytestream_from_source
+from trafilatura import bare_extraction
 import logging
 import json
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+@component
+class HTMLConverter:
+	"""
+	Converter for transform generic HTML pages into haystack Documents.
+	"""
+
+	@component.output_types(documents=List[Document])
+	def run(self, sources: List[ByteStream]):
+		"""
+		Processes bytestreams and extracts the text content, title, author and
+		date from HTML pages using Trafilatura.
+
+		Args:
+			sources (List[ByteStream]): List of ByteStream objects containing
+			the HTML content.
+
+		Returns:
+			dict: A dictionary containing the content extracted from the HTML
+			as haystack documents.
+		"""
+		docs = []
+		for source in sources:
+			bytesream = get_bytestream_from_source(source)
+			result = bare_extraction(
+				bytesream.data.decode("utf-8"),
+				with_metadata=True,
+				output_format="python",
+			)
+			docs.append(
+				Document(
+					content=result.text,
+					meta={
+						"title": result.title,
+						"author": result.author,
+						"date": result.date,
+					},
+				)
+			)
+		return {"documents": docs}
 
 
 @component

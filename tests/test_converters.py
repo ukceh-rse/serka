@@ -1,9 +1,57 @@
 from haystack.dataclasses import ByteStream
-from serka.converters import EIDCConverter
+from serka.converters import EIDCConverter, HTMLConverter
+from haystack.components.preprocessors import DocumentSplitter
+from haystack import Pipeline
 import json
 
 
-def test_run_with_valid_source():
+def test_html_converter_with_valid_source():
+	test_text = "This is some test text for the web page"
+	test_title = "Page title"
+	test_date = "2025-01-01"
+	test_author = "Joe Bloggs"
+	test_html = f"""
+	<html>
+		<head>
+			<title>{test_title}</title>
+			<meta name="author" content="{test_author}">
+			<meta name="date" content="{test_date}">
+		</head>
+		<body>
+			<section>
+				<p>{test_text}</p>
+			</section>
+		</body>
+	</html>
+	"""
+	input = [ByteStream(test_html.encode()), ByteStream(test_html.encode())]
+	converter = HTMLConverter()
+	result = converter.run(input)
+
+	assert "documents" in result
+	assert len(result["documents"]) == 2
+	doc = result["documents"][0]
+	assert doc.content == test_text
+	assert doc.meta["title"] == test_title
+	assert doc.meta["author"] == test_author
+	assert doc.meta["date"] == test_date
+
+
+def test_html_converter_integration():
+	p = Pipeline()
+	p.add_component("convter", HTMLConverter())
+	p.add_component("splitter", DocumentSplitter())
+	p.connect("convter", "splitter")
+	p.run(
+		data={
+			"convter": {
+				"sources": [ByteStream(b"<html><body><p>Test</p></body></html>")]
+			}
+		}
+	)
+
+
+def test_eidc_converter_with_valid_source():
 	test_field = "test_field"
 	test_val = "test_value"
 	test_title = "test_title"
