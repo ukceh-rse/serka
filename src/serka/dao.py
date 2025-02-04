@@ -7,7 +7,7 @@ from haystack_integrations.document_stores.chroma import ChromaDocumentStore
 from haystack_integrations.components.retrievers.chroma import ChromaEmbeddingRetriever
 from haystack_integrations.components.embedders.ollama import OllamaTextEmbedder
 from haystack.components.writers import DocumentWriter
-from .converters import EIDCConverter
+from .converters import EIDCConverter, HTMLConverter
 from typing import List, Dict, Any
 import logging
 from dataclasses import dataclass
@@ -37,9 +37,13 @@ class DAO:
 		return self._chroma_client.list_collections()
 
 	def insert(
-		self, url, collection_name: str, embedding_model: str | None = None
+		self,
+		url,
+		collection_name: str,
+		embedding_model: str | None = None,
+		source_type: str = "eidc",
 	) -> Dict[str, Any]:
-		p = self._eidc_metadata_insertion_pipeline(collection_name, embedding_model)
+		p = self._insertion_pipeline(collection_name, embedding_model, source_type)
 		result = p.run(data={"fetcher": {"urls": [url]}})
 		return {"status": "success", "documents": result["writer"]["documents_written"]}
 
@@ -50,7 +54,7 @@ class DAO:
 	def query(
 		self, collection_name: str, query: str, n: int = 10
 	) -> List[Dict[str, Any]]:
-		p = self._eidc_metadata_query_pipeline(collection_name, n)
+		p = self._query_pipeline(collection_name, n)
 		results = p.run({"embedder": {"text": query}})["retriever"]["documents"]
 		output = []
 		for doc in results:
@@ -69,9 +73,7 @@ class DAO:
 			output.append(d)
 		return output
 
-	def _eidc_metadata_query_pipeline(
-		self, collection_name: str, top_n: int = 5
-	) -> Pipeline:
+	def _query_pipeline(self, collection_name: str, top_n: int = 5) -> Pipeline:
 		doc_store = ChromaDocumentStore(
 			host=self.chroma_host,
 			port=self.chroma_port,
@@ -89,10 +91,18 @@ class DAO:
 		p.connect("embedder.embedding", "retriever.query_embedding")
 		return p
 
-	def _eidc_metadata_insertion_pipeline(
+	def _create_converter(self, source_type: str):
+		if source_type == "eidc":
+			return EIDCConverter({"title", "description"})
+		if source_type == "html":
+			return HTMLConverter()
+		raise ValueError(f"Unknown converter type: {source_type}")
+
+	def _insertion_pipeline(
 		self,
 		collection_name: str,
 		embedding_model: str | None = None,
+		source_type: str = "eidc",
 		chunk_length: int = 150,
 		chunk_overlap: int = 50,
 	) -> Pipeline:
@@ -110,7 +120,7 @@ class DAO:
 		)
 		p = Pipeline()
 		p.add_component("fetcher", LinkContentFetcher())
-		p.add_component("converter", EIDCConverter({"title", "description"}))
+		p.add_component("converter", self._create_converter(source_type))
 		p.add_component(
 			"splitter",
 			DocumentSplitter(

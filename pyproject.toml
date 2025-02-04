@@ -17,6 +17,9 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "chroma-haystack>=2.0.0",
     "pyyaml>=6.0.2",
+    "trafilatura>=2.0.0",
+    "beautifulsoup4>=4.13.0",
+    "scrapy>=2.12.0",
 ]
 
 [project.scripts]
@@ -29,6 +32,7 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "ipykernel>=6.29.5",
+    "ipython>=8.31.0",
     "mypy>=1.14.1",
     "pre-commit>=4.0.1",
     "pytest>=8.3.4",
@@ -42,3 +46,9 @@ indent-style = "tab"
 [tool.mypy]
 files = ["src", "tests"]
 strict = true
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: Marks tests as integration tests that may be slow.",
+    "unit: Marks tests as unit tests that should be fast.",
+]

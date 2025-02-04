@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Query
-from typing import Dict, Sequence, Any, List
+from typing import Dict, Sequence, Any, List, Literal
 from .dao import DAO
 import yaml
 from fastapi.staticfiles import StaticFiles
@@ -85,5 +85,6 @@ def fetch(
 		description="Name of the collection to store the fetched documents.",
 		default=config["chroma"]["default_collection"],
 	),
+	source_type: Literal["eidc", "html"] = "eidc",
 ) -> Dict[str, Any]:
-	return get_dao().insert(url, collection)
+	return get_dao().insert(url, collection, source_type=source_type)

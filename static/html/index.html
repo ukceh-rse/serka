@@ -42,7 +42,7 @@
         async function performSearch(state) {
             state.thinking = true;
             try {
-                const response = await fetch(`/search?q=${state.query}`);
+                const response = await fetch(`/search?q=${state.query}&collection=${state.selected_collection}`);
                 state.results = await response.json();
             } catch (e) {
                 console.error(e);
@@ -50,10 +50,22 @@
                 state.thinking = false;
             }
         }
-        window.onload = function() {
+        async function get_collection_list(state) {
+            try {
+                const response = await fetch(`/list`);
+                const result = await response.json();
+                state.collections = result.collections;
+                if (state.collections.length > 0)
+                    state.selected_collection = state.collections[0];
+                    state.thinking = false;
+            } catch (e) {
+                console.error(e);
+            }
+        }
+        window.onload = function () {
             document.getElementById('searchInput').focus();
         };
-        document.addEventListener('keydown', function(event) {
+        document.addEventListener('keydown', function (event) {
             if (event.ctrlKey && event.shiftKey && event.key === 'F') {
                 event.preventDefault();
                 document.getElementById('searchInput').focus();
@@ -64,25 +76,36 @@
 
 <body class="flex flex-col items-center justify-center h-screen bg-gray-100" x-data="{
     query: '',
+    selected_collection: '',
+    collections: [],
     results: [],
-    thinking: false,
+    thinking: true,
     async search() {
         performSearch(this);
+    },
+    async get_collections(){
+        get_collection_list(this);
     }
-}">
+}" x-init="get_collections()">
     <div x-show="!results.length">
         <img src="/static/img/ukceh-logo.png" alt="UKCEH logo" />
         <h1 class="text-3xl font-bold mb-6 text-gray-800">Serka</h1>
     </div>
     <div id="searchBox"
-        :class="results.length ? 'fixed top-0 left-0 w-full shadow-md p-4 flex justify-center bg-white' : 'animate-fly-in rounded-lg w-80'"
-        class="bg-white shadow-lg p-4 flex items-center z-10">
-        <input id="searchInput" :disabled="thinking" @keydown.enter="search" x-model="query" type="text" placeholder="Search..."
-            class="w-full p-2 border-none focus:outline-none" />
+        :class="results.length ? 'fixed top-0 left-0 w-full shadow-md p-4 flex justify-center bg-white' : 'animate-fly-in rounded-lg w-100'"
+        class="bg-white shadow-lg p-4 flex items-center z-10" x-show="collections.length">
+        <input id="searchInput" :disabled="thinking" @keydown.enter="search" x-model="query" type="text"
+            placeholder="Search..." class="w-full p-2 border-none focus:outline-none" />
+        <select x-model="selected_collection" class="w-20 p-2 border-none focus:outline-none">
+            <template x-for="collection in collections">
+                <option x-text="collection"></option>
+            </template>
+        </select>
         <button :disabled="thinking" @click="search" class="bg-blue-500 text-white px-4 py-2 rounded-lg">
             <i :class="thinking? 'fa-spinner fa-spin' : 'fa-search'" class="fas"></i>
         </button>
     </div>
+    <div x-show="!collections.length">No collections available</div>
 
     <div class="absolute top-0 left-0 w-full mt-20 z-0">
         <table x-show="results.length" class="table-auto w-full border-collapse">
@@ -90,7 +113,7 @@
                 <tr class="bg-gray-100 text-left">
                     <th class="p-2 w-6/10 pl-10">Content</th>
                     <th class="p-2 w-1/10">Section</th>
-                    <th class="p-2 w-2/10">Dataset</th>
+                    <th class="p-2 w-2/10">Title</th>
                     <th class="p-2 w-1/10 pr-10">Score</th>
                 </tr>
             </thead>
@@ -100,7 +123,7 @@
                         <td class="p-2 italic pl-10" x-text="item.content"></td>
                         <td class="p-2" x-text="item.section"></td>
                         <td class="p-2">
-                            <a x-text="item.dataset" :href="item.url" target="_blank"></a>
+                            <a x-text="item.title" :href="item.url" target="_blank"></a>
                         </td>
                         <td class="p-2 overflow-hidden pr-10" x-text="item.score"></td>
                     </tr>
