@@ -46,6 +46,7 @@ class HTMLConverter:
 						"title": result.title,
 						"author": result.author,
 						"date": result.date,
+						"url": result.url,
 					},
 				)
 			)
@@ -73,7 +74,7 @@ class EIDCConverter:
 			d = Document(
 				content=dataset[field],
 				meta={
-					"dataset": dataset.get("title", "unknown_dataset"),
+					"title": dataset.get("title", "unknown_dataset"),
 					"section": field,
 					"retrieved": timestamp,
 					"url": self._extract_url(dataset.get("resourceIdentifier", [])),

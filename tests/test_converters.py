@@ -76,5 +76,5 @@ def test_eidc_converter_with_valid_source():
 	assert len(result["documents"]) == 1
 	assert result["documents"][0].content == test_val
 	assert result["documents"][0].meta["section"] == test_field
-	assert result["documents"][0].meta["dataset"] == test_title
+	assert result["documents"][0].meta["title"] == test_title
 	assert result["documents"][0].meta["url"] == test_url
