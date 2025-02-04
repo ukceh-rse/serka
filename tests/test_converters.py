@@ -3,8 +3,10 @@ from serka.converters import EIDCConverter, HTMLConverter
 from haystack.components.preprocessors import DocumentSplitter
 from haystack import Pipeline
 import json
+import pytest
 
 
+@pytest.mark.integration
 def test_html_converter_with_valid_source():
 	test_text = "This is some test text for the web page"
 	test_title = "Page title"
@@ -37,7 +39,8 @@ def test_html_converter_with_valid_source():
 	assert doc.meta["date"] == test_date
 
 
-def test_html_converter_integration():
+@pytest.mark.integration
+def test_html_converter_in_pipeline():
 	p = Pipeline()
 	p.add_component("convter", HTMLConverter())
 	p.add_component("splitter", DocumentSplitter())
