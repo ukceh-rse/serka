@@ -88,3 +88,17 @@ def fetch(
 	source_type: Literal["eidc", "html"] = "eidc",
 ) -> Dict[str, Any]:
 	return get_dao().insert(url, collection, source_type=source_type)
+
+
+@app.get("/rag", summary="Perform a RAG query")
+def rag(
+	q: str = Query(
+		description="Query to hand the RAG pipeline",
+		examples=["Are there any pike in Windermere lake?"],
+	),
+	collection: str = Query(
+		description="The name of the collection to query in the vector database.",
+		default=config["chroma"]["default_collection"],
+	),
+) -> Dict[str, Any]:
+	return get_dao().rag_query(collection, q)
