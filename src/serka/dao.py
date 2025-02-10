@@ -12,6 +12,9 @@ from typing import List, Dict, Any
 import logging
 from dataclasses import dataclass
 import chromadb
+from haystack.components.builders import PromptBuilder
+from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
+from haystack.components.builders.answer_builder import AnswerBuilder
 
 
 logger = logging.getLogger(__name__)
@@ -72,6 +75,79 @@ class DAO:
 			d["doc"] = doc
 			output.append(d)
 		return output
+
+	def rag_query(self, collection_name: str, query: str) -> Dict[str, Any]:
+		p = self._rag_pipeline(collection_name)
+		result = p.run(
+			{"embedder": {"text": query}, "prompt_builder": {"query": query}}
+		)
+		return {
+			"answer": result["answer_builder"]["answers"][0].data,
+			"query": result["answer_builder"]["answers"][0].query,
+		}
+
+	def _rag_pipeline(self, collection_name: str) -> Pipeline:
+		logger.info(f"Creating RAG pipeline for collection: {collection_name}")
+		p = self._query_pipeline(collection_name)
+		template = """
+			You are part of a retrieval augmented generative pipeline.
+			Your task is to provide an answer to a question based on a given set of retrieved documents.
+			The retrieved documents will be given in JSON format.
+			The retrieved documents are chunks of information retrieved from datasets held in the EIDC (Environmental Information Data Centre).
+			The EIDC is hosted by UKCEH (UK Centre for Ecology and Hydrology).
+			Your answer should be as faithful as possible to the information provided by the retrieved documents.
+			Do not use your own knowledge to answer the question, only the information in the retrieved documents.
+			Do not refer to "retrieved documents" in your answer, instead use phrases like "available information" or "available information from the EIDC".
+			Provide a citation to the relevant retrieved document used to generate each part of your answer.
+			Citations should be inline and use the following markdown format:
+			```
+			[n]
+			```
+			where n is the nth reference in your answer.
+			All of your references should then be provided at the end of your answer in the following format:
+			```
+			### Referecnces:
+			* [1]: [ {title} ]({url})
+			* [2]: etc.
+			```
+			where {title} is replaced with the title of the retrieved document and {url} is replaced with the URL of the retrieved document.
+
+			Question: {{query}}
+
+			"retrieved_documents": [{% for document in documents %}
+					{
+						content: "{{ document.content }}",
+						meta: {
+							title: "{{ document.meta.title }}",
+							url: "{{ document.meta.url }}",
+							chunk_id: "{{ document.id }}"
+						}
+					}
+				{% endfor %}
+			]
+
+			Answer:
+		"""
+		prompt_builder = PromptBuilder(template)
+		logger.info(f"Creating RAG pipeline with llm: {self.default_rag_model}")
+		llm = OllamaGenerator(
+			model=self.default_rag_model,
+			generation_kwargs={"num_ctx": 16384, "temperature": 0.0},
+			url=f"http://{self.ollama_host}:{self.ollama_port}",
+		)
+		answer_builder = AnswerBuilder()
+		p.add_component("prompt_builder", prompt_builder)
+		p.add_component("llm", llm)
+		p.add_component("answer_builder", answer_builder)
+
+		p.connect("retriever.documents", "prompt_builder.documents")
+		p.connect("retriever.documents", "answer_builder.documents")
+
+		p.connect("prompt_builder", "llm")
+
+		p.connect("llm.replies", "answer_builder.replies")
+		p.connect("prompt_builder.prompt", "answer_builder.query")
+		return p
 
 	def _query_pipeline(self, collection_name: str, top_n: int = 5) -> Pipeline:
 		doc_store = ChromaDocumentStore(

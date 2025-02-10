@@ -3,6 +3,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./static:/app/static
+      - ./config.yaml:/app/config.yaml
     environment:
       - PYTHONPATH=/app/src
       - DEBUG=1
