@@ -8,6 +8,6 @@ ollama:
   embedding_models:
     - nomic-embed-text
   rag_models:
-    - mistral-nemo
+    - llama3.1
 eidc:
   url: https://catalogue.ceh.ac.uk/eidc/documents
