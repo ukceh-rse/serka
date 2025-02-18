@@ -101,4 +101,11 @@ def rag(
 		default=config["chroma"]["default_collection"],
 	),
 ) -> Dict[str, Any]:
-	return get_dao().rag_query(collection, q)
+	config["collections"] = config.get("collections", {})
+	collection_desc = config["collections"].get(
+		collection,
+		{
+			"description": "No information about the original source of the documents is known."
+		},
+	)
+	return get_dao().rag_query(collection, str(collection_desc), q)

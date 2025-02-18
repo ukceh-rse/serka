@@ -76,8 +76,10 @@ class DAO:
 			output.append(d)
 		return output
 
-	def rag_query(self, collection_name: str, query: str) -> Dict[str, Any]:
-		p = self._rag_pipeline(collection_name)
+	def rag_query(
+		self, collection_name: str, collection_desc: str, query: str
+	) -> Dict[str, Any]:
+		p = self._rag_pipeline(collection_name, collection_desc)
 		result = p.run(
 			{"embedder": {"text": query}, "prompt_builder": {"query": query}}
 		)
@@ -86,35 +88,49 @@ class DAO:
 			"query": result["answer_builder"]["answers"][0].query,
 		}
 
-	def _rag_pipeline(self, collection_name: str) -> Pipeline:
+	def _rag_pipeline(self, collection_name: str, collection_desc: str) -> Pipeline:
 		logger.info(f"Creating RAG pipeline for collection: {collection_name}")
 		p = self._query_pipeline(collection_name)
-		template = """
-			You are part of a retrieval augmented generative pipeline.
-			Your task is to provide an answer to a question based on a given set of retrieved documents.
-			The retrieved documents will be given in JSON format.
-			The retrieved documents are chunks of information retrieved from datasets held in the EIDC (Environmental Information Data Centre).
-			The EIDC is hosted by UKCEH (UK Centre for Ecology and Hydrology).
-			Your answer should be as faithful as possible to the information provided by the retrieved documents.
-			Do not use your own knowledge to answer the question, only the information in the retrieved documents.
-			Do not refer to "retrieved documents" in your answer, instead use phrases like "available information" or "available information from the EIDC".
+		template = (
+			"""
+			# Task Description:
+			You are a helpful assistant for the UK Centre for Ecology and Hydrology (UKCEH).
+			Your task is to provide an answer to a query based on a given set of retrieved documents.
+			Your answer should be in markdown format.
+			The retrieved documents are in JSON format and are excerpts of information from source documents.
+			The following describes the source of the documents:
+			"""
+			+ collection_desc
+			+ """
+			Your answer should derived from the provided retrieved documents.
+			Do not use your own knowledge to answer the query, only the information in the retrieved documents.
+			If the query is not a question, but appears to be a series of keywords, simply provide a general summary of any retreived documents relevant to the keywords and include references to them.
 			Provide a citation to the relevant retrieved document used to generate each part of your answer.
-			Citations should be inline and use the following markdown format:
-			```
-			[n]
-			```
-			where n is the nth reference in your answer.
-			All of your references should then be provided at the end of your answer in the following format:
-			```
-			### Referecnces:
-			* [1]: [ {title} ]({url})
-			* [2]: etc.
-			```
-			where {title} is replaced with the title of the retrieved document and {url} is replaced with the URL of the retrieved document.
+			Your answer should be in markdown format.
 
-			Question: {{query}}
+			# Examples:
+			## Example 1:
+			### Query:
+			What is the impact of climate change on the UK's biodiversity?
+			### Answer:
+			The impact on bidiversity is discussed in the dataset "UK Biodiversity Indicators" [1].
+			### References:
+			- [1]: [ UK Biodiversity Indicators ](https://eidc.ceh.ac.uk/uk-biodiversity-indicators)
 
-			"retrieved_documents": [{% for document in documents %}
+			## Example 2:
+			### Query:
+			farming
+			### Answer:
+			The following datasets are relevant to farming: "UK farming trends" [1], "UK farming statistics" [2].
+			### References:
+			- [1]: [ UK farming trends ](https://eidc.ceh.ac.uk/uk-farming-trends)
+			- [2]: [ UK farming statistics ](https://eidc.ceh.ac.uk/uk-farming-statistics)
+
+			# The Actual Task:
+			## Query:
+			{{query}}
+			## Retreived Documents:
+			[{% for document in documents %}
 					{
 						content: "{{ document.content }}",
 						meta: {
@@ -125,9 +141,9 @@ class DAO:
 					}
 				{% endfor %}
 			]
-
-			Answer:
+			## Answer:
 		"""
+		)
 		prompt_builder = PromptBuilder(template)
 		logger.info(f"Creating RAG pipeline with llm: {self.default_rag_model}")
 		llm = OllamaGenerator(
