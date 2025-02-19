@@ -15,6 +15,7 @@ import chromadb
 from haystack.components.builders import PromptBuilder
 from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
 from haystack.components.builders.answer_builder import AnswerBuilder
+from .prompts import RAG_PROMPT
 
 
 logger = logging.getLogger(__name__)
@@ -79,72 +80,22 @@ class DAO:
 	def rag_query(
 		self, collection_name: str, collection_desc: str, query: str
 	) -> Dict[str, Any]:
-		p = self._rag_pipeline(collection_name, collection_desc)
+		p = self._rag_pipeline(collection_name)
 		result = p.run(
-			{"embedder": {"text": query}, "prompt_builder": {"query": query}}
+			{
+				"embedder": {"text": query},
+				"prompt_builder": {"query": query, "collection_desc": collection_desc},
+			}
 		)
 		return {
 			"answer": result["answer_builder"]["answers"][0].data,
 			"query": result["answer_builder"]["answers"][0].query,
 		}
 
-	def _rag_pipeline(self, collection_name: str, collection_desc: str) -> Pipeline:
+	def _rag_pipeline(self, collection_name: str) -> Pipeline:
 		logger.info(f"Creating RAG pipeline for collection: {collection_name}")
 		p = self._query_pipeline(collection_name)
-		template = (
-			"""
-			# Task Description:
-			You are a helpful assistant for the UK Centre for Ecology and Hydrology (UKCEH).
-			Your task is to provide an answer to a query based on a given set of retrieved documents.
-			Your answer should be in markdown format.
-			The retrieved documents are in JSON format and are excerpts of information from source documents.
-			The following describes the source of the documents:
-			"""
-			+ collection_desc
-			+ """
-			Your answer should derived from the provided retrieved documents.
-			Do not use your own knowledge to answer the query, only the information in the retrieved documents.
-			If the query is not a question, but appears to be a series of keywords, simply provide a general summary of any retreived documents relevant to the keywords and include references to them.
-			Provide a citation to the relevant retrieved document used to generate each part of your answer.
-			Your answer should be in markdown format.
-
-			# Examples:
-			## Example 1:
-			### Query:
-			What is the impact of climate change on the UK's biodiversity?
-			### Answer:
-			The impact on bidiversity is discussed in the dataset "UK Biodiversity Indicators" [1].
-			### References:
-			- [1]: [ UK Biodiversity Indicators ](https://eidc.ceh.ac.uk/uk-biodiversity-indicators)
-
-			## Example 2:
-			### Query:
-			farming
-			### Answer:
-			The following datasets are relevant to farming: "UK farming trends" [1], "UK farming statistics" [2].
-			### References:
-			- [1]: [ UK farming trends ](https://eidc.ceh.ac.uk/uk-farming-trends)
-			- [2]: [ UK farming statistics ](https://eidc.ceh.ac.uk/uk-farming-statistics)
-
-			# The Actual Task:
-			## Query:
-			{{query}}
-			## Retreived Documents:
-			[{% for document in documents %}
-					{
-						content: "{{ document.content }}",
-						meta: {
-							title: "{{ document.meta.title }}",
-							url: "{{ document.meta.url }}",
-							chunk_id: "{{ document.id }}"
-						}
-					}
-				{% endfor %}
-			]
-			## Answer:
-		"""
-		)
-		prompt_builder = PromptBuilder(template)
+		prompt_builder = PromptBuilder(RAG_PROMPT)
 		logger.info(f"Creating RAG pipeline with llm: {self.default_rag_model}")
 		llm = OllamaGenerator(
 			model=self.default_rag_model,
