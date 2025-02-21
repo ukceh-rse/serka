@@ -87,7 +87,12 @@ def fetch(
 	dao: DAO = Depends(get_dao),
 	source_type: Literal["eidc", "html"] = "eidc",
 ) -> Dict[str, Any]:
-	return dao.insert(url, collection, source_type=source_type)
+	return dao.insert(
+		url,
+		collection,
+		source_type=source_type,
+		unified_metadata=config["unified-metadata"],
+	)
 
 
 @app.get("/rag", summary="Perform a RAG query")

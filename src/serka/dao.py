@@ -8,7 +8,7 @@ from haystack_integrations.components.retrievers.chroma import ChromaEmbeddingRe
 from haystack_integrations.components.embedders.ollama import OllamaTextEmbedder
 from haystack.components.writers import DocumentWriter
 from .converters import EIDCConverter, HTMLConverter, UnifiedEmbeddingConverter
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 import logging
 from dataclasses import dataclass
 import chromadb
@@ -46,8 +46,11 @@ class DAO:
 		collection_name: str,
 		embedding_model: str | None = None,
 		source_type: str = "eidc",
+		unified_metadata: Set[str] = {},
 	) -> Dict[str, Any]:
-		p = self._insertion_pipeline(collection_name, embedding_model, source_type)
+		p = self._insertion_pipeline(
+			collection_name, embedding_model, source_type, unified_metadata
+		)
 		result = p.run(data={"fetcher": {"urls": [url]}})
 		return {"status": "success", "documents": result["writer"]["documents_written"]}
 
@@ -145,6 +148,7 @@ class DAO:
 		collection_name: str,
 		embedding_model: str | None = None,
 		source_type: str = "eidc",
+		unified_metadata: Set[str] = {},
 		chunk_length: int = 150,
 		chunk_overlap: int = 50,
 	) -> Pipeline:
@@ -169,7 +173,7 @@ class DAO:
 				split_by="word", split_length=chunk_length, split_overlap=chunk_overlap
 			),
 		)
-		p.add_component("unifier", UnifiedEmbeddingConverter({"title"}))
+		p.add_component("unifier", UnifiedEmbeddingConverter(unified_metadata))
 		p.add_component(
 			"embedder",
 			OllamaDocumentEmbedder(

@@ -86,7 +86,22 @@ def test_unified_embedding_converter():
 	content = "This is some test content"
 	docs = [Document(content=content, meta={"title": title})]
 	converter = UnifiedEmbeddingConverter({"title"})
+
 	result = converter.run(docs)
+
 	assert "documents" in result
 	assert len(result["documents"]) == 1
-	assert result["documents"][0].content == f"title: {title}\ncontent: {content}"
+	assert result["documents"][0].content == f"title: {title}\ncontent:\n{content}"
+
+
+def test_unified_embedding_converter_with_no_metafields():
+	title = "doc_title"
+	content = "This is some test content"
+	docs = [Document(content=content, meta={"title": title})]
+	converter = UnifiedEmbeddingConverter({})
+
+	result = converter.run(docs)
+
+	assert "documents" in result
+	assert len(result["documents"]) == 1
+	assert result["documents"][0].content == content

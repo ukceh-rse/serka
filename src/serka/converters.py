@@ -112,13 +112,15 @@ class UnifiedEmbeddingConverter:
 	def run(self, documents: List[Document]):
 		for doc in documents:
 			doc.meta["content"] = doc.content
-			unified_content = " ".join(
+			unified_content = "\n".join(
 				[
-					f"{field}: {doc.meta.get(field)}\n"
+					f"{field}: {doc.meta.get(field)}"
 					for field in self.fields
 					if doc.meta.get(field)
 				]
 			)
-			unified_content += f"content: {doc.content}"
+			if self.fields:
+				unified_content += "\ncontent:\n"
+			unified_content += f"{doc.content}"
 			doc.content = unified_content
 		return {"documents": documents}
