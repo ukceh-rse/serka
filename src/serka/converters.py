@@ -96,3 +96,31 @@ class EIDCConverter:
 				logger.warning(f"Could not read {source}. Skipping it. Error: {e}")
 				continue
 		return {"documents": docs}
+
+
+@component
+class UnifiedEmbeddingConverter:
+	"""
+	Converts the content of a document to include metadata the specified metadata fields.
+	Also includes the original content as an additional metadata field to ensure it is preserved.
+	"""
+
+	def __init__(self, fields: Set[str]):
+		self.fields = fields
+
+	@component.output_types(documents=List[Document])
+	def run(self, documents: List[Document]):
+		for doc in documents:
+			doc.meta["content"] = doc.content
+			unified_content = "\n".join(
+				[
+					f"{field}: {doc.meta.get(field)}"
+					for field in self.fields
+					if doc.meta.get(field)
+				]
+			)
+			if self.fields:
+				unified_content += "\ncontent:\n"
+			unified_content += f"{doc.content}"
+			doc.content = unified_content
+		return {"documents": documents}

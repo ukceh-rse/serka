@@ -7,8 +7,8 @@ from haystack_integrations.document_stores.chroma import ChromaDocumentStore
 from haystack_integrations.components.retrievers.chroma import ChromaEmbeddingRetriever
 from haystack_integrations.components.embedders.ollama import OllamaTextEmbedder
 from haystack.components.writers import DocumentWriter
-from .converters import EIDCConverter, HTMLConverter
-from typing import List, Dict, Any
+from .converters import EIDCConverter, HTMLConverter, UnifiedEmbeddingConverter
+from typing import List, Dict, Any, Set
 import logging
 from dataclasses import dataclass
 import chromadb
@@ -46,8 +46,11 @@ class DAO:
 		collection_name: str,
 		embedding_model: str | None = None,
 		source_type: str = "eidc",
+		unified_metadata: Set[str] = {},
 	) -> Dict[str, Any]:
-		p = self._insertion_pipeline(collection_name, embedding_model, source_type)
+		p = self._insertion_pipeline(
+			collection_name, embedding_model, source_type, unified_metadata
+		)
 		result = p.run(data={"fetcher": {"urls": [url]}})
 		return {"status": "success", "documents": result["writer"]["documents_written"]}
 
@@ -63,7 +66,6 @@ class DAO:
 		output = []
 		for doc in results:
 			d = {k: v for k, v in doc.meta.items()}
-			d["content"] = doc.content
 			d["score"] = doc.score
 			output.append(d)
 		return sorted(output, key=lambda x: x["score"])
@@ -146,6 +148,7 @@ class DAO:
 		collection_name: str,
 		embedding_model: str | None = None,
 		source_type: str = "eidc",
+		unified_metadata: Set[str] = {},
 		chunk_length: int = 150,
 		chunk_overlap: int = 50,
 	) -> Pipeline:
@@ -170,6 +173,7 @@ class DAO:
 				split_by="word", split_length=chunk_length, split_overlap=chunk_overlap
 			),
 		)
+		p.add_component("unifier", UnifiedEmbeddingConverter(unified_metadata))
 		p.add_component(
 			"embedder",
 			OllamaDocumentEmbedder(
@@ -180,6 +184,7 @@ class DAO:
 		p.add_component("writer", DocumentWriter(doc_store))
 		p.connect("fetcher.streams", "converter.sources")
 		p.connect("converter.documents", "splitter.documents")
-		p.connect("splitter.documents", "embedder.documents")
+		p.connect("splitter.documents", "unifier.documents")
+		p.connect("unifier.documents", "embedder.documents")
 		p.connect("embedder.documents", "writer.documents")
 		return p
