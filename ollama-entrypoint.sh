@@ -12,8 +12,8 @@ chmod +x /usr/bin/yq
 
 # Pull the appropriate models listed in config.yaml
 readarray -t models < <(
-    yq eval '.ollama.embedding_models[]' config.yaml
-    yq eval '.ollama.rag_models[]' config.yaml
+    yq eval '.embedding_models[]' config.yaml
+    yq eval '.rag_models[]' config.yaml
 )
 for model in "${models[@]}"; do
     echo "Pulling model[$model]..."

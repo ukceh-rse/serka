@@ -4,11 +4,13 @@ from .dao import DAO
 import yaml
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from .config import Config
 
 
 def load_config():
 	with open("config.yaml", "r") as f:
-		return yaml.safe_load(f)
+		config_data = yaml.safe_load(f)
+	return Config(**config_data)
 
 
 config = load_config()
@@ -18,12 +20,12 @@ app = FastAPI(
 )
 
 dao_instance = DAO(
-	ollama_host=config["ollama"]["host"],
-	ollama_port=config["ollama"]["port"],
-	chroma_host=config["chroma"]["host"],
-	chroma_port=config["chroma"]["port"],
-	default_embedding_model=config["ollama"]["embedding_models"][0],
-	default_rag_model=config["ollama"]["rag_models"][0],
+	ollama_host=config.ollama.host,
+	ollama_port=config.ollama.port,
+	chroma_host=config.chroma.host,
+	chroma_port=config.chroma.port,
+	default_embedding_model=config.embedding_models[0],
+	default_rag_model=config.rag_models[0],
 )
 
 
@@ -48,7 +50,7 @@ def list() -> Dict[str, Sequence[str]]:
 def peek(
 	collection: str = Query(
 		description="Name of the collection to peek.",
-		default=config["chroma"]["default_collection"],
+		default=config.default_collection,
 	),
 	dao: DAO = Depends(get_dao),
 ) -> Dict[str, Sequence[Dict[str, str]]]:
@@ -63,7 +65,7 @@ def semantic_search(
 	),
 	collection: str = Query(
 		description="The name of the collection to query in the vector database.",
-		default=config["chroma"]["default_collection"],
+		default=config.default_collection,
 	),
 	n: int = Query(
 		description="Number of results to return.",
@@ -78,11 +80,11 @@ def semantic_search(
 def fetch(
 	url: str = Query(
 		description="URL to fetch metadata from.",
-		default=config["eidc"]["url"],
+		default=config.collections[config.default_collection].url,
 	),
 	collection: str = Query(
 		description="Name of the collection to store the fetched documents.",
-		default=config["chroma"]["default_collection"],
+		default=config.default_collection,
 	),
 	dao: DAO = Depends(get_dao),
 	source_type: Literal["eidc", "html"] = "eidc",
@@ -91,7 +93,7 @@ def fetch(
 		url,
 		collection,
 		source_type=source_type,
-		unified_metadata=config["unified-metadata"],
+		unified_metadata=config.unified_metadata,
 	)
 
 
@@ -103,16 +105,15 @@ def rag(
 	),
 	collection: str = Query(
 		description="The name of the collection to query in the vector database.",
-		default=config["chroma"]["default_collection"],
+		default=config.default_collection,
 	),
 	dao: DAO = Depends(get_dao),
 ) -> Dict[str, Any]:
-	if config["rag-enabled"] is False:
+	if config.rag_enabled is False:
 		return {
 			"answer": "Generative answering is currently disabled. Please enable via `config.yaml`"
 		}
-	config["collections"] = config.get("collections", {})
-	collection_desc = config["collections"].get(
+	collection_desc = config.collections.get(
 		collection,
 		{
 			"description": "No information about the original source of the documents is known."
