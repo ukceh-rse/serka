@@ -12,6 +12,11 @@ class OllamaConfig(BaseModel):
 	port: int
 
 
+class MongoConfig(BaseModel):
+	host: str
+	port: int
+
+
 class CollectionConfig(BaseModel):
 	source_name: str
 	description: str
@@ -22,6 +27,7 @@ class CollectionConfig(BaseModel):
 class Config(BaseModel):
 	chroma: ChromaConfig
 	ollama: OllamaConfig
+	mongo: MongoConfig
 	embedding_models: List[str]
 	rag_models: List[str]
 	collections: Dict[str, CollectionConfig]

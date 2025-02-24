@@ -49,6 +49,19 @@ document.addEventListener("alpine:init", () => {
             console.log('Giving feedback...');
             console.log(event.target);
         },
+        async give_feedback(item, query, feedback) {
+            feedback_obj = { "query": query, "item": item, "feedback": feedback };
+            console.log(feedback_obj);
+            const response = await fetch(`/feedback`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(feedback_obj),
+            });
+            const result = await response.json();
+            console.log(result);
+        },
         openModal(feedbackItem) {
             this.feedbackItem = feedbackItem;
             this.showModal = true;

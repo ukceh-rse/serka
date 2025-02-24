@@ -6,6 +6,10 @@ ollama:
   host: ollama-container
   port: 11434
 
+mongo:
+  host: mongodb-container
+  port: 27017
+
 embedding_models:
   - nomic-embed-text
 

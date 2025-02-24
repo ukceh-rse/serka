@@ -32,6 +32,14 @@ services:
     networks:
       - internal
 
+  mongodb:
+    image: mongo
+    container_name: mongodb-container
+    volumes:
+      - ./.mongodb:/data/db
+    networks:
+      - internal
+
 networks:
   internal:
     driver: bridge

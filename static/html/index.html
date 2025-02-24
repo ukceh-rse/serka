@@ -62,10 +62,10 @@
                         Feedback:
                     </span>
                     <span class="px-3">
-                        <button title="Helpful" @click="feedback($event)">
+                        <button title="Helpful" @click="give_feedback(Alpine.raw(item), query, 'UPVOTE')">
                             <i class="fa-regular fa-thumbs-up"></i>
                         </button>
-                        <button title="Unhelpful" @click="feedback($event)">
+                        <button title="Unhelpful" @click="give_feedback(Alpine.raw(item), query, 'DOWNVOTE')">
                             <i class="fa-regular fa-thumbs-down"></i>
                         </button>
                     </span>
