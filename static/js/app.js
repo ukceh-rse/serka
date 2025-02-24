@@ -7,9 +7,17 @@ document.addEventListener("alpine:init", () => {
         answer: '',
         thinking: true,
         splash: true,
-        feedbackItem: '',
-        feedbackText: '',
-        showModal: false,
+        modal: {
+            show: false,
+            item: '',
+            type: '',
+            text: '',
+        },
+        toast: {
+            show: false,
+            title: 'Toast Title',
+            msg: 'Toast Message',
+        },
         async search() {
             this.splash = false;
             this.thinking = true;
@@ -49,8 +57,17 @@ document.addEventListener("alpine:init", () => {
             console.log('Giving feedback...');
             console.log(event.target);
         },
-        async give_feedback(item, query, feedback) {
-            feedback_obj = { "query": query, "item": item, "feedback": feedback };
+        async submit_feedback_modal(item, itemType, query, feedback, type) {
+            if (feedback.length < 10) {
+                this.showToast('Feedback Error', 'Feedback must be at least 10 characters long');
+                return;
+            }
+            this.give_feedback(item, itemType, query, feedback, type);
+            this.modal.text = '';
+            this.closeModal();
+        },
+        async give_feedback(item, itemType, query, feedback, feedbackType) {
+            const feedback_obj = { "query": query, "item": item, "itemType": itemType, "feedback": feedback, "type": feedbackType };
             console.log(feedback_obj);
             const response = await fetch(`/feedback`, {
                 method: 'POST',
@@ -60,14 +77,23 @@ document.addEventListener("alpine:init", () => {
                 body: JSON.stringify(feedback_obj),
             });
             const result = await response.json();
-            console.log(result);
+            this.showToast('Feedback Submitted', feedbackType + ':"' + feedback + '" for: ' + JSON.stringify(item));
         },
-        openModal(feedbackItem) {
-            this.feedbackItem = feedbackItem;
-            this.showModal = true;
+        showToast(title, msg) {
+            this.toast.show = true;
+            this.toast.title = title;
+            this.toast.msg = msg;
+            setTimeout(() => {
+                this.toast.show = false;
+            }, 4000);
+        },
+        openModal(item, type) {
+            this.modal.item = item;
+            this.modal.type = type;
+            this.modal.show = true;
         },
         closeModal() {
-            this.showModal = false;
+            this.modal.show = false;
         },
     }))
 })

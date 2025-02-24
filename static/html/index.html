@@ -62,14 +62,16 @@
                         Feedback:
                     </span>
                     <span class="px-3">
-                        <button title="Helpful" @click="give_feedback(Alpine.raw(item), query, 'UPVOTE')">
+                        <button title="Helpful"
+                            @click="give_feedback(Alpine.raw(item), 'search-result', query, 'UP', 'VOTE')">
                             <i class="fa-regular fa-thumbs-up"></i>
                         </button>
-                        <button title="Unhelpful" @click="give_feedback(Alpine.raw(item), query, 'DOWNVOTE')">
+                        <button title="Unhelpful"
+                            @click="give_feedback(Alpine.raw(item), 'search-result', query, 'DOWN', 'VOTE')">
                             <i class="fa-regular fa-thumbs-down"></i>
                         </button>
                     </span>
-                    <button title="Detailed Feedback" @click="openModal(item.title)">
+                    <button title="Detailed Feedback" @click="openModal(Alpine.raw(item), 'search-result')">
                         <i class="fa-regular fa-pen-to-square"></i>
                     </button>
                 </div>
@@ -85,21 +87,21 @@
                     Feedback:
                 </span>
                 <span class="px-3">
-                    <button title="Helpful" @click="feedback($event)">
+                    <button title="Helpful" @click="give_feedback(answer, 'rag-response', query, 'UP', 'VOTE')">
                         <i class="fa-regular fa-thumbs-up"></i>
                     </button>
-                    <button title="Unhelpful" @click="feedback($event)">
+                    <button title="Unhelpful" @click="give_feedback(answer, 'rag-response', query, 'DOWN', 'VOTE')">
                         <i class="fa-regular fa-thumbs-down"></i>
                     </button>
                 </span>
-                <button title="Detailed Feedback" @click="openModal(answer)">
+                <button title="Detailed Feedback" @click="openModal(answer, 'rag-response')">
                     <i class="fa-regular fa-pen-to-square"></i>
                 </button>
             </div>
         </div>
     </div>
 
-    <div x-show="showModal" class="modal">
+    <div x-show="modal.show" class="modal">
         <div class="modal-content text-gray-500 rounded-lg border border-gray-200">
             <button title="Close" class="float-right" @click="closeModal">
                 <i class="fa-regular fa-x"></i>
@@ -115,17 +117,30 @@
                 <tr>
                     <td class="align-top">Item:</td>
                     <td>
-                        <div class="italic" x-text="feedbackItem"></div>
+                        <div class="italic max-w-90 ellipsis-multiline" x-text="JSON.stringify(modal.item)"></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="align-top">Type:</td>
+                    <td>
+                        <div class="italic max-w-90 ellipsis-multiline" x-text="modal.type"></div>
                     </td>
                 </tr>
                 <tr>
                     <td class="align-top">Feedback:</td>
-                    <td><textarea x-model="feedbackText" placeholder="Please enter feedback about this item..."
+                    <td><textarea x-model="modal.text" placeholder="Please enter feedback about this item..."
                             class="w-full h-16 p-2 border border-gray-300 rounded mb-4"></textarea></td>
                 </tr>
             </table>
-            <button class="bg-blue-500 text-white px-4 py-2 rounded-lg" @click="closeModal">Submit</button>
+            <button class="bg-blue-500 text-white px-4 py-2 rounded-lg"
+                @click="submit_feedback_modal(modal.item, modal.type, query, modal.text, 'TEXT')">Submit</button>
         </div>
+    </div>
+
+    <div x-show="toast.show" x-transition
+        class="fixed top-4 right-4 bg-blue-100 border-1 border-blue-300 px-4 py-2 rounded-lg shadow-lg max-w-70 z-100 text-gray-500">
+        <div x-text="toast.title" class="font-bold"></div>
+        <div x-text="toast.msg" class="text-sm ellipsis-multiline"></div>
     </div>
 </body>
 

@@ -2,6 +2,7 @@ from pymongo import MongoClient
 from bson import json_util
 from typing import Dict, Any
 import json
+from datetime import datetime
 
 
 class FeedbackLogger:
@@ -11,6 +12,7 @@ class FeedbackLogger:
 		self.collection = self.db.feedback
 
 	def log_feedback(self, feedback: Dict[str, Any]):
+		feedback["timestamp"] = datetime.now()
 		self.collection.insert_one(feedback)
 
 	def get_feedback(self):
