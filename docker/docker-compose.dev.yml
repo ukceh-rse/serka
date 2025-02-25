@@ -22,3 +22,7 @@ services:
       service: ollama
     ports:
       - "11434:11434"
+
+  mongodb:
+    ports:
+      - "27017:27017"

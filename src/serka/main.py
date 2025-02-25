@@ -5,6 +5,7 @@ import yaml
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from .config import Config
+from .feedback import FeedbackLogger
 
 
 def load_config():
@@ -27,6 +28,8 @@ dao_instance = DAO(
 	default_embedding_model=config.embedding_models[0],
 	default_rag_model=config.rag_models[0],
 )
+
+feedback_loggger = FeedbackLogger(config.mongo.host, config.mongo.port)
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -73,6 +76,9 @@ def semantic_search(
 	),
 	dao: DAO = Depends(get_dao),
 ) -> List[Dict[str, Any]]:
+	feedback_loggger.log_feedback(
+		{"query": q, "collection": collection, "type": "semantic_search"}
+	)
 	return dao.query(collection, q, n)
 
 
@@ -119,4 +125,18 @@ def rag(
 			"description": "No information about the original source of the documents is known."
 		},
 	)
+	feedback_loggger.log_feedback(
+		{"query": q, "collection": collection, "type": "rag_query"}
+	)
 	return dao.rag_query(collection, str(collection_desc), q)
+
+
+@app.get("/feedback", summary="Get feedback")
+def get_feedback():
+	return feedback_loggger.get_feedback()
+
+
+@app.post("/feedback", summary="Log feedback")
+def log_feedback(feedback: Dict[str, Any]):
+	feedback_loggger.log_feedback(feedback)
+	return {"status": "success"}
