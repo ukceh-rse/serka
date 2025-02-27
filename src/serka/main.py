@@ -4,13 +4,13 @@ from .dao import DAO
 import yaml
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from .config import Config
+from .models import Config, TaskStatus
 from .feedback import FeedbackLogger
-from concurrent.futures import ThreadPoolExecutor
+from fastapi import BackgroundTasks
 import uuid
+from fastapi import HTTPException
 
-executor = ThreadPoolExecutor(max_workers=1)
-tasks = {}
+tasks: Dict[str, TaskStatus] = {}
 
 
 def load_config():
@@ -87,17 +87,9 @@ def semantic_search(
 	return dao.query(collection, q, n)
 
 
-def scraping_task(url, collection, source_type):
-	return dao_instance.insert(
-		url,
-		collection,
-		source_type=source_type,
-		unified_metadata=config.unified_metadata,
-	)
-
-
 @app.get("/scrape", summary="Submit a task to asynchronously scrape from a source URL")
-def fetch(
+async def scrape(
+	background_tasks: BackgroundTasks,
 	url: str = Query(
 		description="URL to fetch data from / start scraping from.",
 		default=config.collections[config.default_collection].url,
@@ -107,23 +99,36 @@ def fetch(
 		default=config.default_collection,
 	),
 	source_type: Literal["eidc", "html"] = "eidc",
-) -> Dict[str, Any]:
+	dao: DAO = Depends(get_dao),
+) -> TaskStatus:
 	id = str(uuid.uuid4())
-	tasks[id] = executor.submit(scraping_task, url, collection, source_type)
-	return {"status": "submitted", "task_id": id}
+	task = TaskStatus(id=id, status="pending")
+	tasks[id] = task
+
+	def scrape_task():
+		try:
+			tasks[id].status = "running"
+			result = dao.insert(
+				url,
+				collection,
+				source_type=source_type,
+				unified_metadata=config.unified_metadata,
+			)
+			tasks[id].status = "complete"
+			tasks[id].result = result
+		except Exception as e:
+			tasks[id].status = "failed"
+			tasks[id].result = {"error": str(e)}
+
+	background_tasks.add_task(scrape_task)
+	return task
 
 
 @app.get("/status", summary="Get the status of a task")
-def status(id: str):
-	status_response = {"task_id": id, "task_status": "unknown"}
+def status(id: str) -> TaskStatus:
 	if id not in tasks:
-		return status_response
-	if tasks[id].running():
-		status_response["task_status"] = "running"
-	if tasks[id].done():
-		status_response["task_status"] = "complete"
-		status_response["result"] = tasks[id].result()
-	return status_response
+		raise HTTPException(status_code=404, detail=f"Task with ID {id} not found")
+	return tasks[id]
 
 
 @app.get("/rag", summary="Perform a RAG query")

@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import List, Dict, Set
+from pydantic import BaseModel, Field
+from typing import List, Dict, Set, Optional, Any
 
 
 class ChromaConfig(BaseModel):
@@ -34,3 +34,13 @@ class Config(BaseModel):
 	default_collection: str
 	rag_enabled: bool
 	unified_metadata: Set[str]
+
+
+class TaskStatus(BaseModel):
+	id: str
+	status: str
+	result: Optional[Dict[str, Any]] = Field(default=None, exclude=None)
+
+	class Config:
+		json_encoders = {}
+		exclude_none = True
