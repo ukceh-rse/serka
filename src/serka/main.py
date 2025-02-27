@@ -6,6 +6,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from .config import Config
 from .feedback import FeedbackLogger
+from concurrent.futures import ThreadPoolExecutor
+import uuid
+
+executor = ThreadPoolExecutor(max_workers=1)
+tasks = {}
 
 
 def load_config():
@@ -82,25 +87,43 @@ def semantic_search(
 	return dao.query(collection, q, n)
 
 
-@app.get("/fetch", summary="Fetch the latest metadata from the EIDC")
+def scraping_task(url, collection, source_type):
+	return dao_instance.insert(
+		url,
+		collection,
+		source_type=source_type,
+		unified_metadata=config.unified_metadata,
+	)
+
+
+@app.get("/scrape", summary="Submit a task to asynchronously scrape from a source URL")
 def fetch(
 	url: str = Query(
-		description="URL to fetch metadata from.",
+		description="URL to fetch data from / start scraping from.",
 		default=config.collections[config.default_collection].url,
 	),
 	collection: str = Query(
 		description="Name of the collection to store the fetched documents.",
 		default=config.default_collection,
 	),
-	dao: DAO = Depends(get_dao),
 	source_type: Literal["eidc", "html"] = "eidc",
 ) -> Dict[str, Any]:
-	return dao.insert(
-		url,
-		collection,
-		source_type=source_type,
-		unified_metadata=config.unified_metadata,
-	)
+	id = str(uuid.uuid4())
+	tasks[id] = executor.submit(scraping_task, url, collection, source_type)
+	return {"status": "submitted", "task_id": id}
+
+
+@app.get("/status", summary="Get the status of a task")
+def status(id: str):
+	status_response = {"task_id": id, "task_status": "unknown"}
+	if id not in tasks:
+		return status_response
+	if tasks[id].running():
+		status_response["task_status"] = "running"
+	if tasks[id].done():
+		status_response["task_status"] = "complete"
+		status_response["result"] = tasks[id].result()
+	return status_response
 
 
 @app.get("/rag", summary="Perform a RAG query")
