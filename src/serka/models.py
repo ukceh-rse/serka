@@ -1,18 +1,8 @@
-from pydantic import BaseModel, Field
-from typing import List, Dict, Set, Optional, Any
+from pydantic import BaseModel
+from typing import List, Dict, Set, Optional, Any, Literal
 
 
-class ChromaConfig(BaseModel):
-	host: str
-	port: int
-
-
-class OllamaConfig(BaseModel):
-	host: str
-	port: int
-
-
-class MongoConfig(BaseModel):
+class ServiceConfig(BaseModel):
 	host: str
 	port: int
 
@@ -25,9 +15,9 @@ class CollectionConfig(BaseModel):
 
 
 class Config(BaseModel):
-	chroma: ChromaConfig
-	ollama: OllamaConfig
-	mongo: MongoConfig
+	chroma: ServiceConfig
+	ollama: ServiceConfig
+	mongo: ServiceConfig
 	embedding_models: List[str]
 	rag_models: List[str]
 	collections: Dict[str, CollectionConfig]
@@ -38,9 +28,5 @@ class Config(BaseModel):
 
 class TaskStatus(BaseModel):
 	id: str
-	status: str
-	result: Optional[Dict[str, Any]] = Field(default=None, exclude=None)
-
-	class Config:
-		json_encoders = {}
-		exclude_none = True
+	status: Literal["pending", "running", "complete", "failed"] = "pending"
+	result: Optional[Dict[str, Any]] = {}
