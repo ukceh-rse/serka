@@ -4,8 +4,13 @@ from .dao import DAO
 import yaml
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from .config import Config
+from .models import Config, TaskStatus
 from .feedback import FeedbackLogger
+from fastapi import BackgroundTasks
+import uuid
+from fastapi import HTTPException
+
+tasks: Dict[str, TaskStatus] = {}
 
 
 def load_config():
@@ -82,25 +87,48 @@ def semantic_search(
 	return dao.query(collection, q, n)
 
 
-@app.get("/fetch", summary="Fetch the latest metadata from the EIDC")
-def fetch(
+@app.get("/scrape", summary="Submit a task to asynchronously scrape from a source URL")
+async def scrape(
+	background_tasks: BackgroundTasks,
 	url: str = Query(
-		description="URL to fetch metadata from.",
+		description="URL to fetch data from / start scraping from.",
 		default=config.collections[config.default_collection].url,
 	),
 	collection: str = Query(
 		description="Name of the collection to store the fetched documents.",
 		default=config.default_collection,
 	),
-	dao: DAO = Depends(get_dao),
 	source_type: Literal["eidc", "html"] = "eidc",
-) -> Dict[str, Any]:
-	return dao.insert(
-		url,
-		collection,
-		source_type=source_type,
-		unified_metadata=config.unified_metadata,
-	)
+	dao: DAO = Depends(get_dao),
+) -> TaskStatus:
+	id = str(uuid.uuid4())
+	task = TaskStatus(id=id, status="pending")
+	tasks[id] = task
+
+	def scrape_task():
+		try:
+			tasks[id].status = "running"
+			result = dao.insert(
+				url,
+				collection,
+				source_type=source_type,
+				unified_metadata=config.unified_metadata,
+			)
+			tasks[id].status = "complete"
+			tasks[id].result = result
+		except Exception as e:
+			tasks[id].status = "failed"
+			tasks[id].result = {"error": str(e)}
+
+	background_tasks.add_task(scrape_task)
+	return task
+
+
+@app.get("/status", summary="Get the status of a task")
+def status(id: str) -> TaskStatus:
+	if id not in tasks:
+		raise HTTPException(status_code=404, detail=f"Task with ID {id} not found")
+	return tasks[id]
 
 
 @app.get("/rag", summary="Perform a RAG query")
