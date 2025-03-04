@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Set, Optional, Any, Literal
 
 
@@ -30,3 +30,10 @@ class TaskStatus(BaseModel):
 	id: str
 	status: Literal["pending", "running", "complete", "failed"] = "pending"
 	result: Optional[Dict[str, Any]] = {}
+
+
+class Document(BaseModel):
+	content: str = Field(..., description="The content of the document.")
+	metadata: Optional[Dict[str, Any]] = Field(
+		None, description="Metadata associated with the document."
+	)
