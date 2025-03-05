@@ -49,7 +49,7 @@ class DAO:
 
 	def scrape(
 		self,
-		url,
+		urls,
 		collection: str,
 		source_type: str = "eidc",
 		unified_metadata: Set[str] = {},
@@ -57,7 +57,7 @@ class DAO:
 		p = self._pipeline_builder.scraping_pipeline(
 			collection, source_type, unified_metadata
 		)
-		result = p.run(data={"fetcher": {"urls": [url]}})
+		result = p.run(data={"fetcher": {"urls": urls}})
 		insertions = result["writer"]["documents_written"]
 		return Result(
 			success=True, msg=f"Inserted {insertions} document(s) into {collection}"

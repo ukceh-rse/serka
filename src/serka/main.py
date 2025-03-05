@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query, Depends, APIRouter
+from fastapi import FastAPI, Query, Depends, APIRouter, Body
 from typing import Dict, Any, List, Literal
 from .dao import DAO
 import yaml
@@ -22,7 +22,7 @@ def load_config():
 config = load_config()
 
 app = FastAPI(
-	title="Serka", description="An API for expose advanced search functionality"
+	title="Serka", description="An API to expose advanced search functionality"
 )
 
 tasks_router = APIRouter(prefix="/tasks", tags=["Tasks"])
@@ -120,14 +120,14 @@ def insert(
 	return dao.insert(document, collection)
 
 
-@tasks_router.get(
+@tasks_router.post(
 	"/scrape", summary="Submit a task to asynchronously scrape from a source URL"
 )
 async def scrape(
 	background_tasks: BackgroundTasks,
-	url: str = Query(
+	urls: List[str] = Body(
 		description="URL to fetch data from / start scraping from.",
-		default=config.collections[config.default_collection].url,
+		default=[config.collections[config.default_collection].url],
 	),
 	collection: str = Query(
 		description="Name of the collection to store the fetched documents.",
@@ -144,7 +144,7 @@ async def scrape(
 		try:
 			tasks[id].status = "running"
 			result = dao.scrape(
-				url,
+				urls,
 				collection,
 				source_type=source_type,
 				unified_metadata=config.unified_metadata,
