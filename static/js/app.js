@@ -36,7 +36,11 @@ document.addEventListener("alpine:init", () => {
             try {
                 const response = await fetch(`/query/rag?q=${this.query}&collection=${this.selected_collection}`);
                 answer = await response.json();
-                this.answer = marked.parse(answer.answer);
+                if (answer["result"]["success"]) {
+                    this.answer = marked.parse(answer.answer);
+                } else {
+                    this.answer = answer["result"]["msg"];
+                }
             } catch (e) {
                 console.error(e);
             }
@@ -45,7 +49,7 @@ document.addEventListener("alpine:init", () => {
             try {
                 const response = await fetch(`/collections/list`);
                 const result = await response.json();
-                this.collections = result.collections;
+                this.collections = result;
                 if (this.collections.length > 0)
                     this.selected_collection = this.collections[0];
                 this.thinking = false;

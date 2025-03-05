@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Query, Depends, APIRouter
-from typing import Dict, Sequence, Any, List, Literal
+from typing import Dict, Any, List, Literal
 from .dao import DAO
 import yaml
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from .models import Config, TaskStatus, Document
+from .models import Config, TaskStatus, Document, Result, RAGResponse
 from .feedback import FeedbackLogger
 from fastapi import BackgroundTasks
 import uuid
@@ -56,8 +56,8 @@ def get_dao() -> DAO:
 
 
 @collections_router.get("/list", summary="List collections in the vector database")
-def list() -> Dict[str, Sequence[str]]:
-	return {"collections": get_dao().list_collections()}
+def list() -> List[str]:
+	return get_dao().list_collections()
 
 
 @collections_router.get(
@@ -69,8 +69,8 @@ def peek(
 		default=config.default_collection,
 	),
 	dao: DAO = Depends(get_dao),
-) -> Dict[str, Sequence[Dict[str, str]]]:
-	return {"documents": dao.peek(collection)}
+) -> List[Document]:
+	return dao.peek(collection)
 
 
 @collections_router.delete(
@@ -81,7 +81,7 @@ def delete(
 		description="The name of the collection to delete in the vector database.",
 	),
 	dao: DAO = Depends(get_dao),
-):
+) -> Result:
 	return dao.delete(collection)
 
 
@@ -102,7 +102,7 @@ def semantic_search(
 		default=20,
 	),
 	dao: DAO = Depends(get_dao),
-) -> List[Dict[str, Any]]:
+) -> List[Document]:
 	feedback_loggger.log_feedback(
 		{"query": q, "collection": collection, "type": "semantic_search"}
 	)
@@ -116,11 +116,8 @@ def insert(
 	document: Document,
 	collection: str = Query(default=config.default_collection),
 	dao: DAO = Depends(get_dao),
-):
-	dao.insert(document, collection)
-	print("\n\nDoc added:\n\n")
-	print(document)
-	print("\n\n\n")
+) -> Result:
+	return dao.insert(document, collection)
 
 
 @tasks_router.get(
@@ -180,11 +177,16 @@ def rag(
 		default=config.default_collection,
 	),
 	dao: DAO = Depends(get_dao),
-) -> Dict[str, Any]:
+) -> RAGResponse:
 	if config.rag_enabled is False:
-		return {
-			"answer": "Generative answering is currently disabled. Please enable via `config.yaml`"
-		}
+		return RAGResponse(
+			result=Result(
+				success=False,
+				msg="Generative answering is currently disabled. Please enable via `config.yaml`",
+			),
+			answer="",
+			query=q,
+		)
 	collection_desc = config.collections.get(
 		collection,
 		{
@@ -198,14 +200,14 @@ def rag(
 
 
 @feedback_router.get("/list", summary="Get feedback")
-def get_feedback():
+def get_feedback() -> List[Dict[str, Any]]:
 	return feedback_loggger.get_feedback()
 
 
 @feedback_router.post("/submit", summary="Log feedback")
-def log_feedback(feedback: Dict[str, Any]):
+def log_feedback(feedback: Dict[str, Any]) -> Result:
 	feedback_loggger.log_feedback(feedback)
-	return {"status": "success"}
+	return Result(success=True, msg="Feedback logged")
 
 
 app.include_router(tasks_router)

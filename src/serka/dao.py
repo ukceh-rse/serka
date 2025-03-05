@@ -1,9 +1,9 @@
 import chromadb.api
 import haystack
-from typing import List, Dict, Any, Set
+from typing import List, Set
 import logging
 import chromadb
-from .models import Document
+from .models import Document, Result, RAGResponse
 from .pipelines import PipelineBuilder
 
 
@@ -39,52 +39,57 @@ class DAO:
 		return self._chroma_client.list_collections()
 
 	def insert(self, document: Document, collection: str):
-		p = self._pipeline_builder.insert_pipeline(collection)
+		p = self._pipeline_builder.insertion_pipeline(collection)
 		sources = [haystack.Document(content=document.content, meta=document.metadata)]
 		result = p.run(data={"splitter": {"documents": sources}})
-		print(result)
+		insertions = result["writer"]["documents_written"]
+		return Result(
+			success=True, msg=f"Inserted {insertions} document(s) into {collection}"
+		)
 
 	def scrape(
 		self,
 		url,
-		collection_name: str,
+		collection: str,
 		source_type: str = "eidc",
 		unified_metadata: Set[str] = {},
-	) -> Dict[str, Any]:
+	) -> Result:
 		p = self._pipeline_builder.scraping_pipeline(
-			collection_name, source_type, unified_metadata
+			collection, source_type, unified_metadata
 		)
 		result = p.run(data={"fetcher": {"urls": [url]}})
-		return {"status": "success", "documents": result["writer"]["documents_written"]}
+		insertions = result["writer"]["documents_written"]
+		return Result(
+			success=True, msg=f"Inserted {insertions} document(s) into {collection}"
+		)
 
-	def delete(self, collection_name: str) -> Dict[str, Any]:
-		self._chroma_client.delete_collection(collection_name)
-		return {"status": "success"}
+	def delete(self, collection_name: str) -> Result:
+		try:
+			self._chroma_client.delete_collection(collection_name)
+			return Result(success=True, msg=f"Collection '{collection_name}' deleted.")
+		except chromadb.errors.InvalidArgumentError as e:
+			return Result(success=False, msg=str(e))
 
-	def query(
-		self, collection_name: str, query: str, n: int = 10
-	) -> List[Dict[str, Any]]:
+	def query(self, collection_name: str, query: str, n: int = 10) -> List[Document]:
 		p = self._pipeline_builder.query_pipeline(collection_name, n)
 		results = p.run({"embedder": {"text": query}})["retriever"]["documents"]
 		output = []
 		for doc in results:
-			d = {k: v for k, v in doc.meta.items()}
-			d["score"] = doc.score
+			d = Document(content=doc.content, metadata=doc.meta)
+			d.metadata["score"] = doc.score
 			output.append(d)
-		return sorted(output, key=lambda x: x["score"])
+		return sorted(output, key=lambda x: x.metadata["score"])
 
-	def peek(self, collection_name: str, n: int = 5) -> List[Dict[str, str]]:
+	def peek(self, collection_name: str, n: int = 5) -> List[Document]:
 		result = self._chroma_client.get_collection(collection_name).peek(n)
 		output = []
 		for doc, meta in zip(result["documents"], result["metadatas"]):
-			d = {k: str(v) for k, v in meta.items()}
-			d["doc"] = doc
-			output.append(d)
+			output.append(Document(content=doc, metadata=meta))
 		return output
 
 	def rag_query(
 		self, collection_name: str, collection_desc: str, query: str
-	) -> Dict[str, Any]:
+	) -> RAGResponse:
 		p = self._pipeline_builder.rag_pipeline(collection_name)
 		result = p.run(
 			{
@@ -92,7 +97,8 @@ class DAO:
 				"prompt_builder": {"query": query, "collection_desc": collection_desc},
 			}
 		)
-		return {
-			"answer": result["answer_builder"]["answers"][0].data,
-			"query": result["answer_builder"]["answers"][0].query,
-		}
+		return RAGResponse(
+			result=Result(success=True, msg="RAG query successful"),
+			query=result["answer_builder"]["answers"][0].query,
+			answer=result["answer_builder"]["answers"][0].data,
+		)
