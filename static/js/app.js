@@ -24,7 +24,7 @@ document.addEventListener("alpine:init", () => {
             this.answer = '';
             this.ragSearch(this);
             try {
-                const response = await fetch(`/search?q=${this.query}&collection=${this.selected_collection}`);
+                const response = await fetch(`/query/semantic?q=${this.query}&collection=${this.selected_collection}`);
                 this.results = await response.json();
             } catch (e) {
                 console.error(e);
@@ -34,18 +34,22 @@ document.addEventListener("alpine:init", () => {
         },
         async ragSearch() {
             try {
-                const response = await fetch(`/rag?q=${this.query}&collection=${this.selected_collection}`);
+                const response = await fetch(`/query/rag?q=${this.query}&collection=${this.selected_collection}`);
                 answer = await response.json();
-                this.answer = marked.parse(answer.answer);
+                if (answer["result"]["success"]) {
+                    this.answer = marked.parse(answer.answer);
+                } else {
+                    this.answer = answer["result"]["msg"];
+                }
             } catch (e) {
                 console.error(e);
             }
         },
         async get_collections() {
             try {
-                const response = await fetch(`/list`);
+                const response = await fetch(`/collections/list`);
                 const result = await response.json();
-                this.collections = result.collections;
+                this.collections = result;
                 if (this.collections.length > 0)
                     this.selected_collection = this.collections[0];
                 this.thinking = false;
@@ -69,7 +73,7 @@ document.addEventListener("alpine:init", () => {
         async give_feedback(item, itemType, query, feedback, feedbackType) {
             const feedback_obj = { "query": query, "item": item, "itemType": itemType, "feedback": feedback, "type": feedbackType };
             console.log(feedback_obj);
-            const response = await fetch(`/feedback`, {
+            const response = await fetch(`/feedback/submit`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

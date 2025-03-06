@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Set, Optional, Any, Literal
 
 
@@ -26,7 +26,25 @@ class Config(BaseModel):
 	unified_metadata: Set[str]
 
 
+class Result(BaseModel):
+	success: bool
+	msg: str
+
+
 class TaskStatus(BaseModel):
 	id: str
 	status: Literal["pending", "running", "complete", "failed"] = "pending"
-	result: Optional[Dict[str, Any]] = {}
+	result: Result = None
+
+
+class Document(BaseModel):
+	content: str = Field(..., description="The content of the document.")
+	metadata: Optional[Dict[str, Any]] = Field(
+		None, description="Metadata associated with the document."
+	)
+
+
+class RAGResponse(BaseModel):
+	result: Result
+	query: Optional[str]
+	answer: Optional[str]

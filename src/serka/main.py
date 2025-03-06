@@ -1,10 +1,10 @@
-from fastapi import FastAPI, Query, Depends
-from typing import Dict, Sequence, Any, List, Literal
+from fastapi import FastAPI, Query, Depends, APIRouter, Body
+from typing import Dict, Any, List, Literal
 from .dao import DAO
 import yaml
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from .models import Config, TaskStatus
+from .models import Config, TaskStatus, Document, Result, RAGResponse
 from .feedback import FeedbackLogger
 from fastapi import BackgroundTasks
 import uuid
@@ -22,8 +22,14 @@ def load_config():
 config = load_config()
 
 app = FastAPI(
-	title="Serka", description="An API for expose advanced search functionality"
+	title="Serka", description="An API to expose advanced search functionality"
 )
+
+tasks_router = APIRouter(prefix="/tasks", tags=["Tasks"])
+collections_router = APIRouter(prefix="/collections", tags=["Collections"])
+query_router = APIRouter(prefix="/query", tags=["Query"])
+feedback_router = APIRouter(prefix="/feedback", tags=["Feedback"])
+
 
 dao_instance = DAO(
 	ollama_host=config.ollama.host,
@@ -49,23 +55,39 @@ def get_dao() -> DAO:
 	return dao_instance
 
 
-@app.get("/list", summary="List collections in the vector database")
-def list() -> Dict[str, Sequence[str]]:
-	return {"collections": get_dao().list_collections()}
+@collections_router.get("/list", summary="List collections in the vector database")
+def list() -> List[str]:
+	return get_dao().list_collections()
 
 
-@app.get("/peek", summary="Peek into a collection in the vector database")
+@collections_router.get(
+	"/peek", summary="Peek into a collection in the vector database"
+)
 def peek(
 	collection: str = Query(
 		description="Name of the collection to peek.",
 		default=config.default_collection,
 	),
 	dao: DAO = Depends(get_dao),
-) -> Dict[str, Sequence[Dict[str, str]]]:
-	return {"documents": dao.peek(collection)}
+) -> List[Document]:
+	return dao.peek(collection)
 
 
-@app.get("/search", summary="Perform a semantic search in the vector database")
+@collections_router.delete(
+	"/delete", summary="Delete a collection in the vector database"
+)
+def delete(
+	collection: str = Query(
+		description="The name of the collection to delete in the vector database.",
+	),
+	dao: DAO = Depends(get_dao),
+) -> Result:
+	return dao.delete(collection)
+
+
+@query_router.get(
+	"/semantic", summary="Perform a semantic search in the vector database"
+)
 def semantic_search(
 	q: str = Query(
 		description="Query to perform the semantic search with.",
@@ -80,19 +102,32 @@ def semantic_search(
 		default=20,
 	),
 	dao: DAO = Depends(get_dao),
-) -> List[Dict[str, Any]]:
+) -> List[Document]:
 	feedback_loggger.log_feedback(
 		{"query": q, "collection": collection, "type": "semantic_search"}
 	)
 	return dao.query(collection, q, n)
 
 
-@app.get("/scrape", summary="Submit a task to asynchronously scrape from a source URL")
+@collections_router.post(
+	"/insert", summary="Insert a document into the vector database"
+)
+def insert(
+	document: Document,
+	collection: str = Query(default=config.default_collection),
+	dao: DAO = Depends(get_dao),
+) -> Result:
+	return dao.insert(document, collection)
+
+
+@tasks_router.post(
+	"/scrape", summary="Submit a task to asynchronously scrape from a source URL"
+)
 async def scrape(
 	background_tasks: BackgroundTasks,
-	url: str = Query(
+	urls: List[str] = Body(
 		description="URL to fetch data from / start scraping from.",
-		default=config.collections[config.default_collection].url,
+		default=[config.collections[config.default_collection].url],
 	),
 	collection: str = Query(
 		description="Name of the collection to store the fetched documents.",
@@ -108,8 +143,8 @@ async def scrape(
 	def scrape_task():
 		try:
 			tasks[id].status = "running"
-			result = dao.insert(
-				url,
+			result = dao.scrape(
+				urls,
 				collection,
 				source_type=source_type,
 				unified_metadata=config.unified_metadata,
@@ -124,14 +159,14 @@ async def scrape(
 	return task
 
 
-@app.get("/status", summary="Get the status of a task")
+@tasks_router.get("/status", summary="Get the status of a task")
 def status(id: str) -> TaskStatus:
 	if id not in tasks:
 		raise HTTPException(status_code=404, detail=f"Task with ID {id} not found")
 	return tasks[id]
 
 
-@app.get("/rag", summary="Perform a RAG query")
+@query_router.get("/rag", summary="Perform a RAG query")
 def rag(
 	q: str = Query(
 		description="Query to hand the RAG pipeline",
@@ -142,11 +177,16 @@ def rag(
 		default=config.default_collection,
 	),
 	dao: DAO = Depends(get_dao),
-) -> Dict[str, Any]:
+) -> RAGResponse:
 	if config.rag_enabled is False:
-		return {
-			"answer": "Generative answering is currently disabled. Please enable via `config.yaml`"
-		}
+		return RAGResponse(
+			result=Result(
+				success=False,
+				msg="Generative answering is currently disabled. Please enable via `config.yaml`",
+			),
+			answer="",
+			query=q,
+		)
 	collection_desc = config.collections.get(
 		collection,
 		{
@@ -159,12 +199,18 @@ def rag(
 	return dao.rag_query(collection, str(collection_desc), q)
 
 
-@app.get("/feedback", summary="Get feedback")
-def get_feedback():
+@feedback_router.get("/list", summary="Get feedback")
+def get_feedback() -> List[Dict[str, Any]]:
 	return feedback_loggger.get_feedback()
 
 
-@app.post("/feedback", summary="Log feedback")
-def log_feedback(feedback: Dict[str, Any]):
+@feedback_router.post("/submit", summary="Log feedback")
+def log_feedback(feedback: Dict[str, Any]) -> Result:
 	feedback_loggger.log_feedback(feedback)
-	return {"status": "success"}
+	return Result(success=True, msg="Feedback logged")
+
+
+app.include_router(tasks_router)
+app.include_router(collections_router)
+app.include_router(query_router)
+app.include_router(feedback_router)

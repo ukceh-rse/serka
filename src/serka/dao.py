@@ -1,190 +1,104 @@
 import chromadb.api
-from haystack import Pipeline
-from haystack.components.fetchers import LinkContentFetcher
-from haystack.components.preprocessors import DocumentSplitter
-from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
-from haystack_integrations.document_stores.chroma import ChromaDocumentStore
-from haystack_integrations.components.retrievers.chroma import ChromaEmbeddingRetriever
-from haystack_integrations.components.embedders.ollama import OllamaTextEmbedder
-from haystack.components.writers import DocumentWriter
-from .converters import EIDCConverter, HTMLConverter, UnifiedEmbeddingConverter
-from typing import List, Dict, Any, Set
+import haystack
+from typing import List, Set
 import logging
-from dataclasses import dataclass
 import chromadb
-from haystack.components.builders import PromptBuilder
-from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
-from haystack.components.builders.answer_builder import AnswerBuilder
-from .prompts import RAG_PROMPT
+from .models import Document, Result, RAGResponse
+from .pipelines import PipelineBuilder
 
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 class DAO:
-	ollama_host: str
-	ollama_port: int
-	chroma_host: str
-	chroma_port: int
-	default_embedding_model: str
-	default_rag_model: str
 	_chroma_client: chromadb.api.ClientAPI = None
+	_pipeline_builder: PipelineBuilder = None
 
-	def __post_init__(self):
-		logger.info(f"Creating DAO with [{self.chroma_host}:{self.chroma_port}]")
-		self._chroma_client = chromadb.HttpClient(
-			host=self.chroma_host, port=self.chroma_port
+	def __init__(
+		self,
+		ollama_host,
+		ollama_port,
+		chroma_host,
+		chroma_port,
+		default_embedding_model,
+		default_rag_model,
+	):
+		self._chroma_client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+		self._pipeline_builder = PipelineBuilder(
+			ollama_host=ollama_host,
+			ollama_port=ollama_port,
+			chroma_host=chroma_host,
+			chroma_port=chroma_port,
+			embedding_model=default_embedding_model,
+			rag_model=default_rag_model,
+			chunk_length=150,
+			chunk_overlap=50,
 		)
 
 	def list_collections(self) -> List[str]:
 		return self._chroma_client.list_collections()
 
-	def insert(
+	def insert(self, document: Document, collection: str):
+		p = self._pipeline_builder.insertion_pipeline(collection)
+		sources = [haystack.Document(content=document.content, meta=document.metadata)]
+		result = p.run(data={"splitter": {"documents": sources}})
+		insertions = result["writer"]["documents_written"]
+		return Result(
+			success=True, msg=f"Inserted {insertions} document(s) into {collection}"
+		)
+
+	def scrape(
 		self,
-		url,
-		collection_name: str,
-		embedding_model: str | None = None,
+		urls,
+		collection: str,
 		source_type: str = "eidc",
 		unified_metadata: Set[str] = {},
-	) -> Dict[str, Any]:
-		p = self._insertion_pipeline(
-			collection_name, embedding_model, source_type, unified_metadata
+	) -> Result:
+		p = self._pipeline_builder.scraping_pipeline(
+			collection, source_type, unified_metadata
 		)
-		result = p.run(data={"fetcher": {"urls": [url]}})
-		return {"status": "success", "documents": result["writer"]["documents_written"]}
+		result = p.run(data={"fetcher": {"urls": urls}})
+		insertions = result["writer"]["documents_written"]
+		return Result(
+			success=True, msg=f"Inserted {insertions} document(s) into {collection}"
+		)
 
-	def delete(self, collection_name: str) -> Dict[str, Any]:
-		self._chroma_client.delete_collection(collection_name)
-		return {"status": "success"}
+	def delete(self, collection_name: str) -> Result:
+		try:
+			self._chroma_client.delete_collection(collection_name)
+			return Result(success=True, msg=f"Collection '{collection_name}' deleted.")
+		except chromadb.errors.InvalidArgumentError as e:
+			return Result(success=False, msg=str(e))
 
-	def query(
-		self, collection_name: str, query: str, n: int = 10
-	) -> List[Dict[str, Any]]:
-		p = self._query_pipeline(collection_name, n)
+	def query(self, collection_name: str, query: str, n: int = 10) -> List[Document]:
+		p = self._pipeline_builder.query_pipeline(collection_name, n)
 		results = p.run({"embedder": {"text": query}})["retriever"]["documents"]
 		output = []
 		for doc in results:
-			d = {k: v for k, v in doc.meta.items()}
-			d["score"] = doc.score
+			d = Document(content=doc.content, metadata=doc.meta)
+			d.metadata["score"] = doc.score
 			output.append(d)
-		return sorted(output, key=lambda x: x["score"])
+		return sorted(output, key=lambda x: x.metadata["score"])
 
-	def peek(self, collection_name: str, n: int = 5) -> List[Dict[str, str]]:
+	def peek(self, collection_name: str, n: int = 5) -> List[Document]:
 		result = self._chroma_client.get_collection(collection_name).peek(n)
 		output = []
 		for doc, meta in zip(result["documents"], result["metadatas"]):
-			d = {k: str(v) for k, v in meta.items()}
-			d["doc"] = doc
-			output.append(d)
+			output.append(Document(content=doc, metadata=meta))
 		return output
 
 	def rag_query(
 		self, collection_name: str, collection_desc: str, query: str
-	) -> Dict[str, Any]:
-		p = self._rag_pipeline(collection_name)
+	) -> RAGResponse:
+		p = self._pipeline_builder.rag_pipeline(collection_name)
 		result = p.run(
 			{
 				"embedder": {"text": query},
 				"prompt_builder": {"query": query, "collection_desc": collection_desc},
 			}
 		)
-		return {
-			"answer": result["answer_builder"]["answers"][0].data,
-			"query": result["answer_builder"]["answers"][0].query,
-		}
-
-	def _rag_pipeline(self, collection_name: str) -> Pipeline:
-		logger.info(f"Creating RAG pipeline for collection: {collection_name}")
-		p = self._query_pipeline(collection_name)
-		prompt_builder = PromptBuilder(RAG_PROMPT)
-		logger.info(f"Creating RAG pipeline with llm: {self.default_rag_model}")
-		llm = OllamaGenerator(
-			model=self.default_rag_model,
-			generation_kwargs={"num_ctx": 16384, "temperature": 0.0},
-			url=f"http://{self.ollama_host}:{self.ollama_port}",
+		return RAGResponse(
+			result=Result(success=True, msg="RAG query successful"),
+			query=result["answer_builder"]["answers"][0].query,
+			answer=result["answer_builder"]["answers"][0].data,
 		)
-		answer_builder = AnswerBuilder()
-		p.add_component("prompt_builder", prompt_builder)
-		p.add_component("llm", llm)
-		p.add_component("answer_builder", answer_builder)
-
-		p.connect("retriever.documents", "prompt_builder.documents")
-		p.connect("retriever.documents", "answer_builder.documents")
-
-		p.connect("prompt_builder", "llm")
-
-		p.connect("llm.replies", "answer_builder.replies")
-		p.connect("prompt_builder.prompt", "answer_builder.query")
-		return p
-
-	def _query_pipeline(self, collection_name: str, top_n: int = 5) -> Pipeline:
-		doc_store = ChromaDocumentStore(
-			host=self.chroma_host,
-			port=self.chroma_port,
-			collection_name=collection_name,
-		)
-		p = Pipeline()
-		p.add_component(
-			"embedder",
-			OllamaTextEmbedder(
-				url=f"http://{self.ollama_host}:{self.ollama_port}",
-				model=self.default_embedding_model,
-			),
-		)
-		p.add_component("retriever", ChromaEmbeddingRetriever(doc_store, top_k=top_n))
-		p.connect("embedder.embedding", "retriever.query_embedding")
-		return p
-
-	def _create_converter(self, source_type: str):
-		if source_type == "eidc":
-			return EIDCConverter({"title", "description"})
-		if source_type == "html":
-			return HTMLConverter()
-		raise ValueError(f"Unknown converter type: {source_type}")
-
-	def _insertion_pipeline(
-		self,
-		collection_name: str,
-		embedding_model: str | None = None,
-		source_type: str = "eidc",
-		unified_metadata: Set[str] = {},
-		chunk_length: int = 150,
-		chunk_overlap: int = 50,
-	) -> Pipeline:
-		model = embedding_model or self.default_embedding_model
-		logger.info(
-			f"Creating EIDC metadata insertion pipeline["
-			f"ollama({self.ollama_host}:{self.ollama_port}), "
-			f"chroma({self.chroma_host}:{self.chroma_port}), "
-			f"[model({model})]"
-		)
-		doc_store = ChromaDocumentStore(
-			host=self.chroma_host,
-			port=self.chroma_port,
-			collection_name=collection_name,
-		)
-		p = Pipeline()
-		p.add_component("fetcher", LinkContentFetcher())
-		p.add_component("converter", self._create_converter(source_type))
-		p.add_component(
-			"splitter",
-			DocumentSplitter(
-				split_by="word", split_length=chunk_length, split_overlap=chunk_overlap
-			),
-		)
-		p.add_component("unifier", UnifiedEmbeddingConverter(unified_metadata))
-		p.add_component(
-			"embedder",
-			OllamaDocumentEmbedder(
-				url=f"http://{self.ollama_host}:{self.ollama_port}",
-				model=model,
-			),
-		)
-		p.add_component("writer", DocumentWriter(doc_store))
-		p.connect("fetcher.streams", "converter.sources")
-		p.connect("converter.documents", "splitter.documents")
-		p.connect("splitter.documents", "unifier.documents")
-		p.connect("unifier.documents", "embedder.documents")
-		p.connect("embedder.documents", "writer.documents")
-		return p
