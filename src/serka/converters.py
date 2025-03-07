@@ -124,3 +124,35 @@ class UnifiedEmbeddingConverter:
 			unified_content += f"{doc.content}"
 			doc.content = unified_content
 		return {"documents": documents}
+
+
+@component
+class LegiloConverter:
+	"""
+	Converts JSON responses from the Legilo API into haystack Documents.
+	"""
+
+	def _extract_supporting_docs(self, data):
+		docs = []
+		success = data.get("success", False)
+		if success:
+			for key, value in success.items():
+				docs.append(
+					Document(
+						content=value,
+						meta={"title": "Supporting Documentation", "section": key},
+					)
+				)
+		return docs
+
+	@component.output_types(documents=List[Document])
+	def run(self, sources: List[Union[str, Path, ByteStream]]):
+		docs = []
+		for source in sources:
+			try:
+				data = source.data.decode("utf-8")
+				data = json.loads(data)
+				docs += self._extract_supporting_docs(data)
+			except Exception:
+				continue
+		return {"documents": docs}
