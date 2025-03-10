@@ -2,7 +2,12 @@ from dataclasses import dataclass
 from haystack import Pipeline
 from haystack_integrations.document_stores.chroma import ChromaDocumentStore
 from haystack.components.preprocessors import DocumentSplitter
-from .converters import EIDCConverter, HTMLConverter, UnifiedEmbeddingConverter
+from serka.converters import (
+	EIDCConverter,
+	HTMLConverter,
+	UnifiedEmbeddingConverter,
+	LegiloConverter,
+)
 from typing import Set
 from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
 from haystack.components.writers import DocumentWriter
@@ -88,6 +93,8 @@ class PipelineBuilder:
 	def _create_converter(self, source_type: str):
 		if source_type == "eidc":
 			return EIDCConverter({"title", "description"})
+		if source_type == "legilo":
+			return LegiloConverter()
 		if source_type == "html":
 			return HTMLConverter()
 		raise ValueError(f"Unknown converter type: {source_type}")

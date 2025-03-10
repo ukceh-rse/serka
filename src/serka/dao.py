@@ -3,8 +3,8 @@ import haystack
 from typing import List, Set
 import logging
 import chromadb
-from .models import Document, Result, RAGResponse
-from .pipelines import PipelineBuilder
+from serka.models import Document, Result, RAGResponse
+from serka.pipelines import PipelineBuilder
 
 
 logger = logging.getLogger(__name__)

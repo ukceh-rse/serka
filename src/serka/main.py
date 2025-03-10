@@ -1,11 +1,11 @@
 from fastapi import FastAPI, Query, Depends, APIRouter, Body
 from typing import Dict, Any, List, Literal
-from .dao import DAO
+from serka.dao import DAO
 import yaml
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from .models import Config, TaskStatus, Document, Result, RAGResponse
-from .feedback import FeedbackLogger
+from serka.models import Config, TaskStatus, Document, Result, RAGResponse
+from serka.feedback import FeedbackLogger
 from fastapi import BackgroundTasks
 import uuid
 from fastapi import HTTPException
@@ -133,7 +133,7 @@ async def scrape(
 		description="Name of the collection to store the fetched documents.",
 		default=config.default_collection,
 	),
-	source_type: Literal["eidc", "html"] = "eidc",
+	source_type: Literal["eidc", "legilo", "html"] = "eidc",
 	dao: DAO = Depends(get_dao),
 ) -> TaskStatus:
 	id = str(uuid.uuid4())

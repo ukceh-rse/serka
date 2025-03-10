@@ -4,6 +4,7 @@ services:
       - ./src:/app/src
       - ./static:/app/static
       - ./config.yaml:/app/config.yaml
+      - ./.env:/app/.env
     environment:
       - PYTHONPATH=/app/src
       - DEBUG=1
