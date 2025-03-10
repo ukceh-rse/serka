@@ -9,6 +9,8 @@ from serka.feedback import FeedbackLogger
 from fastapi import BackgroundTasks
 import uuid
 from fastapi import HTTPException
+from serka.tasks import scrape_task, legilo_crawl_task
+from pydantic import HttpUrl
 
 tasks: Dict[str, TaskStatus] = {}
 
@@ -125,8 +127,8 @@ def insert(
 )
 async def scrape(
 	background_tasks: BackgroundTasks,
-	urls: List[str] = Body(
-		description="URL to fetch data from / start scraping from.",
+	urls: List[HttpUrl] = Body(
+		description="List of urls to scrape data from.",
 		default=[config.collections[config.default_collection].url],
 	),
 	collection: str = Query(
@@ -139,23 +141,38 @@ async def scrape(
 	id = str(uuid.uuid4())
 	task = TaskStatus(id=id, status="pending")
 	tasks[id] = task
+	background_tasks.add_task(
+		scrape_task, task, dao, urls, collection, source_type, config.unified_metadata
+	)
+	return task
 
-	def scrape_task():
-		try:
-			tasks[id].status = "running"
-			result = dao.scrape(
-				urls,
-				collection,
-				source_type=source_type,
-				unified_metadata=config.unified_metadata,
-			)
-			tasks[id].status = "complete"
-			tasks[id].result = result
-		except Exception as e:
-			tasks[id].status = "failed"
-			tasks[id].result = {"error": str(e)}
 
-	background_tasks.add_task(scrape_task)
+@tasks_router.post(
+	"/crawl", summary="Submit a task to asynchronously crawl from a source URL"
+)
+async def crawl(
+	background_tasks: BackgroundTasks,
+	urls: List[HttpUrl] = Body(
+		description="List of urls to begin crawl from.",
+		default=[config.collections[config.default_collection].url],
+	),
+	collection: str = Query(default=config.default_collection),
+	crawl_type: Literal["legilo", "web"] = "legilo",
+	dao: DAO = Depends(get_dao),
+) -> TaskStatus:
+	id = str(uuid.uuid4())
+	task = TaskStatus(id=id, status="pending")
+	tasks[id] = task
+
+	if crawl_type == "web":
+		raise HTTPException(
+			status_code=501,
+			detail="Web crawling is not yet implemented. Please use 'legilo' for now.",
+		)
+
+	background_tasks.add_task(
+		legilo_crawl_task, task, dao, urls, collection, config.unified_metadata
+	)
 	return task
 
 

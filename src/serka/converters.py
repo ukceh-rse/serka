@@ -7,6 +7,7 @@ from trafilatura import bare_extraction
 import logging
 import json
 from datetime import datetime
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,8 @@ class EIDCConverter:
 				content=dataset[field],
 				meta={
 					"title": dataset.get("title", "unknown_dataset"),
-					"section": field,
+					"section": "metadata",
+					"subsection": field,
 					"retrieved": timestamp,
 					"url": self._extract_url(dataset.get("resourceIdentifier", [])),
 				},
@@ -105,7 +107,7 @@ class UnifiedEmbeddingConverter:
 	Also includes the original content as an additional metadata field to ensure it is preserved.
 	"""
 
-	def __init__(self, fields: Set[str]):
+	def __init__(self, fields: List[str]):
 		self.fields = fields
 
 	@component.output_types(documents=List[Document])
@@ -132,6 +134,9 @@ class LegiloConverter:
 	Converts JSON responses from the Legilo API into haystack Documents.
 	"""
 
+	def __init__(self, metadata: Dict[str, str] = {}):
+		self.metadata = metadata
+
 	def _extract_supporting_docs(self, data):
 		docs = []
 		success = data.get("success", False)
@@ -140,7 +145,7 @@ class LegiloConverter:
 				docs.append(
 					Document(
 						content=value,
-						meta={"title": "Supporting Documentation", "section": key},
+						meta=self.metadata | {"subsection": key},
 					)
 				)
 		return docs

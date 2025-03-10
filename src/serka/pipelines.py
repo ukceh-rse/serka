@@ -8,7 +8,7 @@ from serka.converters import (
 	UnifiedEmbeddingConverter,
 	LegiloConverter,
 )
-from typing import Set
+from typing import Dict, List
 from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
 from haystack.components.writers import DocumentWriter
 from haystack.components.fetchers import LinkContentFetcher
@@ -75,32 +75,40 @@ class PipelineBuilder:
 		return p
 
 	def scraping_pipeline(
-		self, collection, type, unified_metadata: Set[str] = {}
+		self,
+		collection,
+		type,
+		unified_metadata: List[str] = {},
+		metadata: Dict[str, str] = {},
 	) -> Pipeline:
-		p = self.conversion_pipeline(collection, type, unified_metadata)
-		p.add_component("fetcher", LinkContentFetcher())
+		p = self.conversion_pipeline(collection, type, unified_metadata, metadata)
+		p.add_component("fetcher", LinkContentFetcher(timeout=10))
 		p.connect("fetcher.streams", "converter.sources")
 		return p
 
 	def conversion_pipeline(
-		self, collection: str, type: str, unified_metadata: Set[str] = {}
+		self,
+		collection: str,
+		type: str,
+		unified_metadata: List[str] = {},
+		metadata: Dict[str, str] = {},
 	) -> Pipeline:
 		p = self.insertion_pipeline(collection, unified_metadata)
-		p.add_component("converter", self._create_converter(type))
+		p.add_component("converter", self._create_converter(type, metadata))
 		p.connect("converter.documents", "splitter.documents")
 		return p
 
-	def _create_converter(self, source_type: str):
+	def _create_converter(self, source_type: str, metadata: Dict[str, str]):
 		if source_type == "eidc":
-			return EIDCConverter({"title", "description"})
+			return EIDCConverter({"description", "lineage"})
 		if source_type == "legilo":
-			return LegiloConverter()
+			return LegiloConverter(metadata)
 		if source_type == "html":
 			return HTMLConverter()
 		raise ValueError(f"Unknown converter type: {source_type}")
 
 	def insertion_pipeline(
-		self, collection: str, unified_metadata: Set[str] = {}
+		self, collection: str, unified_metadata: List[str] = {}
 	) -> Pipeline:
 		p = Pipeline()
 		doc_store = ChromaDocumentStore(
