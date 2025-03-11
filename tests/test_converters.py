@@ -1,7 +1,6 @@
 from haystack.dataclasses import ByteStream, Document
 from serka.converters import EIDCConverter, HTMLConverter, UnifiedEmbeddingConverter
 from haystack.components.preprocessors import DocumentSplitter
-
 from haystack import Pipeline
 import json
 import pytest
@@ -76,7 +75,8 @@ def test_eidc_converter_with_valid_source():
 	assert "documents" in result
 	assert len(result["documents"]) == 1
 	assert result["documents"][0].content == test_val
-	assert result["documents"][0].meta["section"] == test_field
+	assert result["documents"][0].meta["section"] == "metadata"
+	assert result["documents"][0].meta["subsection"] == test_field
 	assert result["documents"][0].meta["title"] == test_title
 	assert result["documents"][0].meta["url"] == test_url
 
