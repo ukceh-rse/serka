@@ -25,6 +25,9 @@ class Config(BaseModel):
 	rag_enabled: bool
 	unified_metadata: List[str]
 
+	def __hash__(self):
+		return hash(self.model_dump_json())
+
 
 class Result(BaseModel):
 	success: bool
