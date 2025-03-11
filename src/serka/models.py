@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Set, Optional, Any, Literal
+from typing import List, Dict, Optional, Any, Literal
 
 
 class ServiceConfig(BaseModel):
@@ -23,7 +23,10 @@ class Config(BaseModel):
 	collections: Dict[str, CollectionConfig]
 	default_collection: str
 	rag_enabled: bool
-	unified_metadata: Set[str]
+	unified_metadata: List[str]
+
+	def __hash__(self):
+		return hash(self.model_dump_json())
 
 
 class Result(BaseModel):

@@ -1,10 +1,10 @@
 import chromadb.api
 import haystack
-from typing import List, Set
+from typing import List, Dict
 import logging
 import chromadb
-from .models import Document, Result, RAGResponse
-from .pipelines import PipelineBuilder
+from serka.models import Document, Result, RAGResponse
+from serka.pipelines import PipelineBuilder
 
 
 logger = logging.getLogger(__name__)
@@ -52,10 +52,11 @@ class DAO:
 		urls,
 		collection: str,
 		source_type: str = "eidc",
-		unified_metadata: Set[str] = {},
+		unified_metadata: List[str] = {},
+		metadata: Dict[str, str] = {},
 	) -> Result:
 		p = self._pipeline_builder.scraping_pipeline(
-			collection, source_type, unified_metadata
+			collection, source_type, unified_metadata, metadata
 		)
 		result = p.run(data={"fetcher": {"urls": urls}})
 		insertions = result["writer"]["documents_written"]
