@@ -47,6 +47,16 @@ class Document(BaseModel):
 	)
 
 
+class ScoredDocument(BaseModel):
+	document: Document
+	score: float
+
+
+class GroupedDocuments(BaseModel):
+	docs: List[ScoredDocument]
+	groupedby: str
+
+
 class RAGResponse(BaseModel):
 	result: Result
 	query: Optional[str]

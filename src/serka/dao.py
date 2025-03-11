@@ -3,7 +3,7 @@ import haystack
 from typing import List, Dict
 import logging
 import chromadb
-from serka.models import Document, Result, RAGResponse
+from serka.models import Document, Result, RAGResponse, GroupedDocuments, ScoredDocument
 from serka.pipelines import PipelineBuilder
 
 
@@ -71,15 +71,29 @@ class DAO:
 		except chromadb.errors.InvalidArgumentError as e:
 			return Result(success=False, msg=str(e))
 
-	def query(self, collection_name: str, query: str, n: int = 10) -> List[Document]:
+	def query(
+		self, collection_name: str, query: str, n: int = 10, groupby: str = "title"
+	) -> List[GroupedDocuments]:
 		p = self._pipeline_builder.query_pipeline(collection_name, n)
 		results = p.run({"embedder": {"text": query}})["retriever"]["documents"]
-		output = []
-		for doc in results:
-			d = Document(content=doc.content, metadata=doc.meta)
-			d.metadata["score"] = doc.score
-			output.append(d)
-		return sorted(output, key=lambda x: x.metadata["score"])
+
+		doc_scores = [
+			ScoredDocument(
+				document=Document(content=doc.content, metadata=doc.meta),
+				score=doc.score,
+			)
+			for doc in results
+		]
+		doc_scores = sorted(doc_scores, key=lambda x: x.score)
+
+		grouped: Dict[str, GroupedDocuments] = {}
+		for doc in doc_scores:
+			groupby_val = doc.document.metadata.get(groupby, "unknown")
+			if groupby_val not in grouped.keys():
+				grouped[groupby_val] = GroupedDocuments(docs=[], groupedby=groupby)
+			grouped[groupby_val].docs.append(doc)
+
+		return grouped.values()
 
 	def peek(self, collection_name: str, n: int = 5) -> List[Document]:
 		result = self._chroma_client.get_collection(collection_name).peek(n)
