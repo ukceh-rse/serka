@@ -1,6 +1,6 @@
 from fastapi import Query, Depends, APIRouter
 from serka.routers.dependencies import get_dao
-from serka.models import Document, Result
+from serka.models import GroupedDocuments, Result
 from typing import List
 from serka.dao import DAO
 from serka.feedback import FeedbackLogger
@@ -27,7 +27,7 @@ def semantic_search(
 	),
 	dao: DAO = Depends(get_dao),
 	feedback_loggger: FeedbackLogger = Depends(get_feedback_logger),
-) -> List[Document]:
+) -> List[GroupedDocuments]:
 	feedback_loggger.log_feedback(
 		{"query": q, "collection": collection, "type": "semantic_search"}
 	)
