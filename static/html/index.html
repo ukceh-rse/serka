@@ -29,7 +29,7 @@
 <body class="flex flex-col items-center justify-center h-screen bg-gray-100" x-data="app" x-init="get_collections()">
     <div x-show="splash">
         <img src="/static/img/ukceh-logo.png" alt="UKCEH logo" />
-        <h1 class="text-3xl mb-6">Serka <span class="text-xl">AI Enhanced Search Tool</span></h1>
+        <h1 class="text-3xl font-semibold">Serka <span class="text-xl">AI Enhanced Search Tool</span></h1>
     </div>
     <div :class="!splash ? 'fixed top-0 left-0 w-full justify-center' : 'animate-fly-in w-100'" class="p-6 z-10"
         x-show="collections.length">
@@ -59,7 +59,7 @@
         <template x-for="item in results">
             <div class="bg-white p-5 rounded-lg shadow-md text-justify mb-6 border border-gray-200"
                 x-data="{ showDetails: false }">
-                <div class="text-lg">
+                <div class="text-lg font-semibold">
                     <button @click="window.open(item.docs[0].document.metadata.url, '_blank')"
                         class="hero-text hover:underline text-left focus:outline-none"
                         x-text="item.docs[0].document.metadata.title"
