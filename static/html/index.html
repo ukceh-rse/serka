@@ -10,6 +10,8 @@
     <script src="/static/js/marked.js"></script>
     <script src="/static/js/app.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="/static/css/style.css">
     <script>
         window.onload = function () {
@@ -27,22 +29,27 @@
 <body class="flex flex-col items-center justify-center h-screen bg-gray-100" x-data="app" x-init="get_collections()">
     <div x-show="splash">
         <img src="/static/img/ukceh-logo.png" alt="UKCEH logo" />
-        <h1 class="text-3xl font-bold mb-6 text-gray-800">Serka</h1>
+        <h1 class="text-3xl mb-6">Serka <span class="text-xl">AI Enhanced Search Tool</span></h1>
     </div>
     <div :class="!splash ? 'fixed top-0 left-0 w-full justify-center' : 'animate-fly-in w-100'" class="p-6 z-10"
         x-show="collections.length">
-        <div id="searchBox"
-            class="bg-white shadow-md p-2 flex items-center z-10 rounded-lg w-full border border-gray-200">
-            <input id="searchInput" :disabled="thinking" @keydown.enter="search" x-model="query" type="text"
-                placeholder="Search..." class="w-full p-2 border-none focus:outline-none" />
-            <select x-model="selected_collection" class="w-20 p-2 border-none focus:outline-none">
-                <template x-for="collection in collections">
-                    <option x-text="collection"></option>
-                </template>
-            </select>
-            <button :disabled="thinking" @click="search" class="bg-blue-500 text-white px-4 py-2 rounded-lg">
-                <i :class="thinking? 'fa-spinner fa-spin' : 'fa-search'" class="fas"></i>
-            </button>
+        <div class="flex">
+            <div class="pb-2 pr-2 pt-2" x-show="!splash">
+                <img width="40px" src="/static/img/ukceh-icon.png" alt="UKCEH logo" />
+            </div>
+            <div id="searchBox"
+                class="bg-white shadow-md p-2 flex items-center z-10 rounded-lg w-full border border-gray-200">
+                <input id="searchInput" :disabled="thinking" @keydown.enter="search" x-model="query" type="text"
+                    placeholder="Search..." class="w-full p-2 border-none focus:outline-none" />
+                <select x-model="selected_collection" class="w-20 p-2 border-none focus:outline-none">
+                    <template x-for="collection in collections">
+                        <option x-text="collection"></option>
+                    </template>
+                </select>
+                <button :disabled="thinking" @click="search" class="hero-bg text-white px-4 py-2 rounded-lg">
+                    <i :class="thinking? 'fa-spinner fa-spin' : 'fa-search'" class="fas"></i>
+                </button>
+            </div>
         </div>
     </div>
     <div x-show="!collections.length">No collections available</div>
@@ -54,7 +61,7 @@
                 x-data="{ showDetails: false }">
                 <div class="text-lg">
                     <button @click="window.open(item.docs[0].document.metadata.url, '_blank')"
-                        class="text-blue-500 hover:underline text-left focus:outline-none"
+                        class="hero-text hover:underline text-left focus:outline-none"
                         x-text="item.docs[0].document.metadata.title"
                         :title="item.docs[0].document.metadata.title"></button>
                 </div>
@@ -63,7 +70,7 @@
                     x-text="item.docs[0].document.metadata.content" :title="item.docs[0].document.metadata.content">
                 </div>
 
-                <button @click="showDetails = !showDetails" class="text-blue-500 text-xs my-2">
+                <button @click="showDetails = !showDetails" class="hero-text text-xs my-2">
                     <i :class="showDetails ? 'fa-chevron-up' : 'fa-chevron-down'" class="fas ml-1"></i>
                     <span x-text="showDetails ? 'Hide details' : 'Show details'"></span>
                 </button>
@@ -174,7 +181,7 @@
                             class="w-full h-16 p-2 border border-gray-300 rounded mb-4"></textarea></td>
                 </tr>
             </table>
-            <button class="bg-blue-500 text-white px-4 py-2 rounded-lg"
+            <button class="hero-bg text-white px-4 py-2 rounded-lg"
                 @click="submit_feedback_modal(modal.item, modal.type, query, modal.text, 'TEXT')">Submit</button>
         </div>
     </div>

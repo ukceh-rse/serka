@@ -10,6 +10,23 @@
     }
 }
 
+@layer base {
+    html {
+        font-family: 'Lato', sans-serif;
+        color: #575656;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        font-family: 'Montserrat', sans-serif;
+        font-weight: 600;
+    }
+}
+
 .animate-fly-in {
     animation: flyIn 0.8s ease-out;
 }
@@ -36,17 +53,12 @@ button {
     cursor: pointer;
 }
 
-a {
-    color: #0000EE;
-    text-decoration: underline;
+.hero-text {
+    color: #0483a4;
 }
 
-a:visited {
-    color: #551A8B;
-}
-
-a:hover {
-    color: #0056b3;
+.hero-bg {
+    background-color: #0483a4;
 }
 
 .modal {
