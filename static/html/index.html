@@ -191,6 +191,40 @@
         <div x-text="toast.title" class="font-bold"></div>
         <div x-text="toast.msg" class="text-sm ellipsis-multiline"></div>
     </div>
+
+    <div x-show="privacyNotice.show"
+        class="fixed bg-white p-6 rounded-lg shadow-md text-justify border border-gray-200 w-lg z-100 right-4 top-4">
+        <h1 class="text-xl font-bold text-center mb-3"><i class="fa-solid fa-lock"></i> Privacy Notice</h1>
+        <h2>Welcome to Serka</h2>
+        <p class="mb-3">
+            Serka is an AI enhanced search prototype tool. It is designed to help you find information in the EIDC
+            and other UKCEH data sources. You can search for information in the search box. Serka will show
+            you the most relevant sources of data based on a semantic search and will also attempt to answer any query
+            you pose to it using Retrieval Augmented Generation (RAG) in conjunction with a Large Language Model (LLM).
+        </p>
+        <h2>Feedback</h2>
+        <p class="mb-3">
+            As Serka is just a prototype it is important that we get feedback from you to help us improve it. You can
+            provide feedback by clicking on any of the upvote <i class="fa-regular fa-thumbs-up"></i> / downvote <i
+                class="fa-regular fa-thumbs-down"></i> buttons that you see in the search results, or
+            you can provide more detailed feedback on a particular item by clicking: <i
+                class="fa-regular fa-pen-to-square"></i>.
+        </p>
+        <p class="mb-3">
+            We will not log any personal information about you when you provide feedback. We will not even track your IP
+            address. This means your usage of the tool is completely anonymous. This does mean however that you will
+            not be able to withdraw any feedback once provided.
+        <p class="mb-3">
+            Your feedback as well as the queries you pose to the search tool will be logged to a database and used to
+            refine the development of the search tool in the future. The feedback may also be used in academic
+            publications about the developoment of the search tool.
+        </p>
+        <button class="hero-bg text-white px-4 py-2 rounded-lg" @click="closePrivacyNotice">Ok</button>
+    </div>
+    <button @click="openPrivacyNotice" x-show="!privacyNotice.show"
+        class="fixed bottom-4 right-4 bg-white p-2 rounded-lg shadow-md font-bold text-gray-500 border border-gray-200 z-100">
+        <i class="fa-solid fa-lock"></i> Privacy Notice
+    </button>
 </body>
 
 </html>
