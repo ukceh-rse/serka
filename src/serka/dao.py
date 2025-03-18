@@ -103,17 +103,20 @@ class DAO:
 		return output
 
 	def rag_query(
-		self, collection_name: str, collection_desc: str, query: str
-	) -> RAGResponse:
-		p = self._pipeline_builder.rag_pipeline(collection_name)
+		self,
+		collection_name: str,
+		collection_desc: str,
+		query: str,
+		answer: RAGResponse,
+	) -> None:
+		p = self._pipeline_builder.rag_pipeline(
+			collection_name, lambda x: answer.tokens.append(x.content)
+		)
 		result = p.run(
 			{
 				"embedder": {"text": query},
 				"prompt_builder": {"query": query, "collection_desc": collection_desc},
 			}
 		)
-		return RAGResponse(
-			result=Result(success=True, msg="RAG query successful"),
-			query=result["answer_builder"]["answers"][0].query,
-			answer=result["answer_builder"]["answers"][0].data,
-		)
+		answer.complete = True
+		answer.answer = result["answer_builder"]["answers"][0].data

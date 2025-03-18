@@ -58,6 +58,7 @@ class GroupedDocuments(BaseModel):
 
 
 class RAGResponse(BaseModel):
-	result: Result
-	query: Optional[str]
-	answer: Optional[str]
+	id: str
+	answer: str = ""
+	complete: bool = False
+	tokens: List[str] = []

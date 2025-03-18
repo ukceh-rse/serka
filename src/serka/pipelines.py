@@ -8,7 +8,7 @@ from serka.converters import (
 	UnifiedEmbeddingConverter,
 	LegiloConverter,
 )
-from typing import Dict, List
+from typing import Dict, List, Optional, Callable
 from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
 from haystack.components.writers import DocumentWriter
 from haystack.components.fetchers import LinkContentFetcher
@@ -17,6 +17,7 @@ from haystack_integrations.components.retrievers.chroma import ChromaEmbeddingRe
 from haystack.components.builders import PromptBuilder
 from haystack.components.builders.answer_builder import AnswerBuilder
 from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
+from haystack.dataclasses import StreamingChunk
 from .prompts import RAG_PROMPT
 
 
@@ -31,13 +32,18 @@ class PipelineBuilder:
 	chunk_length: int
 	chunk_overlap: int
 
-	def rag_pipeline(self, collection: str) -> Pipeline:
+	def rag_pipeline(
+		self,
+		collection: str,
+		streaming_callback: Optional[Callable[[StreamingChunk], None]] = None,
+	) -> Pipeline:
 		p = self.query_pipeline(collection)
 		prompt_builder = PromptBuilder(RAG_PROMPT)
 		llm = OllamaGenerator(
 			model=self.rag_model,
 			generation_kwargs={"num_ctx": 16384, "temperature": 0.0},
 			url=f"http://{self.ollama_host}:{self.ollama_port}",
+			streaming_callback=streaming_callback,
 		)
 		answer_builder = AnswerBuilder()
 

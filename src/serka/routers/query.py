@@ -1,14 +1,19 @@
 from fastapi import Query, Depends, APIRouter
 from serka.routers.dependencies import get_dao
-from serka.models import GroupedDocuments, Result
-from typing import List
+from serka.models import GroupedDocuments, Result, CollectionConfig
+from typing import List, Dict
 from serka.dao import DAO
 from serka.feedback import FeedbackLogger
 from serka.routers.dependencies import get_config, get_feedback_logger
 from serka.models import Config, RAGResponse
+from fastapi import BackgroundTasks
+import uuid
+from serka.jobs import rag_task
+from fastapi import HTTPException
 
 
 router = APIRouter(prefix="/query", tags=["Query"])
+answers: Dict[str, RAGResponse] = {}
 
 
 @router.get("/semantic", summary="Perform a semantic search in the vector database")
@@ -34,8 +39,9 @@ def semantic_search(
 	return dao.query(collection, q, n)
 
 
-@router.get("/rag", summary="Perform a RAG query")
-def rag(
+@router.post("/rag", summary="Submit a RAG query asynchronously.")
+async def submit_rag(
+	background_tasks: BackgroundTasks,
 	q: str = Query(
 		description="Query to hand the RAG pipeline",
 		examples=["Are there any pike in Windermere lake?"],
@@ -57,13 +63,34 @@ def rag(
 			answer="",
 			query=q,
 		)
-	collection_desc = config.collections.get(
+	collection_config: CollectionConfig = config.collections.get(
 		collection,
-		{
-			"description": "No information about the original source of the documents is known."
-		},
+		CollectionConfig(
+			source_name="unknown",
+			organisation="unknown",
+			url="unknown",
+			description="No information about the original source of the documents is known.",
+		),
 	)
 	feedback_loggger.log_feedback(
 		{"query": q, "collection": collection, "type": "rag_query"}
 	)
-	return dao.rag_query(collection, str(collection_desc), q)
+	id = str(uuid.uuid4())
+	answer = RAGResponse(id=id)
+	answers[id] = answer
+	background_tasks.add_task(
+		rag_task, answer, dao, collection, collection_config.description, q
+	)
+	return answer
+
+
+@router.get("/rag", summary="Get the result of a RAG query.")
+def get_rag(
+	id: str = Query(
+		description="The ID of the RAG query to get the result of.",
+		examples=["a1b2c3d4"],
+	),
+) -> RAGResponse:
+	if id not in answers:
+		raise HTTPException(status_code=404, detail=f"Answer with ID {id} not found")
+	return answers[id]

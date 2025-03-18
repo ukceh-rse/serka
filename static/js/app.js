@@ -1,10 +1,19 @@
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 document.addEventListener("alpine:init", () => {
     Alpine.data("app", () => ({
         query: '',
         selected_collection: '',
         collections: [],
         results: [],
-        answer: '',
+        answer: {
+            show: false,
+            id: '',
+            content: '',
+            complete: false
+        },
         thinking: true,
         splash: true,
         modal: {
@@ -37,12 +46,20 @@ document.addEventListener("alpine:init", () => {
         },
         async ragSearch() {
             try {
-                const response = await fetch(`/query/rag?q=${this.query}&collection=${this.selected_collection}`);
-                answer = await response.json();
-                if (answer["result"]["success"]) {
-                    this.answer = marked.parse(answer.answer);
-                } else {
-                    this.answer = answer["result"]["msg"];
+                this.answer = { id: '', content: '', complete: false, show: false };
+                const response = await fetch(`/query/rag?q=${this.query}&collection=${this.selected_collection}`, { method: 'POST' });
+                const rag_response = await response.json();
+                this.answer.id = rag_response.id;
+                this.answer.content = rag_response.content;
+                this.answer.complete = rag_response.complete;
+                while (this.answer.complete === false) {
+                    const response = await fetch(`/query/rag?id=${this.answer.id}`);
+                    const rag_response = await response.json();
+                    this.answer.id = rag_response.id;
+                    this.answer.content = marked.parse(rag_response.tokens.join(""));
+                    this.answer.complete = rag_response.complete;
+                    this.answer.show = true;
+                    await sleep(500);
                 }
             } catch (e) {
                 console.error(e);
@@ -109,5 +126,10 @@ document.addEventListener("alpine:init", () => {
         closePrivacyNotice() {
             this.privacyNotice.show = false;
         },
+        async updateRagResponse(id) {
+            console.log(id);
+            console.log('Updating RAG response...');
+            const response = await fetch(`/query/rag?id=${this.query}`);
+        }
     }))
 })
