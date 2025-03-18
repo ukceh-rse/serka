@@ -18,6 +18,9 @@ document.addEventListener("alpine:init", () => {
             title: 'Toast Title',
             msg: 'Toast Message',
         },
+        privacyNotice: {
+            show: true,
+        },
         async search() {
             this.splash = false;
             this.thinking = true;
@@ -98,6 +101,13 @@ document.addEventListener("alpine:init", () => {
         },
         closeModal() {
             this.modal.show = false;
+        },
+        openPrivacyNotice() {
+            this.privacyNotice.show = true;
+        }
+        ,
+        closePrivacyNotice() {
+            this.privacyNotice.show = false;
         },
     }))
 })
