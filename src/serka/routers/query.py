@@ -28,7 +28,7 @@ def semantic_search(
 	),
 	n: int = Query(
 		description="Number of results to return.",
-		default=20,
+		default=50,
 	),
 	dao: DAO = Depends(get_dao),
 	feedback_loggger: FeedbackLogger = Depends(get_feedback_logger),

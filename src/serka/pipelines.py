@@ -37,7 +37,7 @@ class PipelineBuilder:
 		collection: str,
 		streaming_callback: Optional[Callable[[StreamingChunk], None]] = None,
 	) -> Pipeline:
-		p = self.query_pipeline(collection)
+		p = self.query_pipeline(collection, top_n=15)
 		prompt_builder = PromptBuilder(RAG_PROMPT)
 		llm = OllamaGenerator(
 			model=self.rag_model,
