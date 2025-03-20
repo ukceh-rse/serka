@@ -1,4 +1,4 @@
-from serka.models import TaskStatus, Result
+from serka.models import TaskStatus, Result, RAGResponse
 from serka.dao import DAO
 from typing import List
 import requests
@@ -70,3 +70,9 @@ def legilo_crawl_task(
 		success=True,
 		msg=f"Inserted {insertions} supporting document(s) source files into {collection}",
 	)
+
+
+def rag_task(
+	answer: RAGResponse, dao: DAO, collection: str, collection_desc: str, q: str
+):
+	dao.rag_query(collection, collection_desc, q, answer)
