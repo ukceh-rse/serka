@@ -7,6 +7,15 @@ from haystack import component
 
 @component
 class EIDCFetcher:
+	"""
+	Haystack fetcher component for retrieving dataset infromation from the EIDC API.
+	Args:
+		url (str): The URL of the EIDC API endpoint.
+	"""
+
+	def __init__(self, url: str = "https://catalogue.ceh.ac.uk/eidc/documents"):
+		self.url = url
+
 	@component.output_types(datasets=List[Dict[Any, Any]])
 	def run(
 		self,
@@ -15,7 +24,7 @@ class EIDCFetcher:
 		filter: str = "state:published AND recordType:Dataset",
 	) -> List[Dict[Any, Any]]:
 		res: Response = requests.get(
-			"https://catalogue.ceh.ac.uk/eidc/documents",
+			self.url,
 			params={
 				"page": page,
 				"rows": limit,
@@ -23,4 +32,4 @@ class EIDCFetcher:
 			},
 		)
 		eidc_data = res.json()
-		return eidc_data["results"]
+		return {"datasets": eidc_data["results"]}

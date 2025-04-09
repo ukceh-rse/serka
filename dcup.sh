@@ -15,5 +15,7 @@ compose_files="-f docker-compose.yml"
 for arg in "$@"; do
     compose_files="$compose_files -f docker/docker-compose.$arg.yml"
 done
+echo "Running docker compose $compose_files pull"
+docker compose $compose_files pull
 echo "Running docker compose $compose_files"
 docker compose $compose_files up -d

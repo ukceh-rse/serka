@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @component
 class HTMLConverter:
 	"""
-	Converter for transform generic HTML pages into haystack Documents.
+	Converter to transform generic HTML pages into haystack Documents.
 	"""
 
 	@component.output_types(documents=List[Document])
@@ -61,7 +61,9 @@ class EIDCJSONToNodes:
 	Nodes should be extracted as entities and relationships beginning with datasets, authors, organisations.
 	"""
 
-	pass
+	@component.output_types(documents=Dict[str, List[Dict[Any, Any]]])
+	def run(self, source: List[Dict[Any, Any]]) -> List[Document]:
+		pass
 
 
 @component
