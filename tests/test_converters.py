@@ -1,9 +1,37 @@
 from haystack.dataclasses import ByteStream, Document
-from serka.converters import EIDCConverter, HTMLConverter, UnifiedEmbeddingConverter
+from serka.converters import (
+	EIDCConverter,
+	HTMLConverter,
+	UnifiedEmbeddingConverter,
+	EIDCJSONToDocument,
+)
 from haystack.components.preprocessors import DocumentSplitter
 from haystack import Pipeline
 import json
 import pytest
+
+
+def test_eidc_json_to_document():
+	test_title = "test_title"
+	test_description = "test_description"
+	test_lineage = "test_lineage"
+	test_data = [
+		{"title": test_title, "description": test_description, "lineage": test_lineage}
+	]
+
+	converter = EIDCJSONToDocument()
+	result = converter.run(test_data)
+
+	assert "documents" in result
+	assert len(result["documents"]) == 2
+	assert result["documents"][0].content == test_description
+	assert result["documents"][0].meta["section"] == "metadata"
+	assert result["documents"][0].meta["subsection"] == "description"
+	assert result["documents"][0].meta["title"] == test_title
+	assert result["documents"][1].content == test_lineage
+	assert result["documents"][1].meta["section"] == "metadata"
+	assert result["documents"][1].meta["subsection"] == "lineage"
+	assert result["documents"][1].meta["title"] == test_title
 
 
 @pytest.mark.integration
