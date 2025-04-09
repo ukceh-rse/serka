@@ -14,7 +14,7 @@ services:
       - internal
 
   chromadb:
-    image: chromadb/chroma
+    image: chromadb/chroma:1.0.3
     container_name: chromadb-container
     volumes:
       - ./.chromadb:/chroma/chroma
@@ -22,7 +22,7 @@ services:
       - internal
 
   ollama:
-    image: ollama/ollama
+    image: ollama/ollama:0.6.5
     container_name: ollama-container
     volumes:
       - ./.ollama:/root/.ollama
@@ -33,7 +33,7 @@ services:
       - internal
 
   mongodb:
-    image: mongo
+    image: mongo:8.0.6
     container_name: mongodb-container
     volumes:
       - ./.mongodb:/data/db
@@ -41,7 +41,7 @@ services:
       - internal
 
   neo4j:
-    image: neo4j:latest
+    image: neo4j:5.26.5
     container_name: neo4j
     volumes:
         - ./.neo4j/logs:/logs
