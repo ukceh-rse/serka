@@ -19,17 +19,14 @@ class EIDCFetcher:
 	@component.output_types(datasets=List[Dict[Any, Any]])
 	def run(
 		self,
-		limit: int = 10000,
+		rows: int = 10000,
 		page: int = 1,
-		filter: str = "state:published AND recordType:Dataset",
+		term: str = "state:published AND recordType:Dataset",
+		**kwargs,
 	) -> List[Dict[Any, Any]]:
 		res: Response = requests.get(
 			self.url,
-			params={
-				"page": page,
-				"rows": limit,
-				"term": filter,
-			},
+			params={"rows": rows, "page": page, "term": term, **kwargs},
 		)
 		eidc_data = res.json()
 		return {"datasets": eidc_data["results"]}

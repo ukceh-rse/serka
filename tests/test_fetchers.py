@@ -4,11 +4,11 @@ import requests
 
 
 def test_eidc_fetcher(monkeypatch):
-	mock_response = Mock()
-	mock_response.json.return_value = {
-		"results": [{"id": 1, "title": "Dataset 1"}, {"id": 2, "title": "Dataset 2"}]
-	}
+	dataset_list = [{"id": 1, "title": "Dataset 1"}, {"id": 2, "title": "Dataset 2"}]
 	test_url = "http://test.com/documents"
+
+	mock_response = Mock()
+	mock_response.json.return_value = {"results": dataset_list}
 
 	def mock_get(*args, **kwargs):
 		assert args[0] == test_url
@@ -22,5 +22,5 @@ def test_eidc_fetcher(monkeypatch):
 	fetcher = EIDCFetcher(test_url)
 	result = fetcher.run()
 
-	assert result == [{"id": 1, "title": "Dataset 1"}, {"id": 2, "title": "Dataset 2"}]
+	assert result == {"datasets": dataset_list}
 	assert mock_response.json.called
