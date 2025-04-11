@@ -16,7 +16,7 @@ class EIDCFetcher:
 	def __init__(self, url: str = "https://catalogue.ceh.ac.uk/eidc/documents"):
 		self.url = url
 
-	@component.output_types(datasets=List[Dict[Any, Any]])
+	@component.output_types(records=List[Dict[Any, Any]])
 	def run(
 		self,
 		rows: int = 10000,
@@ -29,4 +29,4 @@ class EIDCFetcher:
 			params={"rows": rows, "page": page, "term": term, **kwargs},
 		)
 		eidc_data = res.json()
-		return {"datasets": eidc_data["results"]}
+		return {"records": eidc_data["results"]}

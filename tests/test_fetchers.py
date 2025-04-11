@@ -22,5 +22,5 @@ def test_eidc_fetcher(monkeypatch):
 	fetcher = EIDCFetcher(test_url)
 	result = fetcher.run()
 
-	assert result == {"datasets": dataset_list}
+	assert result == {"records": dataset_list}
 	assert mock_response.json.called
