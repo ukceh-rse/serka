@@ -22,6 +22,7 @@ dependencies = [
     "scrapy>=2.12.0",
     "pymongo>=4.11.1",
     "neomodel>=5.4.5",
+    "neo4j-haystack>=2.2.1",
 ]
 
 [project.scripts]

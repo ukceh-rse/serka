@@ -1,5 +1,4 @@
 version = 1
-revision = 1
 requires-python = ">=3.12"
 
 [[package]]
@@ -312,7 +311,7 @@ name = "click"
 version = "8.1.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/0090cbf739cee7d23781ad4b89a9894a41538e4fcf4c31dcdd705b78eb8b/click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a", size = 226593 }
 wheels = [
@@ -880,7 +879,7 @@ name = "ipykernel"
 version = "6.29.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "appnope", marker = "sys_platform == 'darwin'" },
+    { name = "appnope", marker = "platform_system == 'Darwin'" },
     { name = "comm" },
     { name = "debugpy" },
     { name = "ipython" },
@@ -1353,6 +1352,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/4b/20/733dac16f7cedc80b23093415822c9763302519cba0e7c8bcdb5c01fc512/neo4j-5.28.1.tar.gz", hash = "sha256:ae8e37a1d895099062c75bc359b2cce62099baac7be768d0eba7180c1298e214", size = 231094 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/57/94225fe5e9dabdc0ff60c88cbfcedf11277f4b34e7ab1373d3e62dbdd207/neo4j-5.28.1-py3-none-any.whl", hash = "sha256:6755ef9e5f4e14b403aef1138fb6315b120631a0075c138b5ddb2a06b87b09fd", size = 312258 },
+]
+
+[[package]]
+name = "neo4j-haystack"
+version = "2.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "haystack-ai" },
+    { name = "neo4j" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bf/4b/df7ce88871e2be0c66995e0eac1c951e35ad19dc3db1566a65bce60a6b9a/neo4j_haystack-2.2.1.tar.gz", hash = "sha256:57f0c114c222ed333ae7acfcbedaaef456f9cb17d6c06fd50c516b90989f2416", size = 628163 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/28/f3bc45e5db33f63780d4dcb6c95dd3ca688d650e8fd56938a14b0afb644a/neo4j_haystack-2.2.1-py3-none-any.whl", hash = "sha256:82bed4e1f0587e63dd9e756bc5f22fb4e4d11d79cb61ba38676210b29b9a7716", size = 53746 },
 ]
 
 [[package]]
@@ -2397,6 +2409,7 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "haystack-ai" },
     { name = "jq" },
+    { name = "neo4j-haystack" },
     { name = "neomodel" },
     { name = "ollama" },
     { name = "ollama-haystack" },
@@ -2425,6 +2438,7 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.6" },
     { name = "haystack-ai", specifier = ">=2.9.0" },
     { name = "jq", specifier = ">=1.8.0" },
+    { name = "neo4j-haystack", specifier = ">=2.2.1" },
     { name = "neomodel", specifier = ">=5.4.5" },
     { name = "ollama", specifier = ">=0.4.5" },
     { name = "ollama-haystack", specifier = ">=2.2.0" },
@@ -2624,7 +2638,7 @@ name = "tqdm"
 version = "4.67.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737 }
 wheels = [
@@ -2714,7 +2728,7 @@ name = "tzlocal"
 version = "5.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
+    { name = "tzdata", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/04/d3/c19d65ae67636fe63953b20c2e4a8ced4497ea232c43ff8d01db16de8dc0/tzlocal-5.2.tar.gz", hash = "sha256:8d399205578f1a9342816409cc1e46a93ebd5755e39ea2d85334bea911bf0e6e", size = 30201 }
 wheels = [
