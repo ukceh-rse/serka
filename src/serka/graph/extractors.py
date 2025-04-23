@@ -3,7 +3,7 @@ from typing import List, Dict, Tuple, Any
 import re
 
 
-def extract_doi(ids: List[str], default=None) -> str:
+def extract_doi(ids: List[str], default="") -> str:
 	for id in ids:
 		if re.match(r"10\.\d{4,9}/[-._;()/:A-Z0-9]+", id, re.I):
 			return f"https://doi.org/{id}"

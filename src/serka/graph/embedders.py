@@ -7,7 +7,8 @@ from tqdm import tqdm
 @component
 class OllamaNodeEmbedder:
 	"""
-	A class to embed nodes using the Ollama API.
+	A class to embed nodes using the Ollama API. The class uses the Ollama API
+	to embed nodes based on their type and their content.
 	"""
 
 	def __init__(
