@@ -81,7 +81,7 @@ class OrganisationExtractor:
 			for org, ror in zip(record["authorAffiliation"], record["authorRor"])
 		]
 
-	@component.output_types(organisations=List[Dict[str, str]])
+	@component.output_types(organisations=List[Dict[str, Any]])
 	def run(self, records: List[Dict[Any, Any]]) -> Dict[str, List[Dict[str, str]]]:
 		orgs = []
 		for record in records:
