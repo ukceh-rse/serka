@@ -33,6 +33,7 @@ def test_relationship_extractor():
 			"resourceIdentifier": ["10.1234/abc123"],
 			"authorOrcid": ["1234", "5678"],
 			"authorRor": ["https://ror.org/1234"],
+			"ror": ["https://ror.org/1234"],
 		},
 	]
 	extractor = RelationshipExtractor()
@@ -50,6 +51,11 @@ def test_relationship_extractor():
 	assert len(affiliation) == 1
 	assert affiliation[0][0] == "1234"
 	assert affiliation[0][1] == "https://ror.org/1234"
+
+	contributions = relationships["CONTRIBUTED_TO"]
+	assert len(contributions) == 1
+	assert contributions[0][0] == "https://ror.org/1234"
+	assert contributions[0][1] == "https://doi.org/10.1234/abc123"
 
 
 def test_organisation_extractor():

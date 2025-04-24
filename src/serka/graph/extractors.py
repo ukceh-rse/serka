@@ -36,6 +36,8 @@ class TextExtractor:
 @component
 class RelationshipExtractor:
 	def _extract_authorship(self, record) -> List[Tuple[str, str]]:
+		if not all(field in record for field in ["authorRor", "authorOrcid"]):
+			return []
 		doi = extract_doi(record["resourceIdentifier"])
 		return [(doi, orcid) for orcid in record["authorOrcid"]]
 
@@ -47,19 +49,28 @@ class RelationshipExtractor:
 			for orcid, ror in zip(record["authorOrcid"], record["authorRor"])
 		]
 
+	def _extract_contributors(self, record) -> List[Tuple[str, str]]:
+		if not all(field in record for field in ["ror", "resourceIdentifier"]):
+			return []
+		doi = extract_doi(record["resourceIdentifier"])
+		return [(ror, doi) for ror in record["ror"]]
+
 	@component.output_types(relationships=Dict[str, List[Tuple[str, str]]])
 	def run(
 		self, records: List[Dict[Any, Any]]
 	) -> Dict[str, Dict[str, List[Tuple[str, str]]]]:
 		authorships = []
 		affiliations = []
+		contributors = []
 		for record in records:
 			authorships.extend(self._extract_authorship(record))
 			affiliations.extend(self._extract_author_affiliations(record))
+			contributors.extend(self._extract_contributors(record))
 		return {
 			"relationships": {
 				"AUTHORED_BY": authorships,
 				"AFFILIATED_WITH": affiliations,
+				"CONTRIBUTED_TO": contributors,
 			}
 		}
 
