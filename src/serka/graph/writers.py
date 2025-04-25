@@ -11,7 +11,7 @@ class Neo4jGraphWriter:
 		self.password = password
 
 	@staticmethod
-	def create_nodes(tx, nodes_and_types):
+	def create_nodes(tx, nodes_and_types) -> Dict[str, int]:
 		nodes_created: Dict[str, int] = dict()
 		for node_type, node_list in nodes_and_types.items():
 			props = ", ".join(f"{key}: node.{key}" for key in node_list[0].keys())
@@ -25,7 +25,7 @@ class Neo4jGraphWriter:
 		return nodes_created
 
 	@staticmethod
-	def create_relations(tx, relations_and_types):
+	def create_relations(tx, relations_and_types) -> Dict[str, int]:
 		relations_created: Dict[str, int] = dict()
 		for relation_type, relation_list in relations_and_types.items():
 			query = (
@@ -40,10 +40,10 @@ class Neo4jGraphWriter:
 		return relations_created
 
 	@staticmethod
-	def create_doc_nodes(tx, docs: List[Dict[str, Any]]):
+	def create_doc_nodes(tx, docs: List[Dict[str, Any]]) -> int:
 		query = (
 			"UNWIND $docs as doc "
-			"MERGE (d:TextChunk {doc_id: doc.id, content: doc.content}) "
+			"MERGE (d:TextChunk {doc_id: doc.id, content: doc.content, embedding: doc.embedding}) "
 			"RETURN d"
 		)
 		result = tx.run(query, docs=docs)
@@ -63,7 +63,7 @@ class Neo4jGraphWriter:
 		return relations
 
 	@staticmethod
-	def create_doc_relations(tx, docs: List[Dict[str, Any]]):
+	def create_doc_relations(tx, docs: List[Dict[str, Any]]) -> Dict[str, int]:
 		relations = Neo4jGraphWriter.unpack_doc_relations(docs)
 		relations_created: Dict[str, int] = dict()
 		for relation_type, relation_list in relations.items():
@@ -85,6 +85,7 @@ class Neo4jGraphWriter:
 			"content": doc.content,
 			"field": doc.meta.get("field", ""),
 			"uri": doc.meta.get("uri", ""),
+			"embedding": doc.embedding,
 		}
 
 	@staticmethod
@@ -93,7 +94,7 @@ class Neo4jGraphWriter:
 		nodes_and_types: Dict[str, List[Dict[str, Any]]],
 		relations_and_types: Dict[str, List[Tuple[str, str]]],
 		docs: List[Document],
-	):
+	) -> Tuple[Dict[str, int], Dict[str, int]]:
 		nodes_created = Neo4jGraphWriter.create_nodes(tx, nodes_and_types)
 		relations_created = Neo4jGraphWriter.create_relations(tx, relations_and_types)
 
