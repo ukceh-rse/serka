@@ -19,7 +19,9 @@ class TextExtractor:
 		uri = extract_doi(record["resourceIdentifier"])
 		title = record.get("title", "")
 		docs = [
-			Document(content=record[field], meta={"uri": uri, "title": title})
+			Document(
+				content=record[field], meta={"uri": uri, "title": title, "field": field}
+			)
 			for field in self.fields
 			if field in record
 		]
