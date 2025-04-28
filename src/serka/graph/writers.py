@@ -17,7 +17,7 @@ class Neo4jGraphWriter:
 			props = ", ".join(f"{key}: node.{key}" for key in node_list[0].keys())
 			query = (
 				"UNWIND $nodes as node "
-				f"MERGE (n:{node_type} {{{props}}}) "
+				f"MERGE (n:{node_type}:embedded {{{props}}}) "
 				"RETURN n"
 			)
 			result = tx.run(query, nodes=node_list)
@@ -43,7 +43,7 @@ class Neo4jGraphWriter:
 	def create_doc_nodes(tx, docs: List[Dict[str, Any]]) -> int:
 		query = (
 			"UNWIND $docs as doc "
-			"MERGE (d:TextChunk {doc_id: doc.id, content: doc.content, embedding: doc.embedding}) "
+			"MERGE (d:TextChunk:embedded {doc_id: doc.id, content: doc.content, embedding: doc.embedding}) "
 			"RETURN d"
 		)
 		result = tx.run(query, docs=docs)
@@ -89,6 +89,13 @@ class Neo4jGraphWriter:
 		}
 
 	@staticmethod
+	def create_index(tx):
+		query = "CREATE VECTOR INDEX vec_lookup IF NOT EXISTS FOR (n:embedded) ON n.embedding"
+		result = tx.run(query)
+		result = result.data()
+		return result
+
+	@staticmethod
 	def create_graph(
 		tx,
 		nodes_and_types: Dict[str, List[Dict[str, Any]]],
@@ -117,6 +124,8 @@ class Neo4jGraphWriter:
 			self.url, auth=(self.username, self.password)
 		) as driver:
 			with driver.session(database="neo4j") as session:
+				index_created = session.execute_write(Neo4jGraphWriter.create_index)
+				print(index_created)
 				node_result, relation_result = session.execute_write(
 					Neo4jGraphWriter.create_graph, nodes, relations, docs
 				)
