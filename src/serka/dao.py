@@ -38,8 +38,12 @@ class DAO:
 	def list_collections(self) -> List[str]:
 		return self._chroma_client.list_collections()
 
-	def insert(self, document: Document, collection: str):
-		p = self._pipeline_builder.insertion_pipeline(collection)
+	def insert(
+		self, document: Document, collection: str, unified_metadata: List[str] = {}
+	) -> Result:
+		p = self._pipeline_builder.insertion_pipeline(
+			collection, unified_metadata=unified_metadata
+		)
 		sources = [haystack.Document(content=document.content, meta=document.metadata)]
 		result = p.run(data={"splitter": {"documents": sources}})
 		insertions = result["writer"]["documents_written"]

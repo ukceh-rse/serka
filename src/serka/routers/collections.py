@@ -1,5 +1,5 @@
 from fastapi import Query, Depends, APIRouter
-from serka.routers.dependencies import get_dao
+from serka.routers.dependencies import get_dao, get_config
 from serka.models import Document, Result
 from typing import List
 from serka.dao import DAO
@@ -40,4 +40,4 @@ def insert(
 	collection: str = Query(default="eidc"),
 	dao: DAO = Depends(get_dao),
 ) -> Result:
-	return dao.insert(document, collection)
+	return dao.insert(document, collection, get_config().unified_metadata)
