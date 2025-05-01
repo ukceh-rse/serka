@@ -42,7 +42,7 @@ services:
 
   neo4j:
     image: neo4j:5.26.5
-    container_name: neo4j
+    container_name: neo4j-container
     volumes:
         - ./.neo4j/logs:/logs
         - ./.neo4j/config:/config

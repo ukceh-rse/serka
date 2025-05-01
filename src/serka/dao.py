@@ -16,12 +16,14 @@ class DAO:
 
 	def __init__(
 		self,
-		ollama_host,
-		ollama_port,
-		chroma_host,
-		chroma_port,
-		default_embedding_model,
-		default_rag_model,
+		ollama_host: str = "localhost",
+		ollama_port: int = 11434,
+		chroma_host: str = "localhost",
+		chroma_port: int = 8000,
+		neo4j_host: str = "localhost",
+		neo4j_port: int = 7687,
+		default_embedding_model: str = "nomic-embed-text",
+		default_rag_model: str = "llama3.1",
 	):
 		self._chroma_client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
 		self._pipeline_builder = PipelineBuilder(
@@ -29,6 +31,8 @@ class DAO:
 			ollama_port=ollama_port,
 			chroma_host=chroma_host,
 			chroma_port=chroma_port,
+			neo4j_host=neo4j_host,
+			neo4j_port=neo4j_port,
 			embedding_model=default_embedding_model,
 			rag_model=default_rag_model,
 			chunk_length=150,
@@ -46,6 +50,11 @@ class DAO:
 		return Result(
 			success=True, msg=f"Inserted {insertions} document(s) into {collection}"
 		)
+
+	def build_eidc_graph(self, rows=3):
+		p = self._pipeline_builder.eidc_graph_pipeline()
+		result = p.run(data={"fetcher": {"rows": rows}})
+		return Result(success=True, msg=f"Created graph: {result["graph_writer"]}")
 
 	def scrape(
 		self,

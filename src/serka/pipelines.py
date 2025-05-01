@@ -8,6 +8,17 @@ from serka.converters import (
 	UnifiedEmbeddingConverter,
 	LegiloConverter,
 )
+from serka.graph.embedders import OllamaNodeEmbedder
+from serka.graph.writers import Neo4jGraphWriter
+from serka.graph.extractors import (
+	AuthorExtractor,
+	OrganisationExtractor,
+	DatasetExtractor,
+	TextExtractor,
+	RelationshipExtractor,
+)
+from serka.graph.joiners import NodeJoiner
+from serka.fetchers import EIDCFetcher
 from typing import Dict, List, Optional, Callable
 from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
 from haystack.components.writers import DocumentWriter
@@ -27,6 +38,8 @@ class PipelineBuilder:
 	ollama_port: int
 	chroma_host: str
 	chroma_port: int
+	neo4j_host: str
+	neo4j_port: int
 	embedding_model: str
 	rag_model: str
 	chunk_length: int
@@ -112,6 +125,61 @@ class PipelineBuilder:
 		if source_type == "html":
 			return HTMLConverter()
 		raise ValueError(f"Unknown converter type: {source_type}")
+
+	def eidc_graph_pipeline(
+		self, neo4j_username: str = "neo4j", neo4j_password: str = "password"
+	) -> Pipeline:
+		p = Pipeline()
+		p.add_component("fetcher", EIDCFetcher())
+		p.add_component("author_extractor", AuthorExtractor())
+		p.add_component("orgs_extractor", OrganisationExtractor())
+		p.add_component("dataset_extractor", DatasetExtractor())
+		p.add_component("text_extractor", TextExtractor(["description", "lineage"]))
+		p.add_component(
+			"splitter",
+			DocumentSplitter(split_by="word", split_length=150, split_overlap=50),
+		)
+		p.add_component(
+			"doc_emb",
+			OllamaDocumentEmbedder(
+				url=f"http://{self.ollama_host}:{self.ollama_port}",
+				meta_fields_to_embed=["title", "field"],
+			),
+		)
+		p.add_component("joiner", NodeJoiner())
+		p.add_component("rel_extractor", RelationshipExtractor())
+		p.add_component(
+			"node_emb",
+			OllamaNodeEmbedder(url=f"http://{self.ollama_host}:{self.ollama_port}"),
+		)
+		p.add_component(
+			"graph_writer",
+			Neo4jGraphWriter(
+				host=self.neo4j_host,
+				port=self.neo4j_port,
+				username=neo4j_username,
+				password=neo4j_password,
+			),
+		)
+
+		p.connect("fetcher", "author_extractor")
+		p.connect("fetcher", "orgs_extractor")
+		p.connect("fetcher", "dataset_extractor")
+		p.connect("fetcher", "rel_extractor")
+		p.connect("fetcher", "text_extractor")
+
+		p.connect("author_extractor", "joiner.authors")
+		p.connect("orgs_extractor", "joiner.orgs")
+		p.connect("dataset_extractor", "joiner.datasets")
+
+		p.connect("text_extractor", "splitter")
+		p.connect("splitter", "doc_emb")
+		p.connect("doc_emb", "graph_writer.docs")
+
+		p.connect("joiner", "node_emb")
+		p.connect("node_emb", "graph_writer.nodes")
+		p.connect("rel_extractor", "graph_writer.relations")
+		return p
 
 	def insertion_pipeline(
 		self, collection: str, unified_metadata: List[str] = {}

@@ -20,6 +20,8 @@ def get_dao(config: Config = Depends(get_config)) -> DAO:
 		ollama_port=config.ollama.port,
 		chroma_host=config.chroma.host,
 		chroma_port=config.chroma.port,
+		neo4j_host=config.neo4j.host,
+		neo4j_port=config.neo4j.port,
 		default_embedding_model=config.embedding_models[0],
 		default_rag_model=config.rag_models[0],
 	)

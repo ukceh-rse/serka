@@ -5,8 +5,10 @@ from neo4j import GraphDatabase
 
 @component
 class Neo4jGraphWriter:
-	def __init__(self, url="bolt://localhost:7687", username="neo4j", password="neo4j"):
-		self.url = url
+	def __init__(
+		self, host: str, port: int, username: str = "neo4j", password: str = "neo4j"
+	):
+		self.url = f"bolt://{host}:{port}"
 		self.username = username
 		self.password = password
 

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from serka.routers import collections, tasks, query, feedback
+from serka.routers import collections, tasks, query, feedback, graph
 
 
 app = FastAPI(
@@ -21,3 +21,4 @@ app.include_router(tasks.router)
 app.include_router(collections.router)
 app.include_router(query.router)
 app.include_router(feedback.router)
+app.include_router(graph.router)

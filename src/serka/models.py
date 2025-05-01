@@ -18,6 +18,7 @@ class Config(BaseModel):
 	chroma: ServiceConfig
 	ollama: ServiceConfig
 	mongo: ServiceConfig
+	neo4j: ServiceConfig
 	embedding_models: List[str]
 	rag_models: List[str]
 	collections: Dict[str, CollectionConfig]
