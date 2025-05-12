@@ -16,6 +16,8 @@ class DAO:
 
 	def __init__(
 		self,
+		neo4j_user: str,
+		neo4j_password: str,
 		ollama_host: str = "localhost",
 		ollama_port: int = 11434,
 		chroma_host: str = "localhost",
@@ -33,6 +35,8 @@ class DAO:
 			chroma_port=chroma_port,
 			neo4j_host=neo4j_host,
 			neo4j_port=neo4j_port,
+			neo4j_user=neo4j_user,
+			neo4j_password=neo4j_password,
 			embedding_model=default_embedding_model,
 			rag_model=default_rag_model,
 			chunk_length=150,
@@ -79,6 +83,44 @@ class DAO:
 			return Result(success=True, msg=f"Collection '{collection_name}' deleted.")
 		except chromadb.errors.InvalidArgumentError as e:
 			return Result(success=False, msg=str(e))
+
+	def eidc_graph_search(self, query: str) -> List[Document]:
+		p = self._pipeline_builder.eidc_graph_query_pipeline()
+		result = p.run({"embedder": {"text": query}})
+		nodes = result["reader"]["nodes"]
+		docs = set()
+		for node in nodes:
+			score = node["score"]
+			content = None
+			meta = {}
+			if "TextChunk" in node["start_labels"]:
+				content = node["start_node"]["content"]
+				meta["section"] = node["relationship_type"]
+				meta["title"] = node["connected_node"]["title"]
+				meta["url"] = node["connected_node"]["uri"]
+			if "Dataset" in node["start_labels"]:
+				content = repr(node["start_node"])
+				meta["title"] = node["start_node"]["title"]
+				meta["section"] = "Dataset"
+				meta["url"] = node["start_node"]["uri"]
+			if content:
+				docs.add(
+					ScoredDocument(
+						document=Document(content=content, metadata=meta), score=score
+					)
+				)
+
+		docs = sorted(docs, key=lambda x: x.score, reverse=True)
+
+		groupby = "title"
+
+		grouped: Dict[str, GroupedDocuments] = {}
+		for doc in docs:
+			groupby_val = doc.document.metadata.get(groupby, "unknown")
+			if groupby_val not in grouped.keys():
+				grouped[groupby_val] = GroupedDocuments(docs=[], groupedby=groupby)
+			grouped[groupby_val].docs.append(doc)
+		return list(grouped.values())
 
 	def query(
 		self, collection_name: str, query: str, n: int = 10, groupby: str = "title"

@@ -18,4 +18,4 @@ done
 echo "Running docker compose $compose_files pull"
 docker compose $compose_files pull
 echo "Running docker compose $compose_files"
-docker compose $compose_files up -d
+docker compose $compose_files up --build

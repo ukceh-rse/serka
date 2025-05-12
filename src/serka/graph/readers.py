@@ -13,7 +13,7 @@ class Neo4jGraphReader:
 	@staticmethod
 	def query_nodes(tx, embedding: List[float]) -> List[Dict[str, Any]]:
 		query = (
-			"CALL db.index.vector.queryNodes('vec_lookup', 5, $embedding) "
+			"CALL db.index.vector.queryNodes('vec_lookup', 100, $embedding) "
 			"YIELD node AS start_node, score "
 			"MATCH (start_node)-[r]-(connected_node) "
 			"RETURN apoc.map.removeKeys(start_node, ['embedding']) as start_node, "

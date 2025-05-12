@@ -30,6 +30,7 @@ from haystack.components.builders.answer_builder import AnswerBuilder
 from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
 from haystack.dataclasses import StreamingChunk
 from .prompts import RAG_PROMPT
+from serka.graph.readers import Neo4jGraphReader
 
 
 @dataclass
@@ -40,6 +41,8 @@ class PipelineBuilder:
 	chroma_port: int
 	neo4j_host: str
 	neo4j_port: int
+	neo4j_user: str
+	neo4j_password: str
 	embedding_model: str
 	rag_model: str
 	chunk_length: int
@@ -179,6 +182,26 @@ class PipelineBuilder:
 		p.connect("joiner", "node_emb")
 		p.connect("node_emb", "graph_writer.nodes")
 		p.connect("rel_extractor", "graph_writer.relations")
+		return p
+
+	def eidc_graph_query_pipeline(self):
+		p = Pipeline()
+		p.add_component(
+			"embedder",
+			OllamaTextEmbedder(
+				url=f"http://{self.ollama_host}:{self.ollama_port}",
+				model=self.embedding_model,
+			),
+		)
+		p.add_component(
+			"reader",
+			Neo4jGraphReader(
+				url=f"bolt://{self.neo4j_host}:{self.neo4j_port}",
+				username=self.neo4j_user,
+				password=self.neo4j_password,
+			),
+		)
+		p.connect("embedder", "reader")
 		return p
 
 	def insertion_pipeline(

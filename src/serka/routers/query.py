@@ -1,14 +1,12 @@
 from fastapi import Query, Depends, APIRouter
 from serka.routers.dependencies import get_dao
-from serka.models import GroupedDocuments, Result, CollectionConfig
+from serka.models import GroupedDocuments, Result
 from typing import List, Dict
 from serka.dao import DAO
 from serka.feedback import FeedbackLogger
 from serka.routers.dependencies import get_config, get_feedback_logger
 from serka.models import Config, RAGResponse
 from fastapi import BackgroundTasks
-import uuid
-from serka.jobs import rag_task
 from fastapi import HTTPException
 
 
@@ -39,16 +37,27 @@ def semantic_search(
 	return dao.query(collection, q, n)
 
 
+@router.get(
+	"/semantic_graph", summary="Perform a semantic search in the graph database"
+)
+def semantic_graph_search(
+	q: str = Query(
+		description="Query to perform the semantic search with.",
+		examples=["Are there any pike in Windermere lake?"],
+	),
+	dao: DAO = Depends(get_dao),
+	feedback_loggger: FeedbackLogger = Depends(get_feedback_logger),
+) -> List[GroupedDocuments]:
+	feedback_loggger.log_feedback({"query": q, "type": "semantic_graph_search"})
+	return dao.eidc_graph_search(q)
+
+
 @router.post("/rag", summary="Submit a RAG query asynchronously.")
 async def submit_rag(
 	background_tasks: BackgroundTasks,
 	q: str = Query(
 		description="Query to hand the RAG pipeline",
 		examples=["Are there any pike in Windermere lake?"],
-	),
-	collection: str = Query(
-		description="The name of the collection to query in the vector database.",
-		default="eidc",
 	),
 	dao: DAO = Depends(get_dao),
 	config: Config = Depends(get_config),
@@ -63,25 +72,25 @@ async def submit_rag(
 			answer="",
 			query=q,
 		)
-	collection_config: CollectionConfig = config.collections.get(
-		collection,
-		CollectionConfig(
-			source_name="unknown",
-			organisation="unknown",
-			url="unknown",
-			description="No information about the original source of the documents is known.",
-		),
-	)
-	feedback_loggger.log_feedback(
-		{"query": q, "collection": collection, "type": "rag_query"}
-	)
-	id = str(uuid.uuid4())
-	answer = RAGResponse(id=id)
-	answers[id] = answer
-	background_tasks.add_task(
-		rag_task, answer, dao, collection, collection_config.description, q
-	)
-	return answer
+	# collection_config: CollectionConfig = config.collections.get(
+	# 	collection,
+	# 	CollectionConfig(
+	# 		source_name="unknown",
+	# 		organisation="unknown",
+	# 		url="unknown",
+	# 		description="No information about the original source of the documents is known.",
+	# 	),
+	# )
+	# feedback_loggger.log_feedback(
+	# 	{"query": q, "collection": collection, "type": "rag_query"}
+	# )
+	# id = str(uuid.uuid4())
+	# answer = RAGResponse(id=id)
+	# answers[id] = answer
+	# background_tasks.add_task(
+	# 	rag_task, answer, dao, collection, collection_config.description, q
+	# )
+	# return answer
 
 
 @router.get("/rag", summary="Get the result of a RAG query.")
