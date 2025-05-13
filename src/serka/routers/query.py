@@ -1,3 +1,4 @@
+import uuid
 from fastapi import Query, Depends, APIRouter
 from serka.routers.dependencies import get_dao
 from serka.models import GroupedDocuments, Result
@@ -8,6 +9,7 @@ from serka.routers.dependencies import get_config, get_feedback_logger
 from serka.models import Config, RAGResponse
 from fastapi import BackgroundTasks
 from fastapi import HTTPException
+from serka.jobs import graph_rag_task
 
 
 router = APIRouter(prefix="/query", tags=["Query"])
@@ -91,6 +93,33 @@ async def submit_rag(
 	# 	rag_task, answer, dao, collection, collection_config.description, q
 	# )
 	# return answer
+
+
+@router.post("/graph_rag", summary="Submit a graph RAG query asynchronously.")
+async def submit_graph_rag(
+	background_tasks: BackgroundTasks,
+	q: str = Query(
+		description="Query to hand the RAG pipeline",
+		examples=["Are there any pike in Windermere lake?"],
+	),
+	dao: DAO = Depends(get_dao),
+	config: Config = Depends(get_config),
+	feedback_loggger: FeedbackLogger = Depends(get_feedback_logger),
+) -> RAGResponse:
+	if config.rag_enabled is False:
+		return RAGResponse(
+			result=Result(
+				success=False,
+				msg="Generative answering is currently disabled. Please enable via `config.yaml`",
+			),
+			answer="",
+			query=q,
+		)
+	id = str(uuid.uuid4())
+	answer = RAGResponse(id=id)
+	answers[id] = answer
+	background_tasks.add_task(graph_rag_task, answer, dao, q)
+	return answer
 
 
 @router.get("/rag", summary="Get the result of a RAG query.")

@@ -29,7 +29,7 @@ from haystack.components.builders import PromptBuilder
 from haystack.components.builders.answer_builder import AnswerBuilder
 from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
 from haystack.dataclasses import StreamingChunk
-from .prompts import RAG_PROMPT
+from .prompts import RAG_PROMPT, GRAPH_PROMPT
 from serka.graph.readers import Neo4jGraphReader
 
 
@@ -73,6 +73,46 @@ class PipelineBuilder:
 		p.connect("llm.replies", "answer_builder.replies")
 		p.connect("prompt_builder.prompt", "answer_builder.query")
 
+		return p
+
+	def eidc_graph_rag_pipeline(
+		self,
+		streaming_callback: Optional[Callable[[StreamingChunk], None]] = None,
+	):
+		p = Pipeline()
+
+		p.add_component(
+			"embedder",
+			OllamaTextEmbedder(
+				url=f"http://{self.ollama_host}:{self.ollama_port}",
+				model=self.embedding_model,
+			),
+		)
+		p.add_component(
+			"reader",
+			Neo4jGraphReader(
+				url=f"bolt://{self.neo4j_host}:{self.neo4j_port}",
+				username=self.neo4j_user,
+				password=self.neo4j_password,
+			),
+		)
+		p.add_component("prompt_builder", PromptBuilder(GRAPH_PROMPT))
+		p.add_component(
+			"llm",
+			OllamaGenerator(
+				model="llama3.1",
+				generation_kwargs={"num_ctx": 16384, "temperature": 0.0},
+				url=f"http://{self.ollama_host}:{self.ollama_port}",
+				streaming_callback=streaming_callback,
+			),
+		)
+		p.add_component("answer_builder", AnswerBuilder())
+
+		p.connect("embedder", "reader")
+		p.connect("reader", "prompt_builder.nodes")
+		p.connect("prompt_builder", "llm")
+		p.connect("llm.replies", "answer_builder.replies")
+		p.connect("prompt_builder.prompt", "answer_builder.query")
 		return p
 
 	def query_pipeline(self, collection: str, top_n: int = 5) -> Pipeline:

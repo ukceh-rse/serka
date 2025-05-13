@@ -171,3 +171,17 @@ class DAO:
 		)
 		answer.complete = True
 		answer.answer = result["answer_builder"]["answers"][0].data
+
+	def eidc_graph_rag(
+		self,
+		query: str,
+		answer: RAGResponse,
+	) -> None:
+		p = self._pipeline_builder.eidc_graph_rag_pipeline(
+			lambda x: answer.tokens.append(x.content)
+		)
+		result = p.run(
+			{"embedder": {"text": query}, "prompt_builder": {"query": query}}
+		)
+		answer.complete = True
+		answer.answer = result["answer_builder"]["answers"][0].data
