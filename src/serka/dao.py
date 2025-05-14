@@ -1,6 +1,6 @@
 import chromadb.api
 import haystack
-from typing import List, Dict
+from typing import List, Dict, Optional
 import logging
 import chromadb
 from serka.models import Document, Result, RAGResponse, GroupedDocuments, ScoredDocument
@@ -175,13 +175,16 @@ class DAO:
 	def eidc_graph_rag(
 		self,
 		query: str,
-		answer: RAGResponse,
-	) -> None:
-		p = self._pipeline_builder.eidc_graph_rag_pipeline(
-			lambda x: answer.tokens.append(x.content)
-		)
+		answer: Optional[RAGResponse] = None,
+	) -> str:
+		def callback(x):
+			return answer.tokens.append(x.content) if answer else None
+
+		p = self._pipeline_builder.eidc_graph_rag_pipeline(callback)
 		result = p.run(
 			{"embedder": {"text": query}, "prompt_builder": {"query": query}}
 		)
-		answer.complete = True
-		answer.answer = result["answer_builder"]["answers"][0].data
+		if answer:
+			answer.complete = True
+			answer.answer = result["answer_builder"]["answers"][0].data
+		return result
