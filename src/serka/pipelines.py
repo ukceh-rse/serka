@@ -109,7 +109,7 @@ class PipelineBuilder:
 		p.add_component("answer_builder", AnswerBuilder())
 
 		p.connect("embedder", "reader")
-		p.connect("reader", "prompt_builder.nodes")
+		p.connect("reader.markdown_nodes", "prompt_builder.markdown_nodes")
 		p.connect("prompt_builder", "llm")
 		p.connect("llm.replies", "answer_builder.replies")
 		p.connect("prompt_builder.prompt", "answer_builder.query")

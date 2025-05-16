@@ -55,7 +55,7 @@ class DAO:
 			success=True, msg=f"Inserted {insertions} document(s) into {collection}"
 		)
 
-	def build_eidc_graph(self, rows=3):
+	def build_eidc_graph(self, rows=10):
 		p = self._pipeline_builder.eidc_graph_pipeline()
 		result = p.run(data={"fetcher": {"rows": rows}})
 		return Result(success=True, msg=f"Created graph: {result["graph_writer"]}")
