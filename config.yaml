@@ -10,6 +10,10 @@ mongo:
   host: mongodb-container
   port: 27017
 
+neo4j:
+  host: neo4j-container
+  port: 7687
+
 embedding_models:
   - nomic-embed-text
 

@@ -18,6 +18,7 @@ class Config(BaseModel):
 	chroma: ServiceConfig
 	ollama: ServiceConfig
 	mongo: ServiceConfig
+	neo4j: ServiceConfig
 	embedding_models: List[str]
 	rag_models: List[str]
 	collections: Dict[str, CollectionConfig]
@@ -46,10 +47,27 @@ class Document(BaseModel):
 		None, description="Metadata associated with the document."
 	)
 
+	def __hash__(self):
+		metadata_hash = tuple(sorted(self.metadata.items())) if self.metadata else None
+		return hash((self.content, metadata_hash))
+
+	def __eq__(self, other):
+		if not isinstance(other, Document):
+			return False
+		return self.content == other.content and self.metadata == other.metadata
+
 
 class ScoredDocument(BaseModel):
 	document: Document
 	score: float
+
+	def __hash__(self):
+		return hash((hash(self.document), self.score))
+
+	def __eq__(self, other):
+		if not isinstance(other, ScoredDocument):
+			return False
+		return self.document == other.document and self.score == other.score
 
 
 class GroupedDocuments(BaseModel):

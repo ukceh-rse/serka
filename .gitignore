@@ -174,3 +174,4 @@ cython_debug/
 .ollama/
 .mongodb/
 .vscode/
+.neo4j/

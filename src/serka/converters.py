@@ -1,4 +1,4 @@
-from typing import Set, List, Union
+from typing import Set, List, Union, Any
 from pathlib import Path
 from haystack import component
 from haystack.dataclasses import ByteStream, Document
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @component
 class HTMLConverter:
 	"""
-	Converter for transform generic HTML pages into haystack Documents.
+	Converter to transform generic HTML pages into haystack Documents.
 	"""
 
 	@component.output_types(documents=List[Document])
@@ -51,6 +51,56 @@ class HTMLConverter:
 					},
 				)
 			)
+		return {"documents": docs}
+
+
+@component
+class EIDCJSONToNodes:
+	"""
+	TODO: Implement an EIDCJSON to nodes converter.
+	Nodes should be extracted as entities and relationships beginning with datasets, authors, organisations.
+	"""
+
+	@component.output_types(documents=Dict[str, List[Dict[Any, Any]]])
+	def run(self, source: List[Dict[Any, Any]]) -> List[Document]:
+		pass
+
+
+@component
+class EIDCJSONToDocument:
+	def __init__(
+		self,
+		text_fields: List[str] = ["description", "lineage"],
+		meta_fields: List[str] = ["title"],
+	):
+		self.text_fields = text_fields
+		self.meta_fields = meta_fields
+
+	def _extract_fields(self, dataset: Dict[Any, Any]) -> List[Document]:
+		docs = []
+		for field in self.text_fields:
+			if field not in dataset:
+				continue
+			doc_metadata = {
+				meta_field: dataset[meta_field]
+				for meta_field in self.meta_fields
+				if meta_field in dataset
+			}
+			doc_metadata["section"] = "metadata"
+			doc_metadata["subsection"] = field
+			docs.append(
+				Document(
+					content=dataset[field],
+					meta=doc_metadata,
+				)
+			)
+		return docs
+
+	@component.output_types(documents=List[Document])
+	def run(self, source: List[Dict[Any, Any]]) -> List[Document]:
+		docs: List[Document] = []
+		for dataset in source:
+			docs.extend(self._extract_fields(dataset))
 		return {"documents": docs}
 
 

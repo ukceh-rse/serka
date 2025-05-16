@@ -5,8 +5,6 @@ function sleep(ms) {
 document.addEventListener("alpine:init", () => {
     Alpine.data("app", () => ({
         query: '',
-        selected_collection: '',
-        collections: [],
         results: [],
         answer: {
             show: false,
@@ -16,7 +14,7 @@ document.addEventListener("alpine:init", () => {
             html: '',
             complete: false
         },
-        thinking: true,
+        thinking: false,
         splash: true,
         modal: {
             show: false,
@@ -37,7 +35,7 @@ document.addEventListener("alpine:init", () => {
             this.thinking = true;
             this.ragSearch(this);
             try {
-                const response = await fetch(`/query/semantic?q=${this.query}&collection=${this.selected_collection}`);
+                const response = await fetch(`/query/semantic_graph?q=${this.query}`);
                 this.results = await response.json();
             } catch (e) {
                 console.error(e);
@@ -73,25 +71,13 @@ document.addEventListener("alpine:init", () => {
         async ragSearch() {
             try {
                 this.answer = { id: '', content: '', complete: false, show: false, output_index: 0, tokens: [] };
-                const response = await fetch(`/query/rag?q=${this.query}&collection=${this.selected_collection}`, { method: 'POST' });
+                const response = await fetch(`/query/graph_rag?q=${this.query}`, { method: 'POST' });
                 const rag_response = await response.json();
                 this.answer.id = rag_response.id;
                 this.answer.content = rag_response.content;
                 this.answer.complete = rag_response.complete;
                 this.answer.tokens = rag_response.tokens;
                 Promise.all([this.pollRag(), this.updateRagOutput()]);
-            } catch (e) {
-                console.error(e);
-            }
-        },
-        async get_collections() {
-            try {
-                const response = await fetch(`/collections/list`);
-                const result = await response.json();
-                this.collections = result;
-                if (this.collections.length > 0)
-                    this.selected_collection = this.collections[0];
-                this.thinking = false;
             } catch (e) {
                 console.error(e);
             }

@@ -14,7 +14,7 @@ services:
       - internal
 
   chromadb:
-    image: chromadb/chroma
+    image: chromadb/chroma:1.0.3
     container_name: chromadb-container
     volumes:
       - ./.chromadb:/chroma/chroma
@@ -22,7 +22,7 @@ services:
       - internal
 
   ollama:
-    image: ollama/ollama
+    image: ollama/ollama:0.6.5
     container_name: ollama-container
     volumes:
       - ./.ollama:/root/.ollama
@@ -33,12 +33,26 @@ services:
       - internal
 
   mongodb:
-    image: mongo
+    image: mongo:8.0.6
     container_name: mongodb-container
     volumes:
       - ./.mongodb:/data/db
     networks:
       - internal
+
+  neo4j:
+    image: neo4j:5.26.5
+    container_name: neo4j-container
+    volumes:
+        - ./.neo4j/logs:/logs
+        - ./.neo4j/config:/config
+        #- ./.neo4j/data:/data #uncomment to persist data
+        - ./.neo4j/plugins:/plugins
+    environment:
+        - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
+        - NEO4J_PLUGINS=["apoc"]
+    networks:
+        - internal
 
 networks:
   internal:
