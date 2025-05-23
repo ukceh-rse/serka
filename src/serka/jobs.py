@@ -79,4 +79,4 @@ def rag_task(
 
 
 def graph_rag_task(answer: RAGResponse, dao: DAO, q: str):
-	dao.eidc_graph_rag(q, answer)
+	dao.rag_query(q, answer)

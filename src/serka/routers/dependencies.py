@@ -19,8 +19,6 @@ def get_dao(config: Config = Depends(get_config)) -> DAO:
 	return DAO(
 		ollama_host=config.ollama.host,
 		ollama_port=config.ollama.port,
-		chroma_host=config.chroma.host,
-		chroma_port=config.chroma.port,
 		neo4j_host=config.neo4j.host,
 		neo4j_port=config.neo4j.port,
 		neo4j_user=os.getenv("NEO4J_USERNAME"),

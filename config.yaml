@@ -1,7 +1,3 @@
-chroma:
-  host: chromadb-container
-  port: 8000
-
 ollama:
   host: ollama-container
   port: 11434
@@ -19,15 +15,6 @@ embedding_models:
 
 rag_models:
   - llama3.1
-
-default_collection: eidc
-
-collections:
-  eidc:
-    source_name: EIDC (Environmental Infromation Data Centre)
-    description: The Environmental Information Data Centre (EIDC) is part of the Natural Environment Research Council's (NERC) Environmental Data Service and is hosted by the UK Centre for Ecology & Hydrology (UKCEH). We manage nationally-important datasets concerned with the terrestrial and freshwater sciences.
-    organisation: UKCEH (UK Centre for Ecology and Hydrology)
-    url: https://catalogue.ceh.ac.uk/eidc/documents
 
 rag_enabled: true
 
