@@ -1,7 +1,7 @@
 from requests import Response
 from typing import List, Dict, Any
 import requests
-
+from tqdm import tqdm
 from haystack import component
 
 
@@ -16,7 +16,17 @@ class EIDCFetcher:
 	def __init__(self, url: str = "https://catalogue.ceh.ac.uk/eidc/documents"):
 		self.url = url
 
-	@component.output_types(records=List[Dict[Any, Any]])
+	def get_eidc_json(self, ids: List[str]) -> List[Dict[Any, Any]]:
+		results = []
+		for id in tqdm(ids, desc="Fetching EIDC JSON", unit="dataset"):
+			res: Response = requests.get(
+				f"https://catalogue.ceh.ac.uk/documents/{id}?format=json"
+			)
+			if res.status_code == 200:
+				results.append(res.json())
+		return results
+
+	@component.output_types(ids=List[str], data=List[Dict[Any, Any]])
 	def run(
 		self,
 		rows: int = 10000,
@@ -29,7 +39,9 @@ class EIDCFetcher:
 			params={"rows": rows, "page": page, "term": term, **kwargs},
 		)
 		eidc_data = res.json()
-		return {"records": eidc_data["results"]}
+		ids = [record["identifier"] for record in eidc_data["results"]]
+		data = self.get_eidc_json(ids)
+		return {"ids": ids, "data": data}
 
 
 @component

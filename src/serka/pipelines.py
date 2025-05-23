@@ -11,13 +11,9 @@ from serka.converters import (
 from serka.graph.embedders import OllamaNodeEmbedder
 from serka.graph.writers import Neo4jGraphWriter
 from serka.graph.extractors import (
-	AuthorExtractor,
-	OrganisationExtractor,
-	DatasetExtractor,
+	EntityExtractor,
 	TextExtractor,
-	RelationshipExtractor,
 )
-from serka.graph.joiners import NodeJoiner
 from serka.fetchers import EIDCFetcher
 from typing import Dict, List, Optional, Callable
 from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
@@ -174,9 +170,7 @@ class PipelineBuilder:
 	) -> Pipeline:
 		p = Pipeline()
 		p.add_component("fetcher", EIDCFetcher())
-		p.add_component("author_extractor", AuthorExtractor())
-		p.add_component("orgs_extractor", OrganisationExtractor())
-		p.add_component("dataset_extractor", DatasetExtractor())
+		p.add_component("ent_extractor", EntityExtractor())
 		p.add_component("text_extractor", TextExtractor(["description", "lineage"]))
 		p.add_component(
 			"splitter",
@@ -189,8 +183,6 @@ class PipelineBuilder:
 				meta_fields_to_embed=["title", "field"],
 			),
 		)
-		p.add_component("joiner", NodeJoiner())
-		p.add_component("rel_extractor", RelationshipExtractor())
 		p.add_component(
 			"node_emb",
 			OllamaNodeEmbedder(url=f"http://{self.ollama_host}:{self.ollama_port}"),
@@ -205,23 +197,16 @@ class PipelineBuilder:
 			),
 		)
 
-		p.connect("fetcher", "author_extractor")
-		p.connect("fetcher", "orgs_extractor")
-		p.connect("fetcher", "dataset_extractor")
-		p.connect("fetcher", "rel_extractor")
+		p.connect("fetcher", "ent_extractor")
 		p.connect("fetcher", "text_extractor")
-
-		p.connect("author_extractor", "joiner.authors")
-		p.connect("orgs_extractor", "joiner.orgs")
-		p.connect("dataset_extractor", "joiner.datasets")
 
 		p.connect("text_extractor", "splitter")
 		p.connect("splitter", "doc_emb")
 		p.connect("doc_emb", "graph_writer.docs")
 
-		p.connect("joiner", "node_emb")
+		p.connect("ent_extractor", "node_emb")
 		p.connect("node_emb", "graph_writer.nodes")
-		p.connect("rel_extractor", "graph_writer.relations")
+		p.connect("ent_extractor.relationships", "graph_writer.relations")
 		return p
 
 	def eidc_graph_query_pipeline(self):

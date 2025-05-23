@@ -23,8 +23,8 @@ def get_dao(config: Config = Depends(get_config)) -> DAO:
 		chroma_port=config.chroma.port,
 		neo4j_host=config.neo4j.host,
 		neo4j_port=config.neo4j.port,
-		neo4j_user=os.environ.get("NEO4J_USERNAME"),
-		neo4j_password=os.environ.get("NEO4J_PASSWORD"),
+		neo4j_user=os.getenv("NEO4J_USERNAME"),
+		neo4j_password=os.getenv("NEO4J_PASSWORD"),
 		default_embedding_model=config.embedding_models[0],
 		default_rag_model=config.rag_models[0],
 	)
