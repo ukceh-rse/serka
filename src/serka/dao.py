@@ -17,6 +17,8 @@ class DAO:
 		self,
 		neo4j_user: str,
 		neo4j_password: str,
+		legilo_user: str,
+		legilo_password: str,
 		ollama_host: str = "localhost",
 		ollama_port: int = 11434,
 		neo4j_host: str = "localhost",
@@ -31,6 +33,8 @@ class DAO:
 			neo4j_port=neo4j_port,
 			neo4j_user=neo4j_user,
 			neo4j_password=neo4j_password,
+			legilo_user=legilo_user,
+			legilo_password=legilo_password,
 			embedding_model=default_embedding_model,
 			rag_model=default_rag_model,
 			chunk_length=150,
@@ -39,7 +43,7 @@ class DAO:
 
 	def build_eidc_graph(self, rows=10):
 		p = self._pipeline_builder.build_graph_pipeline()
-		result = p.run(data={"fetcher": {"rows": rows}})
+		result = p.run(data={"eidc_fetcher": {"rows": rows}})
 		return Result(success=True, msg=f"Created graph: {result["graph_writer"]}")
 
 	def query(self, query: str) -> List[Document]:

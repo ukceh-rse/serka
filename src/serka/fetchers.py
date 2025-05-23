@@ -2,7 +2,8 @@ from requests import Response
 from typing import List, Dict, Any
 import requests
 from tqdm import tqdm
-from haystack import component
+from haystack import component, Document
+from serka.graph.extractors import extract_doi
 
 
 @component
@@ -26,7 +27,7 @@ class EIDCFetcher:
 				results.append(res.json())
 		return results
 
-	@component.output_types(ids=List[str], data=List[Dict[Any, Any]])
+	@component.output_types(data=List[Dict[Any, Any]])
 	def run(
 		self,
 		rows: int = 10000,
@@ -41,7 +42,7 @@ class EIDCFetcher:
 		eidc_data = res.json()
 		ids = [record["identifier"] for record in eidc_data["results"]]
 		data = self.get_eidc_json(ids)
-		return {"ids": ids, "data": data}
+		return {"data": data}
 
 
 @component
@@ -49,33 +50,49 @@ class LegiloFetcher:
 	"""
 	Haystack fetcher component for retrieving supporting documentation from the Legilo API.
 	Args:
-		url (str): The URL of the Legilo API endpoint.
+		url (str): Format string for the URL of the Legilo API endpoint.
+		{id} is used as a placeholder for the dataset ID
+		e.g. "https://legilo.eds-infra.ceh.ac.uk/{id}/documents"
 	"""
 
 	def __init__(
 		self,
 		legilo_url: str = "https://legilo.eds-infra.ceh.ac.uk/{id}/documents",
-		legilo_username: str = None,
-		legilo_password: str = None,
+		username: str = None,
+		password: str = None,
 	):
 		self.legilo_url = legilo_url
-		self.legilo_username = legilo_username
-		self.legilo_password = legilo_password
+		self.auth = (username, password)
 
-	@component.output_types(records=List[Dict[Any, Any]])
-	def run(self, dataset_ids: List[str]) -> List[Dict[Any, Any]]:
-		for id in dataset_ids:
+	def extract_docs(self, json_data, title, uri):
+		extracted_docs = []
+		docs = json_data.get("success", {})
+		for filename, content in docs.items():
+			extracted_docs.append(
+				Document(
+					content=content,
+					meta={"title": title, "field": "SUPPORTING_DOC", "uri": uri},
+				)
+			)
+		return extracted_docs
+
+	@component.output_types(supporting_docs=List[Document])
+	def run(self, datasets: List[Dict[Any, Any]]) -> List[Document]:
+		supporting_docs = []
+		for dataset in tqdm(datasets, desc="Fetching Legilo records", unit="dataset"):
+			id = dataset.get("id")
+			dataset_uri = extract_doi(dataset["resourceIdentifiers"])
+			dataset_title = dataset.get("title", "")
 			url = self.legilo_url.format(id=id)
 			print(url)
 			res: Response = requests.get(
 				url,
-				auth=(self.legilo_username, self.legilo_password),
+				auth=self.auth,
 			)
-			res.status_code
-			if res.status_code != 200:
-				print(f"Error: {res.status_code}")
-				return {"records": []}
+			print(res.status_code)
 			if res.status_code == 200:
-				print(f"Success: {res.status_code}")
-				print(res.content)
-		return {"records": "results"}
+				json_data = res.json()
+				supporting_docs.extend(
+					self.extract_docs(json_data, dataset_title, dataset_uri)
+				)
+		return {"supporting_docs": supporting_docs}

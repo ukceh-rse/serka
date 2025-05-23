@@ -7,7 +7,7 @@ from serka.graph.extractors import (
 	EntityExtractor,
 	TextExtractor,
 )
-from serka.fetchers import EIDCFetcher
+from serka.fetchers import EIDCFetcher, LegiloFetcher
 from typing import Optional, Callable
 from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
 from haystack_integrations.components.embedders.ollama import OllamaTextEmbedder
@@ -15,6 +15,7 @@ from haystack.components.builders import PromptBuilder
 from haystack.components.builders.answer_builder import AnswerBuilder
 from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
 from haystack.dataclasses import StreamingChunk
+from haystack.components.joiners import DocumentJoiner
 from .prompts import GRAPH_PROMPT
 from serka.graph.readers import Neo4jGraphReader
 
@@ -27,6 +28,8 @@ class PipelineBuilder:
 	neo4j_port: int
 	neo4j_user: str
 	neo4j_password: str
+	legilo_user: str
+	legilo_password: str
 	embedding_model: str
 	rag_model: str
 	chunk_length: int
@@ -76,9 +79,14 @@ class PipelineBuilder:
 		self, neo4j_username: str = "neo4j", neo4j_password: str = "password"
 	) -> Pipeline:
 		p = Pipeline()
-		p.add_component("fetcher", EIDCFetcher())
+		p.add_component("eidc_fetcher", EIDCFetcher())
+		p.add_component(
+			"legilo_fetcher",
+			LegiloFetcher(username=self.legilo_user, password=self.legilo_password),
+		)
 		p.add_component("ent_extractor", EntityExtractor())
 		p.add_component("text_extractor", TextExtractor(["description", "lineage"]))
+		p.add_component("joiner", DocumentJoiner())
 		p.add_component(
 			"splitter",
 			DocumentSplitter(split_by="word", split_length=150, split_overlap=50),
@@ -104,10 +112,14 @@ class PipelineBuilder:
 			),
 		)
 
-		p.connect("fetcher", "ent_extractor")
-		p.connect("fetcher", "text_extractor")
+		p.connect("eidc_fetcher", "ent_extractor")
+		p.connect("eidc_fetcher", "text_extractor")
+		p.connect("eidc_fetcher", "legilo_fetcher")
 
-		p.connect("text_extractor", "splitter")
+		p.connect("text_extractor", "joiner")
+		p.connect("legilo_fetcher", "joiner")
+
+		p.connect("joiner", "splitter")
 		p.connect("splitter", "doc_emb")
 		p.connect("doc_emb", "graph_writer.docs")
 
