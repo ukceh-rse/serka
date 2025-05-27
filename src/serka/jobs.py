@@ -78,5 +78,5 @@ def rag_task(
 	dao.rag_query(collection, collection_desc, q, answer)
 
 
-def graph_rag_task(answer: RAGResponse, dao: DAO, q: str):
-	dao.rag_query(q, answer)
+def graph_rag_task(answer: RAGResponse, dao: DAO, q: str, hyde: bool):
+	dao.rag_query(q, hyde, answer)

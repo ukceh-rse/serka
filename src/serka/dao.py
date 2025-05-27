@@ -1,7 +1,5 @@
-import chromadb.api
 from typing import List, Dict, Optional
 import logging
-import chromadb
 from serka.models import Document, Result, RAGResponse, GroupedDocuments, ScoredDocument
 from serka.pipelines import PipelineBuilder
 
@@ -10,7 +8,6 @@ logger = logging.getLogger(__name__)
 
 
 class DAO:
-	_chroma_client: chromadb.api.ClientAPI = None
 	_pipeline_builder: PipelineBuilder = None
 
 	def __init__(
@@ -87,12 +84,13 @@ class DAO:
 	def rag_query(
 		self,
 		query: str,
+		hyde: bool = False,
 		answer: Optional[RAGResponse] = None,
 	) -> str:
 		def callback(x):
 			return answer.tokens.append(x.content) if answer else None
 
-		p = self._pipeline_builder.rag_pipeline(callback)
+		p = self._pipeline_builder.rag_pipeline(hyde=hyde, streaming_callback=callback)
 		result = p.run(
 			{"embedder": {"text": query}, "prompt_builder": {"query": query}}
 		)

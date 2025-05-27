@@ -36,6 +36,10 @@ async def submit_graph_rag(
 		description="Query to hand the RAG pipeline",
 		examples=["Are there any pike in Windermere lake?"],
 	),
+	hyde: bool = Query(
+		default=False,
+		description="Whether to generate HyDE (Hypothetical Document Embeddings) for the search.",
+	),
 	dao: DAO = Depends(get_dao),
 	config: Config = Depends(get_config),
 	feedback_loggger: FeedbackLogger = Depends(get_feedback_logger),
@@ -52,7 +56,7 @@ async def submit_graph_rag(
 	id = str(uuid.uuid4())
 	answer = RAGResponse(id=id)
 	answers[id] = answer
-	background_tasks.add_task(graph_rag_task, answer, dao, q)
+	background_tasks.add_task(graph_rag_task, answer, dao, q, hyde)
 	return answer
 
 

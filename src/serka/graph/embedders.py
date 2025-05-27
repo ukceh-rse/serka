@@ -2,6 +2,12 @@ from haystack import component
 from typing import Dict, List, Any
 from ollama import Client
 from tqdm import tqdm
+from haystack import Pipeline, Document
+from numpy import array, mean
+from haystack.components.builders import PromptBuilder
+from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
+from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
+from serka.prompts import HYDE_PROMPT_TEMPLATE, HYDE_SYSTEM_PROMPT
 
 
 @component
@@ -65,3 +71,56 @@ class OllamaNodeEmbedder:
 		for node_type, node_list in nodes.items():
 			embedded_nodes[node_type] = self._embed_nodes(node_type, node_list)
 		return {"node_embeddings": embedded_nodes}
+
+
+@component
+class HypotheticalDocumentEmbedder:
+	"""
+	A class to generate hypothetical documents and embed them using the Ollama API.
+	"""
+
+	def __init__(
+		self,
+		llm_model: str = "llama3.1",
+		embedding_model: str = "nomic-embed-text",
+		url: str = "http://localhost:11434",
+		n: int = 5,
+	):
+		self.llm_model = llm_model
+		self.embedding_model = embedding_model
+		self.url = url
+		self.n = 5
+		self.pipeline = Pipeline()
+		self.pipeline.add_component(
+			name="prompt_builder", instance=PromptBuilder(template=HYDE_PROMPT_TEMPLATE)
+		)
+		self.pipeline.add_component(
+			"llm",
+			OllamaGenerator(
+				model="llama3.1",
+				url=url,
+				system_prompt=HYDE_SYSTEM_PROMPT,
+				generation_kwargs={"temperature": 0.5, "n": n, "num_predict": 150},
+			),
+		)
+		self.pipeline.connect("prompt_builder", "llm")
+
+	@component.output_types(hypothetical_embedding=List[float])
+	def run(self, text: str) -> Dict[str, List[float]]:
+		# Here a loop is used to generate multiple hypothetical documents.
+		# Ideally this should be done as a single batch request to the LLM,
+		# unfortunately ollama generator does not seem to support multiple
+		# responses in a single request (openAI generator suppoprts this with
+		# `n` parameter).
+		hypothetical_docs = []
+		for i in tqdm(range(self.n), desc="Generating hypothetical documents"):
+			response = self.pipeline.run(data={"prompt_builder": {"query": text}})
+			hypothetical_docs.append(Document(response["llm"]["replies"][0]))
+
+		embedder = OllamaDocumentEmbedder(url=self.url, model=self.embedding_model)
+		result = embedder.run(hypothetical_docs)
+
+		stacked_embeddings = array([doc.embedding for doc in result["documents"]])
+		avg_embedding = mean(stacked_embeddings, axis=0)
+		hyde_vector = avg_embedding.reshape((1, len(avg_embedding)))
+		return {"hypothetical_embedding": hyde_vector[0].tolist()}

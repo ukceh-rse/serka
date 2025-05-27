@@ -18,6 +18,7 @@ from haystack.dataclasses import StreamingChunk
 from haystack.components.joiners import DocumentJoiner
 from .prompts import GRAPH_PROMPT
 from serka.graph.readers import Neo4jGraphReader
+from serka.graph.embedders import HypotheticalDocumentEmbedder
 
 
 @dataclass
@@ -35,18 +36,29 @@ class PipelineBuilder:
 	chunk_length: int
 	chunk_overlap: int
 
+	def _create_embedder(self, hyde: bool = False):
+		if hyde:
+			return HypotheticalDocumentEmbedder(
+				url=f"http://{self.ollama_host}:{self.ollama_port}",
+				llm_model=self.rag_model,
+				embedding_model=self.embedding_model,
+			)
+		else:
+			return OllamaTextEmbedder(
+				url=f"http://{self.ollama_host}:{self.ollama_port}",
+				model=self.embedding_model,
+			)
+
 	def rag_pipeline(
 		self,
+		hyde: bool = False,
 		streaming_callback: Optional[Callable[[StreamingChunk], None]] = None,
 	):
 		p = Pipeline()
 
 		p.add_component(
 			"embedder",
-			OllamaTextEmbedder(
-				url=f"http://{self.ollama_host}:{self.ollama_port}",
-				model=self.embedding_model,
-			),
+			self._create_embedder(hyde=hyde),
 		)
 		p.add_component(
 			"reader",
