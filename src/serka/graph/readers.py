@@ -13,7 +13,7 @@ class Neo4jGraphReader:
 	@staticmethod
 	def query_nodes(tx, embedding: List[float]) -> List[Dict[str, Any]]:
 		query = (
-			"CALL db.index.vector.queryNodes('vec_lookup', 100, $embedding) "
+			"CALL db.index.vector.queryNodes('vec_lookup', 20, $embedding) "
 			"YIELD node AS start_node, score "
 			"MATCH (start_node)-[r]-(connected_node) "
 			"WITH start_node, r, connected_node, score, "
@@ -38,7 +38,7 @@ class Neo4jGraphReader:
 		for key, value in node.items():
 			if key == "doc_id":
 				continue
-			markdown += f" - {key}: {value}\n"
+			markdown += f" - {key}: {value.replace("\n", " ")}\n"
 		markdown += "\n"
 		return markdown, markdown_id
 
@@ -67,6 +67,10 @@ class Neo4jGraphReader:
 			c_label, c_md, c_id = self.extract_node(
 				row["connected_labels"], row["connected_node_id"], row["connected_node"]
 			)
+
+			if c_label == "TextChunk":
+				continue
+
 			nodes_sets[c_label].add(c_md)
 
 			a = s_id if row["relationship_direction"] == "outgoing" else c_id
@@ -91,4 +95,5 @@ class Neo4jGraphReader:
 				nodes = session.execute_read(
 					Neo4jGraphReader.query_nodes, embedding=embedding
 				)
-		return {"nodes": nodes, "markdown_nodes": self.nodes_to_markdown(nodes)}
+		md_nodes = self.nodes_to_markdown(nodes)
+		return {"nodes": nodes, "markdown_nodes": md_nodes}
