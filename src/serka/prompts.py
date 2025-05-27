@@ -1,54 +1,4 @@
-RAG_PROMPT = """
-    # Task Description:
-    You are a helpful assistant for the UK Centre for Ecology and Hydrology (UKCEH).
-    Your task is to provide an answer to a query based on a given set of retrieved documents.
-    Your answer should be in markdown format.
-    The retrieved documents are in JSON format and are excerpts of information from source documents.
-    The following describes the source of the documents:
-    {{collection_desc}}
-    Your answer should derived from the provided retrieved documents.
-    Do not use your own knowledge to answer the query, only the information in the retrieved documents.
-    If the query is not a question, but appears to be a series of keywords, simply provide a general summary of any retreived documents relevant to the keywords and include references to them.
-    Provide a citation to the relevant retrieved document used to generate each part of your answer.
-    Your answer should be in markdown format.
-
-    # Examples:
-    ## Example 1:
-    ### Query:
-    What is the impact of climate change on the UK's biodiversity?
-    ### Answer:
-    The impact on bidiversity is discussed in the dataset "UK Biodiversity Indicators" [1].
-    ### References:
-    - [1]: [ UK Biodiversity Indicators ](https://eidc.ceh.ac.uk/uk-biodiversity-indicators)
-
-    ## Example 2:
-    ### Query:
-    farming
-    ### Answer:
-    The following datasets are relevant to farming: "UK farming trends" [1], "UK farming statistics" [2].
-    ### References:
-    - [1]: [ UK farming trends ](https://eidc.ceh.ac.uk/uk-farming-trends)
-    - [2]: [ UK farming statistics ](https://eidc.ceh.ac.uk/uk-farming-statistics)
-
-    # The Actual Task:
-    ## Query:
-    {{query}}
-    ## Retreived Documents:
-    [{% for document in documents %}
-            {
-                content: "{{ document.content }}",
-                meta: {
-                    title: "{{ document.meta.title }}",
-                    url: "{{ document.meta.url }}",
-                    chunk_id: "{{ document.id }}"
-                }
-            }
-        {% endfor %}
-    ]
-    ## Answer:
-"""
-
-GRAPH_PROMPT = """
+GRAPH_PROMPT: str = """
 # Overview
 You are a helpful assistant.
 You have access to a knowledge graph containing information about datasets contained in the EIDC (Environmental Information Data Centre).
@@ -72,13 +22,45 @@ The "Smog Monitoring Dataset"[1] was authored by "John Doe"[2], "Jane Smith"[3],
 - [4] [Alice Johnson](https://orcid.org/0000-0003-9876-302C)
 ```
 Do not refer directly to the nodes or relationships in the knowledge graph, but rather use them to construct your answer and provide appropriate references.
+Your reference should always be the name or title of the node as the text and the URI as the link. If the source of information is a TextChunk, use the Dataset connected to it as the reference.
+Do not make up any links or references, only use the ones provided as uris in the knowledge graph.
 
 # Relevant Information
 The list of most relevant nodes and relationships from the knowledge graph is:
 
 {{markdown_nodes}}
 
+Note that this is not an exaustive list of all nodes and relationships in the knowledge graph, but only the most relevant ones to the query.
+Do not assume that the information in the knowledge graph is complete or accurate, and do not make up any information that is not present in the knowledge graph.
+If the user's query is not a question, but appears to be a series of keywords, simply provide a general summary of any retreived documents relevant to the keywords and include references to them.
+If the user asks for a summary of information, do not provide a summary of the knowledge graph, but rather a summary of the information in the knowledge graph that is relevant to the query.
+If the user asks for summaries of the whole of information in the knowledge graph, e.g. how many datasets are there, state that specific numbers are not available, but provide a general overview of the information provided.
 
 # User Query
 The query is: {{query}}
+"""
+
+HYDE_SYSTEM_PROMPT: str = """
+You are a research assistant helping to retrieve relevant documents from an environmental research knowledge base. Based on the user query, generate a hypothetical text passage that represents the kind of content most likely to be useful in response to the query.
+The knowledge base includes entities such as:
+- Dataset: Descriptions of datasets, including their title and metadata.
+- Person: Authors of datasets including their name and associate orcID.
+- Organisation: Organisations involved in funding or producing datasets.
+- TextChunk: Segments of text either describing datasets or from supporting documentation of datasets. Split into 150 word chunks.
+Your output will be used to generate an embedding for semantic retrieval, so it should mimic the style and language of actual research documentation.
+"""
+
+HYDE_PROMPT_TEMPLATE: str = """
+# User Query:
+{{query}}
+
+# Instructions:
+- Write a hypothetical text that could plausibly exist in the knowledge base.
+- Include relevant concepts, terminology, and context that someone seeking to answer this query would find useful.
+- Use a formal, informative tone as found in scientific abstracts or dataset descriptions.
+- Do not answer the user's question directly — instead, simulate the kind of document they would hope to find.
+- Avoid adding any additional information about places or organisation that are not mentioned in the user's query.
+
+# Output Format:
+Plain text paragraph(s), less than 100 words.
 """

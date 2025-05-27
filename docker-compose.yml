@@ -8,16 +8,9 @@ services:
     ports:
       - "80:8000"
     depends_on:
-      - chromadb
+      - neo4j
+      - mongodb
       - ollama
-    networks:
-      - internal
-
-  chromadb:
-    image: chromadb/chroma:1.0.3
-    container_name: chromadb-container
-    volumes:
-      - ./.chromadb:/chroma/chroma
     networks:
       - internal
 

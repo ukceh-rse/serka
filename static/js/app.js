@@ -35,7 +35,7 @@ document.addEventListener("alpine:init", () => {
             this.thinking = true;
             this.ragSearch(this);
             try {
-                const response = await fetch(`/query/semantic_graph?q=${this.query}`);
+                const response = await fetch(`/query/semantic?q=${this.query}`);
                 this.results = await response.json();
             } catch (e) {
                 console.error(e);
@@ -71,7 +71,7 @@ document.addEventListener("alpine:init", () => {
         async ragSearch() {
             try {
                 this.answer = { id: '', content: '', complete: false, show: false, output_index: 0, tokens: [] };
-                const response = await fetch(`/query/graph_rag?q=${this.query}`, { method: 'POST' });
+                const response = await fetch(`/query/rag?q=${this.query}`, { method: 'POST' });
                 const rag_response = await response.json();
                 this.answer.id = rag_response.id;
                 this.answer.content = rag_response.content;

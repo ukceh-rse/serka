@@ -10,13 +10,6 @@ services:
       - DEBUG=1
     command: ["uv", "run", "fastapi", "dev", "src/serka/main.py", "--host", "0.0.0.0", "--port", "8000"]
 
-  chromadb:
-    extends:
-      file: docker-compose.yml
-      service: chromadb
-    ports:
-      - "8000:8000"
-
   ollama:
     extends:
       file: docker-compose.yml
@@ -27,7 +20,7 @@ services:
   mongodb:
     ports:
       - "27017:27017"
-  
+
   neo4j:
     ports:
       - "7474:7474"
