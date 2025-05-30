@@ -87,14 +87,20 @@ class DAO:
 		hyde: bool = False,
 		answer: Optional[RAGResponse] = None,
 	) -> str:
+		logger.info(f'Running RAG pipeline "{query}"')
+
 		def callback(x):
 			return answer.tokens.append(x.content) if answer else None
 
 		p = self._pipeline_builder.rag_pipeline(hyde=hyde, streaming_callback=callback)
 		result = p.run(
-			{"embedder": {"text": query}, "prompt_builder": {"query": query}}
+			{
+				"query_type_prompt_builder": {"query": query},
+				"router": {"query": query},
+				"invalid_answer_builder": {"query": query},
+			}
 		)
 		if answer:
 			answer.complete = True
-			answer.answer = result["answer_builder"]["answers"][0].data
+			answer.answer = result["answer_joiner"]["answers"][0].data
 		return result

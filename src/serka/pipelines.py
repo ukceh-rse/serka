@@ -16,25 +16,27 @@ from haystack.components.builders.answer_builder import AnswerBuilder
 from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
 from haystack.dataclasses import StreamingChunk
 from haystack.components.joiners import DocumentJoiner
-from .prompts import GRAPH_PROMPT
+from serka.prompts import GRAPH_PROMPT, QUERY_TYPE_PROMPT
 from serka.graph.readers import Neo4jGraphReader
 from serka.graph.embedders import HypotheticalDocumentEmbedder
+from haystack.components.routers import ConditionalRouter
+from haystack.components.joiners import StringJoiner, AnswerJoiner
 
 
 @dataclass
 class PipelineBuilder:
-	ollama_host: str
-	ollama_port: int
-	neo4j_host: str
-	neo4j_port: int
-	neo4j_user: str
-	neo4j_password: str
-	legilo_user: str
-	legilo_password: str
-	embedding_model: str
-	rag_model: str
-	chunk_length: int
-	chunk_overlap: int
+	ollama_host: str = "localhost"
+	ollama_port: int = 11434
+	neo4j_host: str = "localhost"
+	neo4j_port: int = 7687
+	neo4j_user: str = ""
+	neo4j_password: str = ""
+	legilo_user: str = ""
+	legilo_password: str = ""
+	embedding_model: str = "nomic-embed-text"
+	rag_model: str = "llama3.1"
+	chunk_length: int = 150
+	chunk_overlap: int = 50
 
 	def _create_embedder(self, hyde: bool = False):
 		if hyde:
@@ -55,6 +57,45 @@ class PipelineBuilder:
 		streaming_callback: Optional[Callable[[StreamingChunk], None]] = None,
 	):
 		p = Pipeline()
+
+		p.add_component("query_type_prompt_builder", PromptBuilder(QUERY_TYPE_PROMPT))
+		p.add_component(
+			"llm_type_classifier",
+			OllamaGenerator(
+				model="llama3.1",
+				generation_kwargs={"num_ctx": 16384, "temperature": 0.0},
+				url=f"http://{self.ollama_host}:{self.ollama_port}",
+			),
+		)
+		p.add_component(
+			"router",
+			ConditionalRouter(
+				routes=[
+					{
+						"condition": "{{'UNRELATED' in replies[0]}}",
+						"output": 'I\'m afraid your query: "{{query}}" does not appear to be related to environmental science or the EIDC. Please try asking a different question.',
+						"output_name": "unrelated_query",
+						"output_type": str,
+					},
+					{
+						"condition": "{{'CODE' in replies[0]}}",
+						"output": [
+							"Unfortunately I can't generate code. I can try to help you find environmental science data in the EIDC."
+						],
+						"output_name": "code_query",
+						"output_type": str,
+					},
+					{
+						"condition": "{{'UNRELATED' not in replies[0]}}",
+						"output": "{{query}}",
+						"output_name": "handle_query",
+						"output_type": str,
+					},
+				]
+			),
+		)
+		p.add_component("invalid_joiner", StringJoiner())
+		p.add_component("invalid_answer_builder", AnswerBuilder())
 
 		p.add_component(
 			"embedder",
@@ -80,11 +121,24 @@ class PipelineBuilder:
 		)
 		p.add_component("answer_builder", AnswerBuilder())
 
+		p.add_component("answer_joiner", AnswerJoiner())
+
+		p.connect("query_type_prompt_builder", "llm_type_classifier")
+		p.connect("llm_type_classifier.replies", "router.replies")
+		p.connect("router.unrelated_query", "invalid_joiner")
+		p.connect("router.code_query", "invalid_joiner")
+		p.connect("invalid_joiner", "invalid_answer_builder")
+		p.connect("router.handle_query", "embedder.text")
+		p.connect("router.handle_query", "prompt_builder.query")
+
 		p.connect("embedder", "reader")
 		p.connect("reader.markdown_nodes", "prompt_builder.markdown_nodes")
 		p.connect("prompt_builder", "llm")
-		p.connect("llm.replies", "answer_builder.replies")
+		p.connect("llm.replies", "answer_builder")
 		p.connect("prompt_builder.prompt", "answer_builder.query")
+
+		p.connect("answer_builder", "answer_joiner")
+		p.connect("invalid_answer_builder", "answer_joiner")
 		return p
 
 	def build_graph_pipeline(

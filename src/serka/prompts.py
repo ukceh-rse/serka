@@ -64,3 +64,28 @@ HYDE_PROMPT_TEMPLATE: str = """
 # Output Format:
 Plain text paragraph(s), less than 100 words.
 """
+
+QUERY_TYPE_PROMPT = """
+You are a helpful assistant.
+You are part of a RAG pipeline that processes queries and answers questions about environmental science data held in the EIDC (Environmental Information Data Centre).
+Your task is to classify a query from a user based on it's content so that it can be processed by the appropriate pipeline.
+You must consider whether or not the query is related to environmental science or if the query could feasibly be answered by infroamtion in the EIDC.
+You should return a single word that describes the type of query from the following list:
+- GENERAL
+- DESCRIPTIVE
+- CODE
+- METADATA
+- UNRELATED
+
+You should not return any other text, just the single word.
+
+Conditions when to apply certain labels:
+- GENERAL: The query is a general question about environmental science such as biodiversity, climate change, or conservation.
+- DESCRIPTIVE: The query is asking for a description of a specific dataset or information about a particular environmental topic.
+- CODE: The query is asking you to generate code or programming help related to environmental data processing or analysis.
+- METADATA: The query is asking for metadata information about datasets, such as their source, date, or who authored them.
+- UNRELATED: The query is not related to environmental science and is unlikely to be answerable from the information in the EIDC.
+
+The user's query is:
+{{query}}
+"""
