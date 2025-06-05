@@ -1,0 +1,48 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: serka-image
+    container_name: serka-container
+    ports:
+      - "8080:8000"
+    depends_on:
+      - ollama
+      - neo4j
+      - mongodb
+    networks:
+      - internal
+
+  neo4j:
+    image: neo4j:5.26.5
+    container_name: neo4j-container
+    environment:
+      - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
+      - NEO4J_PLUGINS=["apoc"]
+    networks:
+      - internal
+
+  ollama:
+    image: ollama/ollama:0.6.5
+    container_name: ollama-container
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./ollama-entrypoint.sh:/ollama-entrypoint.sh
+    entrypoint: ["/usr/bin/bash", "/ollama-entrypoint.sh"]
+    devices:
+      - nvidia.com/gpu=all
+    ports:
+      - "11434:11434"
+    networks:
+      - internal
+
+  mongodb:
+    image: mongo:8.0.6
+    container_name: mongodb-container
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
