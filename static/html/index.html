@@ -59,8 +59,8 @@
                         :title="item.docs[0].document.metadata.title"></button>
                 </div>
                 <div x-text="item.docs[0].document.metadata.url" class="text-xs h-5 ellipses break-all"></div>
-                <div class="max-h-18 ellipsis-multiline text-gray-900 mt-3"
-                    x-text="item.docs[0].document.content" :title="item.docs[0].document.content">
+                <div class="max-h-18 ellipsis-multiline text-gray-900 mt-3" x-text="item.docs[0].document.content"
+                    :title="item.docs[0].document.content">
                 </div>
 
                 <button @click="showDetails = !showDetails" class="hero-text text-xs my-2">
@@ -96,8 +96,7 @@
                                     </div>
                                     <div class="w-1/9 p-2 ellipses" x-text="doc.document.metadata.section">
                                     </div>
-                                    <div class="w-1/9 p-2 break-all"
-                                        x-text="doc.document.metadata.subsection">
+                                    <div class="w-1/9 p-2 break-all" x-text="doc.document.metadata.subsection">
                                     </div>
                                     <div class="w-1/9 p-2" x-text="parseFloat(doc.score).toFixed(3)">
                                     </div>
@@ -106,7 +105,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="mt-3">
+                <div class="mt-3" x-show="privacyNotice.accepted">
                     <span class="text-xs">
                         Feedback:
                     </span>
@@ -131,7 +130,7 @@
         <div class="text-xs">Generative Answer:</div>
         <div class="bg-white p-6 rounded-lg shadow-md text-justify border border-gray-200">
             <div x-html="answer.content"></div>
-            <div class="mt-3">
+            <div class="mt-3" x-show="privacyNotice.accepted">
                 <span class="text-xs">
                     Feedback:
                 </span>
@@ -218,7 +217,14 @@
             Your queries and feedback will be logged in a database and used to refine the future development of the
             search tool. The feedback may also be used in academic publications about the search tool's development.
         </p>
-        <button class="hero-bg text-white px-4 py-2 rounded-lg" @click="closePrivacyNotice">Ok</button>
+        <p class="mb-3">
+            <input type="checkbox" id="privacyNoticeCheckbox" x-model="privacyNotice.accepted" class="mr-2">
+            <label for="privacyNoticeCheckbox" class="text-sm">
+                I consent to provide feedback and understand that my queries and feedback will be logged
+                for the purpose of improving the search tool and may be used in academic publications.
+            </label>
+        </p>
+        <button class="hero-bg text-white px-4 py-2 rounded-lg" @click="closePrivacyNotice">Close</button>
     </div>
     <button @click="openPrivacyNotice" x-show="!privacyNotice.show"
         class="fixed bottom-6 right-6 bg-white p-2 rounded-lg shadow-md font-bold text-gray-500 border border-gray-200 z-100">
