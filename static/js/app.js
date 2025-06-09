@@ -29,6 +29,7 @@ document.addEventListener("alpine:init", () => {
         },
         privacyNotice: {
             show: true,
+            accepted: false,
         },
         async search() {
             this.splash = false;
