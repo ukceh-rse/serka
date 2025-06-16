@@ -1,5 +1,5 @@
 services:
-  app:
+  serka:
     build:
       context: .
       dockerfile: Dockerfile
@@ -11,15 +11,31 @@ services:
       - ollama
       - neo4j
       - mongodb
+    volumes:
+      - ./src:/app/src
+      - ./static:/app/static
+      - ./config.yaml:/app/config.yaml
+      - ./.env:/app/.env
+    environment:
+      - PYTHONPATH=/app/src
+      - DEBUG=1
     networks:
       - internal
 
   neo4j:
     image: neo4j:5.26.5
     container_name: neo4j-container
+    ports:
+      - "7474:7474"
+      - "7687:7687"
     environment:
       - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["apoc"]
+    volumes:
+        - ./.neo4j/logs:/logs
+        - ./.neo4j/config:/config
+        - ./.neo4j/data:/data
+        - ./.neo4j/plugins:/plugins
     networks:
       - internal
 
@@ -27,6 +43,7 @@ services:
     image: ollama/ollama:0.6.5
     container_name: ollama-container
     volumes:
+      - ./.ollama:/root/.ollama
       - ./config.yaml:/config.yaml
       - ./ollama-entrypoint.sh:/ollama-entrypoint.sh
     entrypoint: ["/usr/bin/bash", "/ollama-entrypoint.sh"]
@@ -40,6 +57,8 @@ services:
   mongodb:
     image: mongo:8.0.6
     container_name: mongodb-container
+    ports:
+      - "27017:27017"
     networks:
       - internal
 
