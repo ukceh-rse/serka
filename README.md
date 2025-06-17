@@ -15,6 +15,22 @@ To stop the running services:
 podman-compose -f podman-compose.yml down
 ```
 
+## Ingest Data
+Data is ingested into Serka from the EIDC catalogue and the Legilo API. A convenience script `scripts/ingest-data.py` is provided to ingest data through a data pipeline that will parse, construct a knowledge graph, create embeddings and save to the neo4j database. To run the script you must ensure that you have configured the correct variable in a local `.env`:
+```
+LEGILO_USERNAME=yourusername
+LEGILO_PASSWORD=yourpassword
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=password
+```
+The legilo username and password should be those that you use to access the legilo service. If you do not have access this stage will be skipped with a warning. The neo4j username should always be `neo4j` and the password can be any of your choosing.
+
+Once your `.env` file is set up you can run the ingestion pipeline:
+```
+uv run scripts/ingest-data.py <n>
+```
+Where `<n>` is the number of records from the EIDC catalogue you wish to ingest. Ingesting all records (over 2,000) from the EIDC can take several hours so for testing you may want to ingest a small number (default is 10).
+
 ## Development
 Ensure you have [uv](https://docs.astral.sh/uv/) installed and run:
 ```

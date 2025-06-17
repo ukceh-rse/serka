@@ -1,13 +1,13 @@
 ollama:
-  host: ollama-container
+  host: localhost
   port: 11434
 
 mongo:
-  host: mongodb-container
+  host: localhost
   port: 27017
 
 neo4j:
-  host: neo4j-container
+  host: localhost
   port: 7687
 
 embedding_models:
