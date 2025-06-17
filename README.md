@@ -4,19 +4,20 @@ Serka (serĉi ekologio) is a protoype search tool for the UKCEH NCUK project. It
 ## Podman Deployment
 Serka can be deployed using [podman](https://podman.io/). You must ensure you have `podman`, `podman-compose` and [`nvidia-container-toolkit`](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html) installed.
 
-To run Serka and it's dependent services ([Ollama](https://ollama.com/), [Neo4j](https://neo4j.com/), [MondgoDB](https://www.mongodb.com/)) use:
+To run Serka and it's dependent services ([Ollama](https://ollama.com/), [Neo4j](https://neo4j.com/), [MondgoDB](https://www.mongodb.com/)) defined in `podman-compose.yml` use:
 ```
-podman-compose -f podman-compose.yml up -d
+podman-compose --profile app up -d
 ```
 > Note: Initially the Ollama service will download the required models listed in `config.yml`. This can take some time, but once the models are downloaded they should not need to be downloaded again.
 
 To stop the running services:
 ```
-podman-compose -f podman-compose.yml down
+podman-compose down
 ```
+> ⚠️ **Warning:** Serka is designed to work with a GPU and you may find certain features slow if running without access to a GPU. The GPU configuration is declared in `podman-compose.yml` via: `devices: nvidia.com/gpu=all` in the `ollama` service definition.
 
 ## Ingest Data
-Data is ingested into Serka from the EIDC catalogue and the Legilo API. A convenience script `scripts/ingest-data.py` is provided to ingest data through a data pipeline that will parse, construct a knowledge graph, create embeddings and save to the neo4j database. To run the script you must ensure that you have configured the correct variable in a local `.env`:
+Data is ingested into Serka from the EIDC catalogue and the Legilo API. A convenience script `scripts/ingest-data.py` is provided to ingest data through a data pipeline that will parse, construct a knowledge graph, create embeddings and save to the neo4j database. To run the script you must ensure that you have configured the correct variable in a local `.env` file:
 ```
 LEGILO_USERNAME=yourusername
 LEGILO_PASSWORD=yourpassword
@@ -46,8 +47,8 @@ uv run
 ```
 
 ### Running Locally
-The best way to run the Serka tool for development is to use podman to start the necessary services through podman-compose and then run the FastAPI Serka service locally:
+The best way to run the Serka tool for development is to use podman to start the necessary services through podman-compose using the `dev` profile and then run the FastAPI Serka service locally:
 ```
-podman-compose -f podman-compose.yml up neo4j ollama mongodb -d
+podman-compose up neo4j ollama mongodb -d
 uv run fastapi run src/serka/main.py --port 8080
 ```

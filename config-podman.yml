@@ -1,0 +1,24 @@
+ollama:
+  host: ollama-container
+  port: 11434
+
+mongo:
+  host: mongodb-container
+  port: 27017
+
+neo4j:
+  host: neo4j-container
+  port: 7687
+
+embedding_models:
+  - nomic-embed-text
+
+rag_models:
+  - llama3.1
+
+rag_enabled: true
+
+unified_metadata:
+  - title
+  - section
+  - subsection
