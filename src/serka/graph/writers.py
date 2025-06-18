@@ -32,8 +32,8 @@ class Neo4jGraphWriter:
 		for relation_type, relation_list in relations_and_types.items():
 			query = (
 				"UNWIND $relations as relation "
-				f"MATCH (a), (b) "
-				"WHERE a.uri = relation[0] AND b.uri = relation[1] "
+				"MATCH (a {uri: relation[0]}) "
+				"MATCH (b {uri: relation[1]}) "
 				f"MERGE (a)-[:{relation_type}]->(b) "
 				"RETURN COUNT(*)"
 			)
@@ -71,8 +71,8 @@ class Neo4jGraphWriter:
 		for relation_type, relation_list in relations.items():
 			query = (
 				"UNWIND $relations as relation "
-				f"MATCH (a:TextChunk), (b) "
-				"WHERE a.doc_id = relation[0] AND b.uri = relation[1] "
+				"MATCH (a:TextChunk {doc_id: relation[0]}) "
+				"MATCH (b {uri: relation[1]}) "
 				f"MERGE (a)-[:{relation_type}]->(b) "
 				"RETURN COUNT(*)"
 			)
@@ -91,11 +91,13 @@ class Neo4jGraphWriter:
 		}
 
 	@staticmethod
-	def create_index(tx):
-		query = "CREATE VECTOR INDEX vec_lookup IF NOT EXISTS FOR (n:embedded) ON n.embedding"
-		result = tx.run(query)
-		result = result.data()
-		return result
+	def create_indexes(tx):
+		tx.run(
+			"CREATE VECTOR INDEX vec_lookup IF NOT EXISTS FOR (n:embedded) ON n.embedding;"
+		)
+		tx.run("CREATE INDEX doc_id_idx IF NOT EXISTS FOR (c:TextChunk) ON (c.doc_id);")
+		tx.run("CREATE INDEX uri_idx IF NOT EXISTS FOR (n:embedded) ON (n.uri);")
+		return {"message": "Indexes created successfully"}
 
 	@staticmethod
 	def create_graph(
@@ -126,8 +128,7 @@ class Neo4jGraphWriter:
 			self.url, auth=(self.username, self.password)
 		) as driver:
 			with driver.session(database="neo4j") as session:
-				index_created = session.execute_write(Neo4jGraphWriter.create_index)
-				print(index_created)
+				session.execute_write(Neo4jGraphWriter.create_indexes)
 				node_result, relation_result = session.execute_write(
 					Neo4jGraphWriter.create_graph, nodes, relations, docs
 				)
