@@ -49,6 +49,9 @@ uv run
 ### Running Locally
 The best way to run the Serka tool for development is to use podman to start the necessary services through podman-compose using the `dev` profile and then run the FastAPI Serka service locally:
 ```
+podman-compose --profile dev up -d
+# or
 podman-compose up neo4j ollama mongodb -d
+
 uv run fastapi run src/serka/main.py --port 8080
 ```
