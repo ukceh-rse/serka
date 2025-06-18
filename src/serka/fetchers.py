@@ -84,12 +84,10 @@ class LegiloFetcher:
 			dataset_uri = extract_doi(dataset["resourceIdentifiers"])
 			dataset_title = dataset.get("title", "")
 			url = self.legilo_url.format(id=id)
-			print(url)
 			res: Response = requests.get(
 				url,
 				auth=self.auth,
 			)
-			print(res.status_code)
 			if res.status_code == 200:
 				json_data = res.json()
 				supporting_docs.extend(

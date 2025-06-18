@@ -9,7 +9,7 @@ import os
 
 @lru_cache
 def get_config() -> Config:
-	with open("config.yaml", "r") as f:
+	with open("config.yml", "r") as f:
 		config_data = yaml.safe_load(f)
 	return Config(**config_data)
 
