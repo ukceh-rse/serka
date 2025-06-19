@@ -1,6 +1,6 @@
-from typing import List, Dict, Optional
+from typing import List, Optional
 import logging
-from serka.models import Document, Result, RAGResponse, GroupedDocuments, ScoredDocument
+from serka.models import Result, RAGResponse, GroupedDocuments
 from serka.pipelines import PipelineBuilder
 
 
@@ -43,43 +43,10 @@ class DAO:
 		result = p.run(data={"eidc_fetcher": {"rows": rows}})
 		return Result(success=True, msg=f"Created graph: {result["graph_writer"]}")
 
-	def query(self, query: str) -> List[Document]:
+	def query(self, query: str) -> List[GroupedDocuments]:
 		p = self._pipeline_builder.query_pipeline()
 		result = p.run({"embedder": {"text": query}})
-		nodes = result["reader"]["nodes"]
-		docs = set()
-		for node in nodes:
-			score = node["score"]
-			content = None
-			meta = {}
-			if "TextChunk" in node["start_labels"]:
-				content = node["start_node"]["content"]
-				meta["section"] = node["relationship_type"]
-				meta["title"] = node["connected_node"]["title"]
-				meta["url"] = node["connected_node"]["uri"]
-			if "Dataset" in node["start_labels"]:
-				content = repr(node["start_node"])
-				meta["title"] = node["start_node"]["title"]
-				meta["section"] = "Dataset"
-				meta["url"] = node["start_node"]["uri"]
-			if content:
-				docs.add(
-					ScoredDocument(
-						document=Document(content=content, metadata=meta), score=score
-					)
-				)
-
-		docs = sorted(docs, key=lambda x: x.score, reverse=True)
-
-		groupby = "title"
-
-		grouped: Dict[str, GroupedDocuments] = {}
-		for doc in docs:
-			groupby_val = doc.document.metadata.get(groupby, "unknown")
-			if groupby_val not in grouped.keys():
-				grouped[groupby_val] = GroupedDocuments(docs=[], groupedby=groupby)
-			grouped[groupby_val].docs.append(doc)
-		return list(grouped.values())
+		return result["reader"]["grouped_docs"]
 
 	def rag_query(
 		self,
