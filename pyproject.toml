@@ -23,6 +23,7 @@ dependencies = [
     "pymongo>=4.11.1",
     "neomodel>=5.4.5",
     "neo4j-haystack>=2.2.1",
+    "amazon-bedrock-haystack>=3.9.1",
 ]
 
 [project.scripts]
