@@ -7,12 +7,27 @@ class ServiceConfig(BaseModel):
 	port: int
 
 
+class ModelServerConfig(BaseModel):
+	provider: Literal["ollama", "bedrock"]
+	embedding: str
+	llm: str
+
+
+class OllamaModelServerConfig(ModelServerConfig):
+	provider: Literal["ollama"] = "ollama"
+	host: str
+	port: int
+
+
+class BedrockModelServerConfig(ModelServerConfig):
+	provider: Literal["bedrock"] = "bedrock"
+	region: Literal["eu-west-2"] = "eu-west-2"
+
+
 class Config(BaseModel):
-	ollama: ServiceConfig
 	mongo: ServiceConfig
 	neo4j: ServiceConfig
-	embedding_models: List[str]
-	rag_models: List[str]
+	models: ModelServerConfig
 	rag_enabled: bool
 	unified_metadata: List[str]
 

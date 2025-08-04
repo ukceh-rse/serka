@@ -19,16 +19,13 @@ def create_pipeline_builder() -> PipelineBuilder:
 	load_dotenv()
 	config = load_config()
 	return PipelineBuilder(
-		ollama_host=config.ollama.host,
-		ollama_port=config.ollama.port,
 		neo4j_host=config.neo4j.host,
 		neo4j_port=config.neo4j.port,
 		neo4j_user=os.getenv("NEO4J_USERNAME"),
 		neo4j_password=os.getenv("NEO4J_PASSWORD"),
 		legilo_user=os.getenv("LEGILO_USERNAME"),
 		legilo_password=os.getenv("LEGILO_PASSWORD"),
-		embedding_model=config.embedding_models[0],
-		rag_model=config.rag_models[0],
+		models=config.models,
 		chunk_length=150,
 		chunk_overlap=50,
 	)

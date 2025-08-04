@@ -1807,15 +1807,16 @@ wheels = [
 
 [[package]]
 name = "ollama-haystack"
-version = "2.2.0"
+version = "3.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "haystack-ai" },
     { name = "ollama" },
+    { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8b/9d/d3c38f4a9c346337f075827373788beff0c475827bb8259eb0f875c24807/ollama_haystack-2.2.0.tar.gz", hash = "sha256:211053922f052dd4fad7c35c065b2d44aaa1b070a49edea02b96f9ef7f3db6f3", size = 20137 }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/15/bc4fbfad5149fc820e41d3267259217b2ebec7b0b18dffadb3618537951d/ollama_haystack-3.4.0.tar.gz", hash = "sha256:de4a29a1a94facc45bf99988d853b7afb2fb7ff7a98e48cb08a7def23b2530e6", size = 26083 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8d/ac/b238ff084dc5352b6b06ad8c5be06e7807837ff81c756569c8b3519a3edc/ollama_haystack-2.2.0-py3-none-any.whl", hash = "sha256:8998a2040a862a84e23afee5f76d731cbe42dd918bfd5199c952045407094199", size = 16084 },
+    { url = "https://files.pythonhosted.org/packages/78/a1/5b10c16051355640ccaf123014a690d4ee377abada180ad4b4d2c31bba1e/ollama_haystack-3.4.0-py3-none-any.whl", hash = "sha256:0e2598cb95f330c6424d8e0885e5633e819406a7c8a7d5ab05bb4c33f569a827", size = 20530 },
 ]
 
 [[package]]
@@ -2907,7 +2908,7 @@ requires-dist = [
     { name = "neo4j-haystack", specifier = ">=2.2.1" },
     { name = "neomodel", specifier = ">=5.4.5" },
     { name = "ollama", specifier = ">=0.4.5" },
-    { name = "ollama-haystack", specifier = ">=2.2.0" },
+    { name = "ollama-haystack", specifier = ">=2.3.0" },
     { name = "pymongo", specifier = ">=4.11.1" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "pyyaml", specifier = ">=6.0.2" },

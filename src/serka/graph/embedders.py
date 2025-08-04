@@ -1,5 +1,5 @@
 from haystack import component
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional, Literal
 from ollama import Client
 from tqdm import tqdm
 from haystack import Pipeline, Document
@@ -7,7 +7,58 @@ from numpy import array, mean
 from haystack.components.builders import PromptBuilder
 from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
 from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
+from haystack_integrations.components.embedders.amazon_bedrock import (
+	AmazonBedrockTextEmbedder,
+)
 from serka.prompts import HYDE_PROMPT_TEMPLATE, HYDE_SYSTEM_PROMPT
+from haystack.utils import Secret
+
+
+@component
+class BedrockNodeEmbedder:
+	def __init__(
+		self,
+		model: Literal["amazon.titan-embed-text-v2:0"] = "amazon.titan-embed-text-v2:0",
+		aws_access_key_id: Optional[Secret] = Secret.from_env_var("AWS_KEY_ID"),
+		aws_secret_access_key: Optional[Secret] = Secret.from_env_var("AWS_SECRET_KEY"),
+		aws_region_name: Optional[Secret] = Secret.from_env_var("AWS_REGION"),
+	):
+		self.embedder = AmazonBedrockTextEmbedder(
+			model=model,
+			aws_access_key_id=aws_access_key_id,
+			aws_secret_access_key=aws_secret_access_key,
+			aws_region_name=aws_region_name,
+		)
+
+	def _prepare_nodes_to_embed(
+		self, node_type: str, nodes: List[Dict[str, Any]]
+	) -> List[str]:
+		nodes_to_embed = []
+		for node in nodes:
+			nodes_to_embed.append(f"{node_type}: {repr(node)}")
+		return nodes_to_embed
+
+	def _embed_node(self, node: str):
+		return self.embedder.run(text=node)["embedding"]
+
+	def _embed_nodes(
+		self, node_type: str, nodes: List[Dict[str, Any]]
+	) -> List[Dict[str, Any]]:
+		nodes_to_embed = self._prepare_nodes_to_embed(node_type, nodes)
+		embeddings = [self._embed_node(node) for node in nodes_to_embed]
+
+		for node, emb in zip(nodes, embeddings):
+			node["embedding"] = emb
+		return nodes
+
+	@component.output_types(node_embeddings=Dict[str, List[Dict[str, str]]])
+	def run(
+		self, nodes: Dict[str, List[Dict[str, Any]]]
+	) -> Dict[str, Dict[str, List[Dict[str, str]]]]:
+		embedded_nodes = {}
+		for node_type, node_list in nodes.items():
+			embedded_nodes[node_type] = self._embed_nodes(node_type, node_list)
+		return {"node_embeddings": embedded_nodes}
 
 
 @component
