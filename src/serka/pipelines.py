@@ -7,13 +7,16 @@ from serka.graph.extractors import (
 	EntityExtractor,
 	TextExtractor,
 )
+from haystack.utils import Secret
 from serka.fetchers import EIDCFetcher, LegiloFetcher
 from typing import Optional, Callable
 from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
 from haystack_integrations.components.embedders.ollama import OllamaTextEmbedder
 from haystack.components.builders import PromptBuilder
 from haystack.components.builders.answer_builder import AnswerBuilder
-from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
+from haystack_integrations.components.generators.amazon_bedrock import (
+	AmazonBedrockGenerator,
+)
 from haystack.dataclasses import StreamingChunk
 from haystack.components.joiners import DocumentJoiner
 from .prompts import GRAPH_PROMPT
@@ -69,12 +72,22 @@ class PipelineBuilder:
 			),
 		)
 		p.add_component("prompt_builder", PromptBuilder(GRAPH_PROMPT))
+		# p.add_component(
+		# 	"llm",
+		# 	OllamaGenerator(
+		# 		model="llama3.1",
+		# 		generation_kwargs={"num_ctx": 16384, "temperature": 0.0},
+		# 		url=f"http://{self.ollama_host}:{self.ollama_port}",
+		# 		streaming_callback=streaming_callback,
+		# 	),
+		# )
 		p.add_component(
 			"llm",
-			OllamaGenerator(
-				model="llama3.1",
-				generation_kwargs={"num_ctx": 16384, "temperature": 0.0},
-				url=f"http://{self.ollama_host}:{self.ollama_port}",
+			AmazonBedrockGenerator(
+				model="meta.llama3-8b-instruct-v1:0",
+				aws_access_key_id=Secret.from_env_var("AWS_KEY_ID"),
+				aws_secret_access_key=Secret.from_env_var("AWS_SECRET_KEY"),
+				aws_region_name=Secret.from_env_var("AWS_REGION"),
 				streaming_callback=streaming_callback,
 			),
 		)
