@@ -6,7 +6,7 @@ services:
     image: serka-image
     container_name: serka-container
     ports:
-      - "8080:8000"
+      - "8080:8080"
     depends_on:
       - ollama
       - neo4j
@@ -39,7 +39,7 @@ services:
         - ./.neo4j/plugins:/plugins
     networks:
       - internal
-    profiles: [app, dev]
+    profiles: [app, dev, aws]
 
   ollama:
     image: ollama/ollama:0.6.5
@@ -64,7 +64,7 @@ services:
       - "27017:27017"
     networks:
       - internal
-    profiles: [app, dev]
+    profiles: [app, dev, aws]
 
 networks:
   internal:

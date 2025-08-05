@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Any, Literal
+from typing import List, Dict, Optional, Any, Literal, Union
 
 
 class ServiceConfig(BaseModel):
@@ -7,21 +7,24 @@ class ServiceConfig(BaseModel):
 	port: int
 
 
-class ModelServerConfig(BaseModel):
+class BasModelServerConfig(BaseModel):
 	provider: Literal["ollama", "bedrock"]
 	embedding: str
 	llm: str
 
 
-class OllamaModelServerConfig(ModelServerConfig):
+class OllamaModelServerConfig(BasModelServerConfig):
 	provider: Literal["ollama"] = "ollama"
 	host: str
 	port: int
 
 
-class BedrockModelServerConfig(ModelServerConfig):
+class BedrockModelServerConfig(BasModelServerConfig):
 	provider: Literal["bedrock"] = "bedrock"
 	region: Literal["eu-west-2"] = "eu-west-2"
+
+
+ModelServerConfig = Union[OllamaModelServerConfig, BedrockModelServerConfig]
 
 
 class Config(BaseModel):

@@ -24,6 +24,7 @@ The "Smog Monitoring Dataset"[1] was authored by "John Doe"[2], "Jane Smith"[3],
 Do not refer directly to the nodes or relationships in the knowledge graph, but rather use them to construct your answer and provide appropriate references.
 Your reference should always be the name or title of the node as the text and the URI as the link. If the source of information is a TextChunk, use the Dataset connected to it as the reference.
 Do not make up any links or references, only use the ones provided as uris in the knowledge graph.
+Keep your answers brief.
 
 # Relevant Information
 The list of most relevant nodes and relationships from the knowledge graph is:

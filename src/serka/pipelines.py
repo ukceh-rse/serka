@@ -57,7 +57,9 @@ class PipelineBuilder:
 
 	def _create_node_embedder(self):
 		if self.models.provider == "ollama":
-			OllamaNodeEmbedder(url=f"http://{self.models.host}:{self.models.port}")
+			return OllamaNodeEmbedder(
+				url=f"http://{self.models.host}:{self.models.port}"
+			)
 		elif self.models.provider == "bedrock":
 			return BedrockNodeEmbedder(model=self.models.embedding)
 		else:
