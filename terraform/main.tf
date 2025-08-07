@@ -16,25 +16,34 @@ data "aws_ami" "ubuntu" {
 resource "aws_instance" "app_server" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = var.instance_type
-
-  vpc_security_group_ids = [module.vpc.default_security_group_id]
-  subnet_id              = module.vpc.private_subnets[0]
+  key_name = var.ssh_key_name
+  vpc_security_group_ids = [aws_security_group.ssh_access.id]
 
   tags = {
     Name = var.instance_name
   }
 }
 
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "5.19.0"
+resource "aws_security_group" "ssh_access" {
+  name        = "${var.instance_name}-ssh-access"
+  description = "Allow SSH inbound traffic"
 
-  name = "example-vpc"
-  cidr = "10.0.0.0/16"
+  ingress {
+    description = "SSH from specified CIDR blocks"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-  azs             = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
-  public_subnets  = ["10.0.101.0/24"]
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-  enable_dns_hostnames    = true
+  tags = {
+    Name = "${var.instance_name}-ssh-access"
+  }
 }
