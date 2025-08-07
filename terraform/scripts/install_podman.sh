@@ -1,7 +1,17 @@
 #!/bin/bash
 
+# Create log file
+LOG_FILE="/var/log/podman_install.log"
+touch $LOG_FILE
+
+# Function for logging
+log() {
+    echo "$(date +"%Y-%m-%d %H:%M:%S") - $1" | tee -a $LOG_FILE
+}
+
 # install and configure nginx
-apt-get install -y nginx
+log "Installing nginx..."
+apt-get install -y nginx >> $LOG_FILE 2>&1
 cat > /etc/nginx/sites-available/default <<EOF
 server {
     listen 80;
@@ -16,13 +26,31 @@ server {
     }
 }
 EOF
-systemctl restart nginx
+log "Restarting nginx..."
+systemctl restart nginx >> $LOG_FILE 2>&1
 
 # install podman
-apt-get update -y
-apt-get install -y podman
-apt-get install -y podman-compose
-echo "Podman and Podman-Compose installed successfully" > /home/ubuntu/installation_complete.txt
+log "Updating package lists..."
+apt-get update -y >> $LOG_FILE 2>&1
+log "Installing podman..."
+apt-get install -y podman >> $LOG_FILE 2>&1
+log "Installing podman-compose..."
+apt-get install -y podman-compose >> $LOG_FILE 2>&1
+echo 'unqualified-search-registries = ["docker.io"]' | sudo tee -a /etc/containers/registries.conf >> $LOG_FILE 2>&1
 
 #start server
-podman run -dt -p 8080:80/tcp docker.io/library/httpd
+log "Configuring git..."
+git config --global http.sslVerify false >> $LOG_FILE 2>&1
+log "Cloning repository..."
+git clone https://github.com/ukceh-rse/serka.git >> $LOG_FILE 2>&1
+cd serka
+log "Creating .env file"
+touch .env
+cat > .env <<EOF
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=neo4j
+EOF
+log "Checking out branch..."
+git checkout bedrock-integration >> $LOG_FILE 2>&1
+log "Starting services with podman-compose..."
+podman-compose -f podman-compose[aws].yml up -d >> $LOG_FILE 2>&1
