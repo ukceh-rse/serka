@@ -50,7 +50,15 @@ git clone https://github.com/ukceh-rse/serka.git /home/ubuntu/serka >> $LOG_FILE
 
 cd /home/ubuntu/serka
 
+# Generate random username and password for neo4j
+RANDOM_USERNAME="$(head /dev/urandom | tr -dc 'a-z' | head -c 8)"
+RANDOM_PASSWORD="$(head /dev/urandom | tr -dc 'a-z0-9' | head -c 8)"
+
 touch .env
+cat > .env << ENV_CONTENT
+NEO4J_USERNAME=$RANDOM_USERNAME
+NEO4J_PASSWORD=$RANDOM_PASSWORD
+ENV_CONTENT
 
 git checkout bedrock-integration >> $LOG_FILE 2>&1
 
