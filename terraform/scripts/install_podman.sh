@@ -50,19 +50,19 @@ git clone https://github.com/ukceh-rse/serka.git /home/ubuntu/serka >> $LOG_FILE
 
 cd /home/ubuntu/serka
 
-# Generate random username and password for neo4j
-RANDOM_USERNAME="$(head /dev/urandom | tr -dc 'a-z' | head -c 8)"
+# Generate random password for neo4j (username must be default "neo4j")
 RANDOM_PASSWORD="$(head /dev/urandom | tr -dc 'a-z0-9' | head -c 8)"
 
 touch .env
 cat > .env << ENV_CONTENT
-NEO4J_USERNAME=$RANDOM_USERNAME
+NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=$RANDOM_PASSWORD
 ENV_CONTENT
 
 git checkout bedrock-integration >> $LOG_FILE 2>&1
-
-podman-compose -f podman-compose[aws].yml up -d >> $LOG_FILE 2>&1
 EOF_UBUNTU
+
+cd /home/ubuntu/serka
+podman-compose -f podman-compose[aws].yml up -d >> $LOG_FILE 2>&1
 
 log "Initialization completed"
