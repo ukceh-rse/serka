@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # Create log file
-LOG_FILE="/var/log/podman_install.log"
+LOG_FILE="/home/ubuntu/initialize.log"
 touch $LOG_FILE
+chown ubuntu:ubuntu $LOG_FILE
 
 # Function for logging
 log() {
@@ -38,19 +39,22 @@ log "Installing podman-compose..."
 apt-get install -y podman-compose >> $LOG_FILE 2>&1
 echo 'unqualified-search-registries = ["docker.io"]' | sudo tee -a /etc/containers/registries.conf >> $LOG_FILE 2>&1
 
+log "Switching to ubuntu user"
+su - ubuntu << 'EOF_UBUNTU'
 #start server
-log "Configuring git..."
+LOG_FILE="/home/ubuntu/initialize.log"
+
 git config --global http.sslVerify false >> $LOG_FILE 2>&1
-log "Cloning repository..."
-git clone https://github.com/ukceh-rse/serka.git >> $LOG_FILE 2>&1
-cd serka
-log "Creating .env file"
+
+git clone https://github.com/ukceh-rse/serka.git /home/ubuntu/serka >> $LOG_FILE 2>&1
+
+cd /home/ubuntu/serka
+
 touch .env
-cat > .env <<EOF
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=neo4j
-EOF
-log "Checking out branch..."
+
 git checkout bedrock-integration >> $LOG_FILE 2>&1
-log "Starting services with podman-compose..."
+
 podman-compose -f podman-compose[aws].yml up -d >> $LOG_FILE 2>&1
+EOF_UBUNTU
+
+log "Initialization completed"

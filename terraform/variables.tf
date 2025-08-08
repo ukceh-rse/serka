@@ -14,3 +14,8 @@ variable "ssh_key_name" {
   description = "Name of the existing AWS EC2 Key Pair to use for SSH"
   type        = string
 }
+
+variable "connect_ip" {
+  description = "IP address to allow connections from"
+  type = string
+}
