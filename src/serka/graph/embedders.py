@@ -1,5 +1,5 @@
 from haystack import component
-from typing import Dict, List, Any, Optional, Literal
+from typing import Dict, List, Any, Literal
 from ollama import Client
 from tqdm import tqdm
 from haystack import Pipeline, Document
@@ -11,7 +11,6 @@ from haystack_integrations.components.embedders.amazon_bedrock import (
 	AmazonBedrockTextEmbedder,
 )
 from serka.prompts import HYDE_PROMPT_TEMPLATE, HYDE_SYSTEM_PROMPT
-from haystack.utils import Secret
 
 
 @component
@@ -19,16 +18,8 @@ class BedrockNodeEmbedder:
 	def __init__(
 		self,
 		model: Literal["amazon.titan-embed-text-v2:0"] = "amazon.titan-embed-text-v2:0",
-		aws_access_key_id: Optional[Secret] = Secret.from_env_var("AWS_KEY_ID"),
-		aws_secret_access_key: Optional[Secret] = Secret.from_env_var("AWS_SECRET_KEY"),
-		aws_region_name: Optional[Secret] = Secret.from_env_var("AWS_REGION"),
 	):
-		self.embedder = AmazonBedrockTextEmbedder(
-			model=model,
-			aws_access_key_id=aws_access_key_id,
-			aws_secret_access_key=aws_secret_access_key,
-			aws_region_name=aws_region_name,
-		)
+		self.embedder = AmazonBedrockTextEmbedder(model=model)
 
 	def _prepare_nodes_to_embed(
 		self, node_type: str, nodes: List[Dict[str, Any]]
