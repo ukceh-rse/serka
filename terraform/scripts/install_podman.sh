@@ -57,7 +57,7 @@ touch .env
 cat > .env << ENV_CONTENT
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=$RANDOM_PASSWORD
-AWS_REGION=eu-west-2
+AWS_DEFAULT_REGION=eu-west-2
 ENV_CONTENT
 
 git checkout bedrock-integration >> $LOG_FILE 2>&1
