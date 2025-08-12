@@ -1,4 +1,4 @@
-output "instance_hostname" {
-  description = "Private DNS name of the EC2 instance."
-  value       = aws_instance.app_server.private_dns
+output "instance_url" {
+  description = "HTTP URL for the EC2 instance."
+  value       = "http://${aws_instance.app_server.public_ip}"
 }
