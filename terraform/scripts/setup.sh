@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Create log file
-LOG_FILE="/home/ubuntu/initialize.log"
+LOG_FILE="/home/ubuntu/setup.log"
 touch $LOG_FILE
 chown ubuntu:ubuntu $LOG_FILE
 
@@ -9,6 +9,8 @@ chown ubuntu:ubuntu $LOG_FILE
 log() {
     echo "$(date +"%Y-%m-%d %H:%M:%S") - $1" | tee -a $LOG_FILE
 }
+
+log "Beginning Serka setup..."
 
 # install and configure nginx
 log "Installing nginx..."
@@ -39,10 +41,11 @@ log "Installing podman-compose..."
 apt-get install -y podman-compose >> $LOG_FILE 2>&1
 echo 'unqualified-search-registries = ["docker.io"]' | sudo tee -a /etc/containers/registries.conf >> $LOG_FILE 2>&1
 
+# setup local repo to import data using utility scripts
 log "Switching to ubuntu user"
 su - ubuntu << 'EOF_UBUNTU'
 #start server
-LOG_FILE="/home/ubuntu/initialize.log"
+LOG_FILE="/home/ubuntu/setup.log"
 
 git config --global http.sslVerify false >> $LOG_FILE 2>&1
 
@@ -69,7 +72,9 @@ podman-compose -f podman-compose[aws].yml up -d >> $LOG_FILE 2>&1
 # Setup uv locally to run the data import script.
 # Note this is just for testing, data should be imported and processed sperately and then made accessible to the instance.
 sudo snap install astral-uv --classic >> $LOG_FILE 2>&1
-uv sync
-#uv run scripts/ingest-data.py 1
+uv sync >> $LOG_FILE 2>&1
 
-log "Initialization completed"
+# Note this will only import a small number of datasets for testing
+uv run scripts/ingest-data.py >> $LOG_FILE 2>&1
+
+log "Serka setup completed"

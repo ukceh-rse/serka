@@ -67,7 +67,7 @@ resource "aws_instance" "app_server" {
   vpc_security_group_ids = [aws_security_group.ssh_access.id]
   iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
 
-  user_data = templatefile("${path.module}/scripts/install_podman.sh", {})
+  user_data = templatefile("${path.module}/scripts/setup.sh", {})
 
   tags = {
     Name = var.instance_name
