@@ -10,15 +10,14 @@ neo4j:
   host: neo4j-container
   port: 7687
 
-embedding_models:
-  - nomic-embed-text
-
-rag_models:
-  - llama3.1
-
 rag_enabled: true
 
 unified_metadata:
   - title
   - section
   - subsection
+
+models:
+  provider: bedrock
+  embedding: amazon.titan-embed-text-v2:0
+  llm: anthropic.claude-3-7-sonnet-20250219-v1:0
