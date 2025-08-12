@@ -139,9 +139,7 @@ class PipelineBuilder:
 		p.connect("prompt_builder.prompt", "answer_builder.query")
 		return p
 
-	def build_graph_pipeline(
-		self, neo4j_username: str = "neo4j", neo4j_password: str = "password"
-	) -> Pipeline:
+	def build_graph_pipeline(self) -> Pipeline:
 		p = Pipeline()
 		p.add_component("eidc_fetcher", EIDCFetcher())
 		p.add_component(
@@ -162,8 +160,8 @@ class PipelineBuilder:
 			Neo4jGraphWriter(
 				host=self.neo4j_host,
 				port=self.neo4j_port,
-				username=neo4j_username,
-				password=neo4j_password,
+				username=self.neo4j_user,
+				password=self.neo4j_password,
 			),
 		)
 
