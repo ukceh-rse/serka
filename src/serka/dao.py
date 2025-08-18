@@ -1,6 +1,13 @@
 from typing import List, Dict, Optional
 import logging
-from serka.models import Document, Result, RAGResponse, GroupedDocuments, ScoredDocument
+from serka.models import (
+	Document,
+	Result,
+	RAGResponse,
+	GroupedDocuments,
+	ScoredDocument,
+	ModelServerConfig,
+)
 from serka.pipelines import PipelineBuilder
 
 
@@ -16,24 +23,18 @@ class DAO:
 		neo4j_password: str,
 		legilo_user: str,
 		legilo_password: str,
-		ollama_host: str = "localhost",
-		ollama_port: int = 11434,
+		model_server_config: ModelServerConfig,
 		neo4j_host: str = "localhost",
 		neo4j_port: int = 7687,
-		default_embedding_model: str = "nomic-embed-text",
-		default_rag_model: str = "llama3.1",
 	):
 		self._pipeline_builder = PipelineBuilder(
-			ollama_host=ollama_host,
-			ollama_port=ollama_port,
 			neo4j_host=neo4j_host,
 			neo4j_port=neo4j_port,
 			neo4j_user=neo4j_user,
 			neo4j_password=neo4j_password,
 			legilo_user=legilo_user,
 			legilo_password=legilo_password,
-			embedding_model=default_embedding_model,
-			rag_model=default_rag_model,
+			models=model_server_config,
 			chunk_length=150,
 			chunk_overlap=50,
 		)

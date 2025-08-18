@@ -1,0 +1,38 @@
+services:
+  serka:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: serka-image
+    container_name: serka-container
+    ports:
+      - "8080:8000"
+    depends_on:
+      - neo4j
+      - mongodb
+    volumes:
+      - ./config-podman.yml:/app/config.yml
+      - ./.env:/app/.env
+    networks:
+      - internal
+
+  neo4j:
+    image: neo4j:5.26.5
+    container_name: neo4j-container
+    ports:
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
+      - NEO4J_PLUGINS=["apoc"]
+    networks:
+      - internal
+
+  mongo:
+    image: mongo:8.0.6
+    container_name: mongodb-container
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
