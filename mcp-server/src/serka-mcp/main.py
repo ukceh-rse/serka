@@ -1,4 +1,4 @@
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from typing import List, Any, Literal, Optional, Union
 import requests
 import logging
@@ -210,5 +210,5 @@ def search(search_term: str) -> Union[List[Dataset], Error]:
 
 if __name__ == "__main__":
 	logger.info("Starting MCP server...")
-	mcp.run(transport="streamable-http")
+	mcp.run(transport="http", host="0.0.0.0", port=8000)
 	logger.info("Stopping MCP server")

@@ -1,0 +1,13 @@
+[project]
+name = "mcp-server"
+version = "0.1.0"
+description = "Serka MCP (Model Context Protocol) server. Enables Serka to make use of agentic tools."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "Matthew Coole", email = "matcoo@ceh.ac.uk" }
+]
+dependencies = [
+    "fastmcp>=2.11.3",
+    "requests>=2.32.3",
+]
