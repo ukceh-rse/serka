@@ -24,6 +24,8 @@ dependencies = [
     "neomodel>=5.4.5",
     "neo4j-haystack>=2.2.1",
     "amazon-bedrock-haystack>=3.9.1",
+    "mcp[cli]>=1.13.0",
+    "mcp-haystack>=0.5.0",
 ]
 
 [project.scripts]
