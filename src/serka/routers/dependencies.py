@@ -19,6 +19,8 @@ def get_dao(config: Config = Depends(get_config)) -> DAO:
 	return DAO(
 		neo4j_host=config.neo4j.host,
 		neo4j_port=config.neo4j.port,
+		mcp_host=config.mcp.host,
+		mcp_port=config.mcp.port,
 		neo4j_user=os.getenv("NEO4J_USERNAME"),
 		neo4j_password=os.getenv("NEO4J_PASSWORD"),
 		legilo_user=os.getenv("LEGILO_USERNAME"),

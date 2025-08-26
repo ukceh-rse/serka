@@ -9,6 +9,9 @@ from serka.models import (
 	ModelServerConfig,
 )
 from serka.pipelines import PipelineBuilder
+from haystack.dataclasses import ChatMessage
+from haystack.components.agents import Agent
+from serka.prompts import AGENT_PROMPT
 
 
 logger = logging.getLogger(__name__)
@@ -26,12 +29,16 @@ class DAO:
 		model_server_config: ModelServerConfig,
 		neo4j_host: str = "localhost",
 		neo4j_port: int = 7687,
+		mcp_host: str = "localhost",
+		mcp_port: int = 8000,
 	):
 		self._pipeline_builder = PipelineBuilder(
 			neo4j_host=neo4j_host,
 			neo4j_port=neo4j_port,
 			neo4j_user=neo4j_user,
 			neo4j_password=neo4j_password,
+			mcp_host=mcp_host,
+			mcp_port=mcp_port,
 			legilo_user=legilo_user,
 			legilo_password=legilo_password,
 			models=model_server_config,
@@ -85,17 +92,21 @@ class DAO:
 	def rag_query(
 		self,
 		query: str,
-		hyde: bool = False,
 		answer: Optional[RAGResponse] = None,
 	) -> str:
 		def callback(x):
 			return answer.tokens.append(x.content) if answer else None
 
-		p = self._pipeline_builder.rag_pipeline(hyde=hyde, streaming_callback=callback)
-		result = p.run(
-			{"embedder": {"text": query}, "prompt_builder": {"query": query}}
-		)
+		agent: Agent = self._pipeline_builder.agent()
+
+		agent.warm_up()
+		messages = [
+			ChatMessage.from_system(AGENT_PROMPT),
+			ChatMessage.from_user(query),
+		]
+		result = agent.run(messages=messages, streaming_callback=callback)
+
 		if answer:
 			answer.complete = True
-			answer.answer = result["answer_builder"]["answers"][0].data
+			answer.answer = result["messages"][-1].text
 		return result

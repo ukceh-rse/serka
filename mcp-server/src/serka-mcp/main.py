@@ -1,6 +1,7 @@
 from fastmcp import FastMCP
 from typing import List, Any, Literal, Optional, Union
 import requests
+from logging import Logger
 import logging
 from dotenv import load_dotenv
 import os
@@ -16,15 +17,15 @@ logging.basicConfig(
 		logging.FileHandler("eidc_mcp.log"),
 	],
 )
-logger = logging.getLogger("eidc_mcp")
+logger: Logger = logging.getLogger("eidc_mcp")
 
-mcp = FastMCP("EIDC")
+mcp: FastMCP = FastMCP("EIDC")
 
-EIDC_URL = "https://catalogue.ceh.ac.uk/eidc/documents"
-DETAILS_URL = "https://catalogue.ceh.ac.uk/documents/{id}?format=json"
-LEGILO_URL = "https://legilo.eds-infra.ceh.ac.uk/{id}/documents"
+EIDC_URL: str = "https://catalogue.ceh.ac.uk/eidc/documents"
+DETAILS_URL: str = "https://catalogue.ceh.ac.uk/documents/{id}?format=json"
+LEGILO_URL: str = "https://legilo.eds-infra.ceh.ac.uk/{id}/documents"
 
-TIMEOUT = 10
+TIMEOUT: int = 10
 
 
 class Dataset(BaseModel):

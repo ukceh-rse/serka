@@ -11,8 +11,6 @@ from serka.fetchers import EIDCFetcher, LegiloFetcher
 from typing import Optional, Callable
 from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
 from haystack_integrations.components.embedders.ollama import OllamaTextEmbedder
-from haystack.components.builders import PromptBuilder
-from haystack.components.builders.answer_builder import AnswerBuilder
 from haystack_integrations.components.generators.amazon_bedrock import (
 	AmazonBedrockGenerator,
 )
@@ -22,7 +20,6 @@ from haystack_integrations.components.embedders.amazon_bedrock import (
 from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
 from haystack.dataclasses import StreamingChunk
 from haystack.components.joiners import DocumentJoiner
-from .prompts import GRAPH_PROMPT
 from serka.graph.readers import Neo4jGraphReader
 from serka.graph.embedders import HypotheticalDocumentEmbedder
 from .models import ModelServerConfig
@@ -30,6 +27,11 @@ from serka.graph.embedders import BedrockNodeEmbedder
 from haystack_integrations.components.embedders.amazon_bedrock import (
 	AmazonBedrockDocumentEmbedder,
 )
+from haystack_integrations.tools.mcp import MCPToolset, StreamableHttpServerInfo
+from haystack_integrations.components.generators.amazon_bedrock import (
+	AmazonBedrockChatGenerator,
+)
+from haystack.components.agents import Agent
 
 
 @dataclass
@@ -39,6 +41,8 @@ class PipelineBuilder:
 	neo4j_port: int
 	neo4j_user: str
 	neo4j_password: str
+	mcp_host: str
+	mcp_port: int
 	legilo_user: str
 	legilo_password: str
 	chunk_length: int
@@ -107,37 +111,13 @@ class PipelineBuilder:
 		else:
 			return self._create_text_embedder()
 
-	def rag_pipeline(
-		self,
-		hyde: bool = False,
-		streaming_callback: Optional[Callable[[StreamingChunk], None]] = None,
-	):
-		p = Pipeline()
-
-		p.add_component(
-			"embedder",
-			self._create_embedder(hyde=hyde),
+	def agent(self) -> Agent:
+		server_info = StreamableHttpServerInfo(
+			url=f"http://{self.mcp_host}:{self.mcp_port}/mcp"
 		)
-		p.add_component(
-			"reader",
-			Neo4jGraphReader(
-				url=f"bolt://{self.neo4j_host}:{self.neo4j_port}",
-				username=self.neo4j_user,
-				password=self.neo4j_password,
-			),
-		)
-		p.add_component("prompt_builder", PromptBuilder(GRAPH_PROMPT))
-		p.add_component(
-			"llm", self._create_llm_generator(streaming_callback=streaming_callback)
-		)
-		p.add_component("answer_builder", AnswerBuilder())
-
-		p.connect("embedder", "reader")
-		p.connect("reader.markdown_nodes", "prompt_builder.markdown_nodes")
-		p.connect("prompt_builder", "llm")
-		p.connect("llm.replies", "answer_builder.replies")
-		p.connect("prompt_builder.prompt", "answer_builder.query")
-		return p
+		toolset = MCPToolset(server_info=server_info)
+		generator = AmazonBedrockChatGenerator(model=self.models.llm)
+		return Agent(chat_generator=generator, tools=toolset, exit_conditions=["text"])
 
 	def build_graph_pipeline(self) -> Pipeline:
 		p = Pipeline()
