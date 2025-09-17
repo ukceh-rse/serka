@@ -180,6 +180,24 @@ def list(
 
 
 @mcp.tool()
+def semantic_search(search_term: str) -> Any:
+	"""Performs a semantic search on the EIDC catalogue using the given search term.
+
+	Args:
+	    search_term (str): The search term to use for the semantic search.
+
+	Returns:
+	    Any: The raw response from the semantic search API or an error message.
+	"""
+	logger.info(f'Performing semantic search with term: "{search_term}"')
+	try:
+		return {"test": "this is a test"}
+	except Exception as e:
+		logger.error(f'Error performing semantic search for "{search_term}": {str(e)}')
+		return Error(f'Error performing semantic search for "{search_term}": {str(e)}')
+
+
+@mcp.tool()
 def search(search_term: str) -> Union[List[Dataset], Error]:
 	"""Searches the EIDC catalogue for datasets most relevant to the search term. Returns the title and url of the 20 most relevant datasets
 
@@ -211,5 +229,7 @@ def search(search_term: str) -> Union[List[Dataset], Error]:
 
 if __name__ == "__main__":
 	logger.info("Starting MCP server...")
+	print(os.getenv("NEO4J_USERNAME"))
+	print(os.getenv("NEO4J_PASSWORD"))
 	mcp.run(transport="http", host="0.0.0.0", port=8000)
 	logger.info("Stopping MCP server")
