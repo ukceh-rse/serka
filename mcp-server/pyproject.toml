@@ -9,5 +9,6 @@ authors = [
 ]
 dependencies = [
     "fastmcp>=2.11.3",
+    "neo4j>=5.28.1",
     "requests>=2.32.3",
 ]

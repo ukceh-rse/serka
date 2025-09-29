@@ -1680,12 +1680,14 @@ version = "0.1.0"
 source = { virtual = "mcp-server" }
 dependencies = [
     { name = "fastmcp" },
+    { name = "neo4j" },
     { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastmcp", specifier = ">=2.11.3" },
+    { name = "neo4j", specifier = ">=5.28.1" },
     { name = "requests", specifier = ">=2.32.3" },
 ]
 

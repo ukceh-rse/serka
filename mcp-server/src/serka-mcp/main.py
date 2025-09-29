@@ -6,6 +6,7 @@ import logging
 from dotenv import load_dotenv
 import os
 from pydantic import BaseModel, Field
+from neo4j import GraphDatabase
 
 load_dotenv()
 
@@ -179,6 +180,33 @@ def list(
 		return Error(msg=f"Error listing datasets: {str(e)}")
 
 
+def list_query(tx, type: str = "Dataset", limit: int = 25):
+	query = f"MATCH (n:{type}) RETURN apoc.map.removeKey(properties(n), 'embedding') AS datasets LIMIT {limit}"
+	result = tx.run(query)
+	return result.data()
+
+
+@mcp.tool()
+def list_datasets() -> Any:
+	"""Lists the datasets held in Serka's EIDC knowledge graph.
+
+	Return:
+		Any: The raw response from the knowledge graph.
+	"""
+	logger.info("Listing datasets in Serka knowledge graph.")
+	try:
+		with GraphDatabase.driver(
+			os.getenv("NEO4J_URI"),
+			auth=(os.getenv("NEO4J_USERNAME"), os.getenv("NEO4J_PASSWORD")),
+		) as driver:
+			with driver.session(database="neo4j") as session:
+				nodes = session.execute_read(list_query)
+				return nodes
+	except Exception as e:
+		logger.error(f"Error listing datasets in Serka knowledge graph: {str(e)}")
+		return Error(f"Error listing datasets in Serka knowledge graph: {str(e)}")
+
+
 @mcp.tool()
 def semantic_search(search_term: str) -> Any:
 	"""Performs a semantic search on the EIDC catalogue using the given search term.
@@ -229,7 +257,5 @@ def search(search_term: str) -> Union[List[Dataset], Error]:
 
 if __name__ == "__main__":
 	logger.info("Starting MCP server...")
-	print(os.getenv("NEO4J_USERNAME"))
-	print(os.getenv("NEO4J_PASSWORD"))
 	mcp.run(transport="http", host="0.0.0.0", port=8000)
 	logger.info("Stopping MCP server")
