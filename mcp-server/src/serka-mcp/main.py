@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 import os
 from pydantic import BaseModel, Field
 from neo4j import GraphDatabase
+from haystack_integrations.components.embedders.amazon_bedrock import (
+	AmazonBedrockTextEmbedder,
+)
 
 load_dotenv()
 
@@ -15,12 +18,12 @@ logging.basicConfig(
 	format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 	handlers=[
 		logging.StreamHandler(),
-		logging.FileHandler("eidc_mcp.log"),
+		logging.FileHandler("serka_mcp.log"),
 	],
 )
-logger: Logger = logging.getLogger("eidc_mcp")
+logger: Logger = logging.getLogger("serka_mcp")
 
-mcp: FastMCP = FastMCP("EIDC")
+mcp: FastMCP = FastMCP("Serka")
 
 EIDC_URL: str = "https://catalogue.ceh.ac.uk/eidc/documents"
 DETAILS_URL: str = "https://catalogue.ceh.ac.uk/documents/{id}?format=json"
@@ -207,6 +210,28 @@ def list_datasets() -> Any:
 		return Error(f"Error listing datasets in Serka knowledge graph: {str(e)}")
 
 
+def search_query(tx, embedding: List[float], limit: int = 25):
+	query = (
+		"CALL db.index.vector.queryNodes('vec_lookup', 20, $embedding) "
+		"YIELD node AS start_node, score "
+		"MATCH (start_node)-[r]-(connected_node) "
+		"WITH start_node, r, connected_node, score, "
+		"CASE WHEN startNode(r) = start_node THEN 'outgoing' ELSE 'incoming' END as direction "
+		"RETURN apoc.map.removeKeys(start_node, ['embedding']) as start_node, "
+		"id(start_node) as start_node_id, "
+		"labels(start_node) as start_labels, "
+		"type(r) as relationship_type, "
+		"direction as relationship_direction, "
+		"apoc.map.removeKeys(connected_node, ['embedding']) as connected_node, "
+		"id(connected_node) as connected_node_id, "
+		"labels(connected_node) as connected_labels, "
+		"score"
+	)
+	result = tx.run(query, embedding=embedding)
+	data = result.data()
+	return data
+
+
 @mcp.tool()
 def semantic_search(search_term: str) -> Any:
 	"""Performs a semantic search on the EIDC catalogue using the given search term.
@@ -218,8 +243,29 @@ def semantic_search(search_term: str) -> Any:
 	    Any: The raw response from the semantic search API or an error message.
 	"""
 	logger.info(f'Performing semantic search with term: "{search_term}"')
+
 	try:
-		return {"test": "this is a test"}
+		embedding_model: str = os.getenv(
+			"AWS_EMBEDDING_MODEL", "<AWS_EMBEDDING_MODEL missing!!!>"
+		)
+		logger.debug(
+			f"Creating embedding for {search_term} using {embedding_model} embedding model."
+		)
+		embedder = AmazonBedrockTextEmbedder(model=embedding_model)
+		embedding = embedder.run(search_term)["embedding"]
+		logger.debug(f"Created embedding for {search_term} successfully.")
+
+		db_uri: str = os.getenv("NEO4J_URI", "<NEO4J_URI missing!!!>")
+		db_user = os.getenv("NEO4J_USERNAME", "<NEO4J_USERNAME missing!!!>")
+		db_password = os.getenv("NEO4J_PASSWORD", "<NEO4J_PASSWORD missing!!!>")
+		logger.debug(f"Querying graph at {db_uri}.")
+		with GraphDatabase.driver(
+			db_uri,
+			auth=(db_user, db_password),
+		) as driver:
+			with driver.session(database="neo4j") as session:
+				datasets = session.execute_read(search_query, embedding=embedding)
+				return datasets
 	except Exception as e:
 		logger.error(f'Error performing semantic search for "{search_term}": {str(e)}')
 		return Error(f'Error performing semantic search for "{search_term}": {str(e)}')
