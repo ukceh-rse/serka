@@ -1679,6 +1679,7 @@ name = "mcp-server"
 version = "0.1.0"
 source = { virtual = "mcp-server" }
 dependencies = [
+    { name = "amazon-bedrock-haystack" },
     { name = "fastmcp" },
     { name = "neo4j" },
     { name = "requests" },
@@ -1686,6 +1687,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "amazon-bedrock-haystack", specifier = ">=3.9.1" },
     { name = "fastmcp", specifier = ">=2.11.3" },
     { name = "neo4j", specifier = ">=5.28.1" },
     { name = "requests", specifier = ">=2.32.3" },

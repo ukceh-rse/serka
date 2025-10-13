@@ -15,6 +15,8 @@ class EntityExtractor:
 		return {
 			"uri": extract_doi(record["resourceIdentifiers"]),
 			"title": record["title"],
+			"citations": record["incomingCitationCount"],
+			"publication_date": record["publicationDate"],
 		}
 
 	def _extract_authors(self, record):
