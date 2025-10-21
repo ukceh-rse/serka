@@ -34,6 +34,8 @@ services:
     networks:
      - internal
     profiles: [app]
+    volumes:
+      - ./.env:/app/.env
 
   neo4j:
     image: neo4j:5.26.5

@@ -69,6 +69,18 @@ class Dataset(BaseModel):
 	publication_date: Optional[str] = Field(
 		None, description="Date when the dataset was published"
 	)
+	north_boundary: Optional[float] = Field(
+		description="The northern most latitude of the datasets spatial boundary."
+	)
+	south_boundary: Optional[float] = Field(
+		description="The southern most latitude of the datasets spatial boundary."
+	)
+	west_boundary: Optional[float] = Field(
+		description="The western most longitude of the datasets spatial boundary."
+	)
+	east_boundary: Optional[float] = Field(
+		description="The eastern most longitude of the datasets spatial boundary."
+	)
 
 
 class BoundingBox(BaseModel):
@@ -251,7 +263,7 @@ def search_query(tx, embedding: List[float], limit: int = 25):
 
 
 @mcp.tool()
-def search(search_term: str) -> List[SearchResult]:
+def search(search_term: str) -> Union[List[SearchResult], Error]:
 	"""Performs a semantic search on the EIDC catalogue using the given search term.
 
 	Args:
