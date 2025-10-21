@@ -9,6 +9,9 @@ from neo4j import GraphDatabase, Driver
 from haystack_integrations.components.embedders.amazon_bedrock import (
 	AmazonBedrockTextEmbedder,
 )
+from geopy.geocoders.nominatim import Nominatim
+from geopy.location import Location
+
 
 load_dotenv()
 
@@ -23,6 +26,7 @@ logging.basicConfig(
 logger: Logger = logging.getLogger("serka_mcp")
 
 mcp: FastMCP = FastMCP("Serka")
+geolocator: Nominatim = Nominatim(user_agent="serka_geocoder")
 
 
 def create_neo4j_driver(
@@ -64,6 +68,34 @@ class Dataset(BaseModel):
 	)
 	publication_date: Optional[str] = Field(
 		None, description="Date when the dataset was published"
+	)
+
+
+class BoundingBox(BaseModel):
+	"""Represents a bounding box of an area."""
+
+	south: float = Field(..., description="Southern boundary (minimum latitude)")
+	north: float = Field(..., description="Northern boundary (maximum latitude)")
+	west: float = Field(..., description="Western boundary (minimum longitude)")
+	east: float = Field(..., description="Eastern boundary (maximum longitude)")
+
+	@classmethod
+	def from_nominatim(cls, bbox_array: List[str]) -> "BoundingBox":
+		"""Create BoundingBox from Nominatim's bbox array [south, north, west, east]"""
+		return cls(
+			south=float(bbox_array[0]),
+			north=float(bbox_array[1]),
+			west=float(bbox_array[2]),
+			east=float(bbox_array[3]),
+		)
+
+
+class GeoCodedLocation(BaseModel):
+	name: str = Field(
+		..., description="The full display name of the geocoded location."
+	)
+	boundary: BoundingBox = Field(
+		..., description="A bounding box representing the boundry of the location."
 	)
 
 
@@ -134,7 +166,36 @@ def get_dataset(uri: str) -> Union[Dataset, Error]:
 			return Dataset(**result["d"])
 	except Exception as e:
 		logger.error(f"Error retrieving dataset {uri}: {str(e)}")
-		return Error(f"Error retrieving dataset {uri}: {str(e)}")
+		return Error(msg=f"Error retrieving dataset {uri}: {str(e)}")
+
+
+@mcp.tool()
+def geocode_location(location: str) -> Union[GeoCodedLocation, Error]:
+	"""Geocode a location name to get its geographic boundaries within the UK.
+
+	This function uses the Nominatim geocoding service to convert a place name
+	into geographic coordinates and bounding box information. The search is
+	biased towards UK locations using the country code "GB".
+
+	Args:
+	    location (str): The location name to geocode. Can be a city, town,
+	        village, region, or other geographic feature. Examples: "London",
+	        "Lake District", "Cambridge", "M25 motorway".
+
+	Returns:
+	    Union[GeoCodedLocation, Error]:
+	        - GeoCodedLocation: Contains the full display name and bounding box
+	          coordinates (south, north, west, east boundaries in decimal degrees)
+	        - Error: Returned if the location cannot be found, has no bounding box
+	          data, or if there's a network/service error
+	"""
+	try:
+		result: Location = geolocator.geocode(location, country_codes="GB")
+		boundary: BoundingBox = BoundingBox.from_nominatim(result.raw["boundingbox"])
+		return GeoCodedLocation(name=result.raw["display_name"], boundary=boundary)
+	except Exception as e:
+		logger.error(f"Error geocoding location {location}: {str(e)}")
+		return Error(msg=f"Error geocoding location {location}: {str(e)}")
 
 
 @mcp.tool()
@@ -164,7 +225,7 @@ def list_datasets(
 			return datasets
 	except Exception as e:
 		logger.error(f"Error listing datasets in Serka knowledge graph: {str(e)}")
-		return Error(f"Error listing datasets in Serka knowledge graph: {str(e)}")
+		return Error(msg=f"Error listing datasets in Serka knowledge graph: {str(e)}")
 
 
 def search_query(tx, embedding: List[float], limit: int = 25):
@@ -244,7 +305,9 @@ def search(search_term: str) -> List[SearchResult]:
 			return search_results
 	except Exception as e:
 		logger.error(f'Error performing semantic search for "{search_term}": {str(e)}')
-		return Error(f'Error performing semantic search for "{search_term}": {str(e)}')
+		return Error(
+			msg=f'Error performing semantic search for "{search_term}": {str(e)}'
+		)
 
 
 if __name__ == "__main__":
