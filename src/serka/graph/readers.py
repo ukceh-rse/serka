@@ -95,5 +95,5 @@ class Neo4jGraphReader:
 				nodes = session.execute_read(
 					Neo4jGraphReader.query_nodes, embedding=embedding
 				)
-		md_nodes = self.nodes_to_markdown(nodes)
-		return {"nodes": nodes, "markdown_nodes": md_nodes}
+		# md_nodes = self.nodes_to_markdown(nodes)
+		return {"nodes": nodes, "markdown_nodes": ""}
