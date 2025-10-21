@@ -30,6 +30,7 @@ ModelServerConfig = Union[OllamaModelServerConfig, BedrockModelServerConfig]
 class Config(BaseModel):
 	mongo: ServiceConfig
 	neo4j: ServiceConfig
+	mcp: ServiceConfig
 	models: ModelServerConfig
 	rag_enabled: bool
 	unified_metadata: List[str]

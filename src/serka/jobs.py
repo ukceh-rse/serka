@@ -72,11 +72,5 @@ def legilo_crawl_task(
 	)
 
 
-def rag_task(
-	answer: RAGResponse, dao: DAO, collection: str, collection_desc: str, q: str
-):
-	dao.rag_query(collection, collection_desc, q, answer)
-
-
-def graph_rag_task(answer: RAGResponse, dao: DAO, q: str, hyde: bool):
-	dao.rag_query(q, hyde, answer)
+def rag_task(answer: RAGResponse, dao: DAO, q: str):
+	dao.rag_query(q, answer)

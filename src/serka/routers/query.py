@@ -9,7 +9,7 @@ from serka.routers.dependencies import get_config, get_feedback_logger
 from serka.models import Config, RAGResponse
 from fastapi import BackgroundTasks
 from fastapi import HTTPException
-from serka.jobs import graph_rag_task
+from serka.jobs import rag_task
 
 
 router = APIRouter(prefix="/query", tags=["Query"])
@@ -56,7 +56,7 @@ async def submit_graph_rag(
 	id = str(uuid.uuid4())
 	answer = RAGResponse(id=id)
 	answers[id] = answer
-	background_tasks.add_task(graph_rag_task, answer, dao, q, hyde)
+	background_tasks.add_task(rag_task, answer, dao, q)
 	return answer
 
 

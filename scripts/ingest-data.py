@@ -25,6 +25,8 @@ def create_pipeline_builder() -> PipelineBuilder:
 		neo4j_password=os.getenv("NEO4J_PASSWORD"),
 		legilo_user=os.getenv("LEGILO_USERNAME"),
 		legilo_password=os.getenv("LEGILO_PASSWORD"),
+		mcp_host=config.mcp.host,
+		mcp_port=config.mcp.port,
 		models=config.models,
 		chunk_length=150,
 		chunk_overlap=50,

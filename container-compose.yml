@@ -23,6 +23,18 @@ services:
       - internal
     profiles: [app]
 
+  mcp:
+    build:
+     context: ./mcp-server
+     dockerfile: Containerfile
+    image: serka-mcp-image
+    container_name: mcp-container
+    ports:
+     - "8000:8000"
+    networks:
+     - internal
+    profiles: [app]
+
   neo4j:
     image: neo4j:5.26.5
     container_name: neo4j-container
@@ -33,26 +45,10 @@ services:
       - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["apoc"]
     volumes:
-        - ./.neo4j/logs:/logs
-        - ./.neo4j/config:/config
-        - ./.neo4j/data:/data
-        - ./.neo4j/plugins:/plugins
-    networks:
-      - internal
-    profiles: [app, dev, aws]
-
-  ollama:
-    image: ollama/ollama:0.6.5
-    container_name: ollama-container
-    volumes:
-      - ./.ollama:/root/.ollama
-      - ./config.yml:/config.yml
-      - ./ollama-entrypoint.sh:/ollama-entrypoint.sh
-    entrypoint: ["/usr/bin/bash", "/ollama-entrypoint.sh"]
-    devices:
-      - nvidia.com/gpu=all
-    ports:
-      - "11434:11434"
+      - ./.neo4j/logs:/logs
+      - ./.neo4j/config:/config
+      - ./.neo4j/data:/data
+      - ./.neo4j/plugins:/plugins
     networks:
       - internal
     profiles: [app, dev]
@@ -64,7 +60,7 @@ services:
       - "27017:27017"
     networks:
       - internal
-    profiles: [app, dev, aws]
+    profiles: [app, dev]
 
 networks:
   internal:
