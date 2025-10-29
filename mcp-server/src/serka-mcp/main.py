@@ -11,7 +11,7 @@ from haystack_integrations.components.embedders.amazon_bedrock import (
 )
 from geopy.geocoders.nominatim import Nominatim
 from geopy.location import Location
-
+from typing import Annotated
 
 load_dotenv()
 
@@ -99,6 +99,28 @@ class BoundingBox(BaseModel):
 			north=float(bbox_array[1]),
 			west=float(bbox_array[2]),
 			east=float(bbox_array[3]),
+		)
+
+	def expand(self, percentage: float = 10.0) -> "BoundingBox":
+		"""Expand the bounding box by a given percentage.
+
+		Args:
+		    percentage: The percentage to expand by (default 10.0 for 10%)
+
+		Returns:
+		    A new BoundingBox that is expanded by the specified percentage
+		"""
+		width = self.east - self.west
+		height = self.north - self.south
+
+		width_expansion = (width * percentage) / 200.0
+		height_expansion = (height * percentage) / 200.0
+
+		return BoundingBox(
+			south=self.south - height_expansion,
+			north=self.north + height_expansion,
+			west=self.west - width_expansion,
+			east=self.east + width_expansion,
 		)
 
 
@@ -240,11 +262,29 @@ def list_datasets(
 		return Error(msg=f"Error listing datasets in Serka knowledge graph: {str(e)}")
 
 
-def search_query(tx, embedding: List[float], limit: int = 25):
-	query = (
-		"CALL db.index.vector.queryNodes('vec_lookup', 20, $embedding) "
+def search_query(
+	tx,
+	embedding: List[float],
+	limit: int = 10,
+	bounding_box: Optional[BoundingBox] = None,
+):
+	base_query = (
+		"CALL db.index.vector.queryNodes('vec_lookup', $limit, $embedding) "
 		"YIELD node AS start_node, score "
 		"MATCH (start_node)-[r]-(connected_node) "
+	)
+
+	if bounding_box:
+		spatial_filter = (
+			"WHERE 'Dataset' IN labels(connected_node) AND "
+			"connected_node.south_boundary >= $south AND "
+			"connected_node.north_boundary <= $north AND "
+			"connected_node.west_boundary >= $west AND "
+			"connected_node.east_boundary <= $east "
+		)
+		base_query += spatial_filter
+
+	query = base_query + (
 		"WITH start_node, r, connected_node, score, "
 		"CASE WHEN startNode(r) = start_node THEN 'outgoing' ELSE 'incoming' END as direction "
 		"RETURN apoc.map.removeKeys(start_node, ['embedding']) as start_node, "
@@ -257,22 +297,45 @@ def search_query(tx, embedding: List[float], limit: int = 25):
 		"labels(connected_node) as connected_labels, "
 		"score"
 	)
-	result = tx.run(query, embedding=embedding)
+	params = {"embedding": embedding, "limit": limit}
+	if bounding_box:
+		bounding_box = bounding_box.expand(20)
+		params.update(
+			{
+				"south": bounding_box.south,
+				"north": bounding_box.north,
+				"west": bounding_box.west,
+				"east": bounding_box.east,
+			}
+		)
+	result = tx.run(query, **params)
 	data = result.data()
 	return data
 
 
 @mcp.tool()
-def search(search_term: str) -> Union[List[SearchResult], Error]:
+def search(
+	search_term: Annotated[str, "A term to use to search the EIDC catalogue."],
+	bounding_box: Annotated[
+		Optional[BoundingBox],
+		"A bounding box representing the geographic boundaries to filter the search on. This bounding box will be expanded by ~20% to ensure capturing of data.",
+	] = None,
+) -> Union[List[SearchResult], Error]:
 	"""Performs a semantic search on the EIDC catalogue using the given search term.
 
 	Args:
 	    search_term (str): The search term to use for the semantic search.
+		bounding_box (Optional[BoundingBox], optional): Geographic boundaries to filter
+			search results. When provided, only datasets whose spatial boundaries fall
+			within this bounding box will be included in the results. The bounding box
+			should contain south, north, west, and east coordinates in decimal degrees.
+			Defaults to None (no geographic filtering).
 
 	Returns:
-	    Any: The raw response from the semantic search API or an error message.
+	    Union[List[SearchResult], Error]: A list of search results ranked by semantic
+	        similarity, or an Error if the search fails.
 	"""
-	logger.info(f'Performing semantic search with term: "{search_term}"')
+	logger.info(f'Search: "{search_term}" [bounding_box={bounding_box}]')
 
 	try:
 		embedding_model: str = os.getenv(
@@ -286,7 +349,9 @@ def search(search_term: str) -> Union[List[SearchResult], Error]:
 		logger.debug(f"Created embedding for {search_term} successfully.")
 
 		with neo4j_driver.session(database="neo4j") as session:
-			nodes = session.execute_read(search_query, embedding=embedding)
+			nodes = session.execute_read(
+				search_query, embedding=embedding, bounding_box=bounding_box
+			)
 			search_results: List[SearchResult] = []
 			for n in nodes:
 				if "TextChunk" in n["start_labels"]:
