@@ -63,7 +63,7 @@ document.addEventListener("alpine:init", () => {
                         tokens_to_show = this.answer.tokens.slice(0, this.answer.output_index).join("");
                         this.answer.content = marked.parse(tokens_to_show);
                         this.answer.output_index++;
-                        await sleep(30);
+                        await sleep(5);
                     }
                 }
                 await sleep(300); //RAG output exausted, sleep for a bit before polling again

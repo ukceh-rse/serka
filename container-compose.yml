@@ -8,20 +8,14 @@ services:
     ports:
       - "8080:8000"
     depends_on:
-      - ollama
       - neo4j
       - mongodb
+      - mcp
     volumes:
-      - ./src:/app/src
-      - ./static:/app/static
       - ./config-podman.yml:/app/config.yml
       - ./.env:/app/.env
-    environment:
-      - PYTHONPATH=/app/src
-      - DEBUG=1
     networks:
       - internal
-    profiles: [app]
 
   mcp:
     build:
@@ -33,34 +27,25 @@ services:
      - "8000:8000"
     networks:
      - internal
-    profiles: [app]
+    volumes:
+      - ./.env:/app/.env
 
   neo4j:
     image: neo4j:5.26.5
     container_name: neo4j-container
     ports:
-      - "7474:7474"
       - "7687:7687"
     environment:
       - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["apoc"]
-    volumes:
-      - ./.neo4j/logs:/logs
-      - ./.neo4j/config:/config
-      - ./.neo4j/data:/data
-      - ./.neo4j/plugins:/plugins
     networks:
       - internal
-    profiles: [app, dev]
 
   mongo:
     image: mongo:8.0.6
     container_name: mongodb-container
-    ports:
-      - "27017:27017"
     networks:
       - internal
-    profiles: [app, dev]
 
 networks:
   internal:

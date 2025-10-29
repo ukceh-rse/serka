@@ -87,5 +87,7 @@ class GroupedDocuments(BaseModel):
 class RAGResponse(BaseModel):
 	id: str
 	answer: str = ""
+	thinking: bool = True
 	complete: bool = False
+	thinking_tokens: List[str] = []
 	tokens: List[str] = []

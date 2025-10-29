@@ -49,7 +49,7 @@ class DAO:
 	def build_eidc_graph(self, rows=10):
 		p = self._pipeline_builder.build_graph_pipeline()
 		result = p.run(data={"eidc_fetcher": {"rows": rows}})
-		return Result(success=True, msg=f"Created graph: {result["graph_writer"]}")
+		return Result(success=True, msg=f"Created graph: {result['graph_writer']}")
 
 	def query(self, query: str) -> List[Document]:
 		p = self._pipeline_builder.query_pipeline()
@@ -95,7 +95,14 @@ class DAO:
 		answer: Optional[RAGResponse] = None,
 	) -> str:
 		def callback(x):
-			return answer.tokens.append(x.content) if answer else None
+			if answer == None:
+				return
+			if answer.thinking:
+				answer.thinking_tokens.append(x.content)
+				if "".join(answer.thinking_tokens).strip().endswith("</thinking>"):
+					answer.thinking = False
+			else:
+				answer.tokens.append(x.content)
 
 		agent: Agent = self._pipeline_builder.agent()
 

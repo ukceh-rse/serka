@@ -1,5 +1,9 @@
 from haystack import component, Document
 from typing import List, Dict, Tuple, Any
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def extract_doi(resource_identifiers, default="") -> str:
@@ -11,12 +15,27 @@ def extract_doi(resource_identifiers, default="") -> str:
 
 @component
 class EntityExtractor:
+	def _extract_boundary(self, record):
+		try:
+			bb = record["boundingBoxes"][0]
+			boundary = {
+				"south_boundary": bb["southBoundLatitude"],
+				"north_boundary": bb["northBoundLatitude"],
+				"west_boundary": bb["westBoundLongitude"],
+				"east_boundary": bb["eastBoundLongitude"],
+			}
+			return boundary
+		except Exception as e:
+			logger.error(f"Error extracting boundary: {e}")
+			return {}
+
 	def _extract_dataset(self, record) -> Dict[str, str]:
 		return {
 			"uri": extract_doi(record["resourceIdentifiers"]),
 			"title": record["title"],
 			"citations": record["incomingCitationCount"],
 			"publication_date": record["publicationDate"],
+			**self._extract_boundary(record),
 		}
 
 	def _extract_authors(self, record):

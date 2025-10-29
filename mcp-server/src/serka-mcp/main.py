@@ -9,6 +9,9 @@ from neo4j import GraphDatabase, Driver
 from haystack_integrations.components.embedders.amazon_bedrock import (
 	AmazonBedrockTextEmbedder,
 )
+from geopy.geocoders.nominatim import Nominatim
+from geopy.location import Location
+from typing import Annotated
 
 load_dotenv()
 
@@ -23,6 +26,7 @@ logging.basicConfig(
 logger: Logger = logging.getLogger("serka_mcp")
 
 mcp: FastMCP = FastMCP("Serka")
+geolocator: Nominatim = Nominatim(user_agent="serka_geocoder")
 
 
 def create_neo4j_driver(
@@ -64,6 +68,68 @@ class Dataset(BaseModel):
 	)
 	publication_date: Optional[str] = Field(
 		None, description="Date when the dataset was published"
+	)
+	north_boundary: Optional[float] = Field(
+		description="The northern most latitude of the datasets spatial boundary."
+	)
+	south_boundary: Optional[float] = Field(
+		description="The southern most latitude of the datasets spatial boundary."
+	)
+	west_boundary: Optional[float] = Field(
+		description="The western most longitude of the datasets spatial boundary."
+	)
+	east_boundary: Optional[float] = Field(
+		description="The eastern most longitude of the datasets spatial boundary."
+	)
+
+
+class BoundingBox(BaseModel):
+	"""Represents a bounding box of an area."""
+
+	south: float = Field(..., description="Southern boundary (minimum latitude)")
+	north: float = Field(..., description="Northern boundary (maximum latitude)")
+	west: float = Field(..., description="Western boundary (minimum longitude)")
+	east: float = Field(..., description="Eastern boundary (maximum longitude)")
+
+	@classmethod
+	def from_nominatim(cls, bbox_array: List[str]) -> "BoundingBox":
+		"""Create BoundingBox from Nominatim's bbox array [south, north, west, east]"""
+		return cls(
+			south=float(bbox_array[0]),
+			north=float(bbox_array[1]),
+			west=float(bbox_array[2]),
+			east=float(bbox_array[3]),
+		)
+
+	def expand(self, percentage: float = 10.0) -> "BoundingBox":
+		"""Expand the bounding box by a given percentage.
+
+		Args:
+		    percentage: The percentage to expand by (default 10.0 for 10%)
+
+		Returns:
+		    A new BoundingBox that is expanded by the specified percentage
+		"""
+		width = self.east - self.west
+		height = self.north - self.south
+
+		width_expansion = (width * percentage) / 200.0
+		height_expansion = (height * percentage) / 200.0
+
+		return BoundingBox(
+			south=self.south - height_expansion,
+			north=self.north + height_expansion,
+			west=self.west - width_expansion,
+			east=self.east + width_expansion,
+		)
+
+
+class GeoCodedLocation(BaseModel):
+	name: str = Field(
+		..., description="The full display name of the geocoded location."
+	)
+	boundary: BoundingBox = Field(
+		..., description="A bounding box representing the boundry of the location."
 	)
 
 
@@ -134,7 +200,36 @@ def get_dataset(uri: str) -> Union[Dataset, Error]:
 			return Dataset(**result["d"])
 	except Exception as e:
 		logger.error(f"Error retrieving dataset {uri}: {str(e)}")
-		return Error(f"Error retrieving dataset {uri}: {str(e)}")
+		return Error(msg=f"Error retrieving dataset {uri}: {str(e)}")
+
+
+@mcp.tool()
+def geocode_location(location: str) -> Union[GeoCodedLocation, Error]:
+	"""Geocode a location name to get its geographic boundaries within the UK.
+
+	This function uses the Nominatim geocoding service to convert a place name
+	into geographic coordinates and bounding box information. The search is
+	biased towards UK locations using the country code "GB".
+
+	Args:
+	    location (str): The location name to geocode. Can be a city, town,
+	        village, region, or other geographic feature. Examples: "London",
+	        "Lake District", "Cambridge", "M25 motorway".
+
+	Returns:
+	    Union[GeoCodedLocation, Error]:
+	        - GeoCodedLocation: Contains the full display name and bounding box
+	          coordinates (south, north, west, east boundaries in decimal degrees)
+	        - Error: Returned if the location cannot be found, has no bounding box
+	          data, or if there's a network/service error
+	"""
+	try:
+		result: Location = geolocator.geocode(location, country_codes="GB")
+		boundary: BoundingBox = BoundingBox.from_nominatim(result.raw["boundingbox"])
+		return GeoCodedLocation(name=result.raw["display_name"], boundary=boundary)
+	except Exception as e:
+		logger.error(f"Error geocoding location {location}: {str(e)}")
+		return Error(msg=f"Error geocoding location {location}: {str(e)}")
 
 
 @mcp.tool()
@@ -164,14 +259,32 @@ def list_datasets(
 			return datasets
 	except Exception as e:
 		logger.error(f"Error listing datasets in Serka knowledge graph: {str(e)}")
-		return Error(f"Error listing datasets in Serka knowledge graph: {str(e)}")
+		return Error(msg=f"Error listing datasets in Serka knowledge graph: {str(e)}")
 
 
-def search_query(tx, embedding: List[float], limit: int = 25):
-	query = (
-		"CALL db.index.vector.queryNodes('vec_lookup', 20, $embedding) "
+def search_query(
+	tx,
+	embedding: List[float],
+	limit: int = 10,
+	bounding_box: Optional[BoundingBox] = None,
+):
+	base_query = (
+		"CALL db.index.vector.queryNodes('vec_lookup', $limit, $embedding) "
 		"YIELD node AS start_node, score "
 		"MATCH (start_node)-[r]-(connected_node) "
+	)
+
+	if bounding_box:
+		spatial_filter = (
+			"WHERE 'Dataset' IN labels(connected_node) AND "
+			"connected_node.south_boundary >= $south AND "
+			"connected_node.north_boundary <= $north AND "
+			"connected_node.west_boundary >= $west AND "
+			"connected_node.east_boundary <= $east "
+		)
+		base_query += spatial_filter
+
+	query = base_query + (
 		"WITH start_node, r, connected_node, score, "
 		"CASE WHEN startNode(r) = start_node THEN 'outgoing' ELSE 'incoming' END as direction "
 		"RETURN apoc.map.removeKeys(start_node, ['embedding']) as start_node, "
@@ -184,22 +297,45 @@ def search_query(tx, embedding: List[float], limit: int = 25):
 		"labels(connected_node) as connected_labels, "
 		"score"
 	)
-	result = tx.run(query, embedding=embedding)
+	params = {"embedding": embedding, "limit": limit}
+	if bounding_box:
+		bounding_box = bounding_box.expand(20)
+		params.update(
+			{
+				"south": bounding_box.south,
+				"north": bounding_box.north,
+				"west": bounding_box.west,
+				"east": bounding_box.east,
+			}
+		)
+	result = tx.run(query, **params)
 	data = result.data()
 	return data
 
 
 @mcp.tool()
-def search(search_term: str) -> List[SearchResult]:
+def search(
+	search_term: Annotated[str, "A term to use to search the EIDC catalogue."],
+	bounding_box: Annotated[
+		Optional[BoundingBox],
+		"A bounding box representing the geographic boundaries to filter the search on. This bounding box will be expanded by ~20% to ensure capturing of data.",
+	] = None,
+) -> Union[List[SearchResult], Error]:
 	"""Performs a semantic search on the EIDC catalogue using the given search term.
 
 	Args:
 	    search_term (str): The search term to use for the semantic search.
+		bounding_box (Optional[BoundingBox], optional): Geographic boundaries to filter
+			search results. When provided, only datasets whose spatial boundaries fall
+			within this bounding box will be included in the results. The bounding box
+			should contain south, north, west, and east coordinates in decimal degrees.
+			Defaults to None (no geographic filtering).
 
 	Returns:
-	    Any: The raw response from the semantic search API or an error message.
+	    Union[List[SearchResult], Error]: A list of search results ranked by semantic
+	        similarity, or an Error if the search fails.
 	"""
-	logger.info(f'Performing semantic search with term: "{search_term}"')
+	logger.info(f'Search: "{search_term}" [bounding_box={bounding_box}]')
 
 	try:
 		embedding_model: str = os.getenv(
@@ -213,7 +349,9 @@ def search(search_term: str) -> List[SearchResult]:
 		logger.debug(f"Created embedding for {search_term} successfully.")
 
 		with neo4j_driver.session(database="neo4j") as session:
-			nodes = session.execute_read(search_query, embedding=embedding)
+			nodes = session.execute_read(
+				search_query, embedding=embedding, bounding_box=bounding_box
+			)
 			search_results: List[SearchResult] = []
 			for n in nodes:
 				if "TextChunk" in n["start_labels"]:
@@ -244,7 +382,9 @@ def search(search_term: str) -> List[SearchResult]:
 			return search_results
 	except Exception as e:
 		logger.error(f'Error performing semantic search for "{search_term}": {str(e)}')
-		return Error(f'Error performing semantic search for "{search_term}": {str(e)}')
+		return Error(
+			msg=f'Error performing semantic search for "{search_term}": {str(e)}'
+		)
 
 
 if __name__ == "__main__":

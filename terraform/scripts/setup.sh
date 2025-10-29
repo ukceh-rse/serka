@@ -60,14 +60,16 @@ touch .env
 cat > .env << ENV_CONTENT
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=$RANDOM_PASSWORD
+NEO4J_URI=bolt://neo4j-container:7687
 AWS_DEFAULT_REGION=eu-west-2
+AWS_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0
 ENV_CONTENT
 
-git checkout bedrock-integration >> $LOG_FILE 2>&1
+git checkout geocoding >> $LOG_FILE 2>&1
 EOF_UBUNTU
 
 cd /home/ubuntu/serka
-podman-compose -f podman-compose[aws].yml up -d >> $LOG_FILE 2>&1
+podman-compose -f container-compose.yml up -d >> $LOG_FILE 2>&1
 
 # Setup uv locally to run the data import script.
 # Note this is just for testing, data should be imported and processed sperately and then made accessible to the instance.
