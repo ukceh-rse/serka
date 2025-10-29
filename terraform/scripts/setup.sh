@@ -62,6 +62,7 @@ NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=$RANDOM_PASSWORD
 NEO4J_URI=bolt://neo4j-container:7687
 AWS_DEFAULT_REGION=eu-west-2
+AWS_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0
 ENV_CONTENT
 
 git checkout geocoding >> $LOG_FILE 2>&1
