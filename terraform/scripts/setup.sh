@@ -65,7 +65,6 @@ AWS_DEFAULT_REGION=eu-west-2
 AWS_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0
 ENV_CONTENT
 
-git checkout geocoding >> $LOG_FILE 2>&1
 EOF_UBUNTU
 
 cd /home/ubuntu/serka
