@@ -172,7 +172,7 @@ cython_debug/
 
 .chromadb/
 .ollama/
-.mongodb/
+.mongo/
 .vscode/
 .neo4j/
 

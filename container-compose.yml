@@ -8,32 +8,27 @@ services:
     ports:
       - "8080:8000"
     depends_on:
-      - ollama
+      - mcp
       - neo4j
-      - mongodb
+      - mongo
     volumes:
-      - ./src:/app/src
-      - ./static:/app/static
-      - ./config-podman.yml:/app/config.yml
       - ./.env:/app/.env
-    environment:
-      - PYTHONPATH=/app/src
-      - DEBUG=1
+      - ./config-podman.yml:/app/config.yml
     networks:
       - internal
-    profiles: [app]
 
   mcp:
     build:
-     context: ./mcp-server
-     dockerfile: Containerfile
+      context: ./mcp-server
+      dockerfile: Containerfile
     image: serka-mcp-image
     container_name: mcp-container
     ports:
-     - "8000:8000"
+      - "8000:8000"
     networks:
-     - internal
-    profiles: [app]
+      - internal
+    volumes:
+      - ./.env:/app/.env
 
   neo4j:
     image: neo4j:5.26.5
@@ -51,16 +46,16 @@ services:
       - ./.neo4j/plugins:/plugins
     networks:
       - internal
-    profiles: [app, dev]
 
   mongo:
     image: mongo:8.0.6
     container_name: mongodb-container
     ports:
       - "27017:27017"
+    volumes:
+      - ./.mongo/data:/data/db
     networks:
       - internal
-    profiles: [app, dev]
 
 networks:
   internal:
