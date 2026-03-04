@@ -65,22 +65,6 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   role = aws_iam_role.ec2_role.name
 }
 
-resource "aws_instance" "app_server" {
-  ami           = data.aws_ami.ubuntu.id
-  instance_type = var.instance_type
-  subnet_id = var.subnet_id
-  vpc_security_group_ids = [aws_security_group.ssm_access.id]
-  iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
-
-  associate_public_ip_address = true
-
-  user_data = templatefile("${path.module}/scripts/setup.sh", {})
-
-  tags = {
-    Name = var.instance_name
-  }
-}
-
 resource "aws_security_group" "ssm_access" {
   name        = "${var.instance_name}-ssm-access"
   description = "Allow HTTP/HTTPS inbound; SSM managed, no SSH"
@@ -111,5 +95,21 @@ resource "aws_security_group" "ssm_access" {
 
   tags = {
     Name = "${var.instance_name}-ssm-access"
+  }
+}
+
+resource "aws_instance" "app_server" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = var.instance_type
+  subnet_id = var.subnet_id
+  vpc_security_group_ids = [aws_security_group.ssm_access.id]
+  iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
+
+  associate_public_ip_address = true
+
+  user_data = templatefile("${path.module}/scripts/setup.sh", {})
+
+  tags = {
+    Name = var.instance_name
   }
 }
