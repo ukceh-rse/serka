@@ -65,7 +65,7 @@ AWS_DEFAULT_REGION=eu-west-2
 AWS_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0
 ENV_CONTENT
 
-git checkout geocoding >> $LOG_FILE 2>&1
+git checkout rc-alpha >> $LOG_FILE 2>&1
 EOF_UBUNTU
 
 cd /home/ubuntu/serka
@@ -77,6 +77,6 @@ sudo snap install astral-uv --classic >> $LOG_FILE 2>&1
 uv sync >> $LOG_FILE 2>&1
 
 # Note this will only import a small number of datasets for testing
-uv run scripts/ingest-data.py 20 >> $LOG_FILE 2>&1
+uv run scripts/ingest-data.py 30 >> $LOG_FILE 2>&1
 
 log "Serka setup completed"

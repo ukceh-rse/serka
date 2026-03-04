@@ -6,7 +6,7 @@ To deploy you will need to install:
 - [Terraform](https://developer.hashicorp.com/terraform/install)
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 
-You will also need an AWS account set up with appropriate permissions for [Bedrock](https://aws.amazon.com/bedrock/) and [EC2](https://aws.amazon.com/ec2/) (check infromation on [IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction.html) roles to set up).
+You will also need an AWS account. For the UKCEH deployment we configure using SSM for access controls.
 
 ## Configure
 Once you have got everything above installed and setup you need to initialize terraform which will install the appropriate providers based on `main.tf`. Run the following command from the `terraform/` directory:
@@ -15,11 +15,12 @@ terraform init
 ```
 Next you will need to create a new file to hold values for a few variables. Create a file called `terraform/terraform.tfvars` and populate it with the following:
 ```
-ssh_key_name = <SSH_KEY_NAME>
-connect_ip = <YOUR_IP_ADDRESS>
+connect_ip = <IP_ADDRESS(ES)>
 instance_type = <INSTANCE_TYPE>
+vpc_id = <VPC_ID>
+subnet_id = <SUBNET_ID>
 ```
-These variables are defined in the `terraform/variables.tf`. `<SSH_KEY_NAME>` is the name of an SSH key that you have already created in your AWS account so that you can SSH into the EC2 instance once it is created. `<YOUR_IP_ADDRESS>` is to secure the EC2 instance so that only you can connect. `<INSTANCE_TYPE>` is the type of EC2 instance to deploy (recommended option are `t3.micro` or `t3.small`).
+These variables are defined in the `terraform/variables.tf`. `<IP_ADDRESS(ES)>` is to secure the EC2 instance so that only certain addresses can connect based on CIDR notation e.g. for all fully open use `"0.0.0.0/0"`. `<INSTANCE_TYPE>` is the type of EC2 instance to deploy (recommended option are `"t3.micro"` or `"t3.small"`). `<VPC_ID>` and `<SUBNET_ID>` expect the IDs of pre-existing subnets (check with AWS account admin if these are not setup).
 ## Deploy
 Once you have configured everything you can deploy with the command:
 ```
@@ -31,9 +32,9 @@ The initial deployment of the resources defined in the terraform setup should be
 instance_url = "http://<EC2_IP>"
 ```
 Deployment of the Serka application on the EC2 instance may take several minutes (makes use of `terraforms/scripts/setup.sh`) so connecting to the application may not be possible immediately.
-> **Note**: The basic deployment will only import a small sample set of data from the EIDC for testing (10 datasets).
+> **Note**: The basic deployment will only import a small sample set of data from the EIDC for testing (30 datasets).
 
 To tear down the deployment simply use:
 ```
-tf destroy
+terraform destroy
 ```
