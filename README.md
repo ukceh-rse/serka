@@ -1,6 +1,9 @@
 # Serka
 Serka (serĉi ekologio) is a protoype search tool for the UKCEH NCUK project. It uses modern AI techniques (LLMs, RAG, Vector Stores) to enhance the EIDC catalogue's search functionality.
 
+## AWS Deployment
+Serka is now deployable on AWS infrastructure. For instructions see [`terraform/README.md`](terraform/README.md).
+
 ## Podman Deployment
 Serka can be deployed using [podman](https://podman.io/). You must ensure you have `podman`, `podman-compose` and [`nvidia-container-toolkit`](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html) installed.
 
