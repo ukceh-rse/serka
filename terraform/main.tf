@@ -34,6 +34,11 @@ resource "aws_iam_role" "ec2_role" {
   }
 }
 
+resource "aws_iam_role_policy_attachment" "ssm_managed" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_iam_role_policy" "bedrock_access" {
   name = "${var.instance_name}-bedrock-access"
   role = aws_iam_role.ec2_role.id
@@ -63,9 +68,11 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 resource "aws_instance" "app_server" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = var.instance_type
-  key_name = var.ssh_key_name
-  vpc_security_group_ids = [aws_security_group.ssh_access.id]
+  subnet_id = var.subnet_id
+  vpc_security_group_ids = [aws_security_group.ssm_access.id]
   iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
+
+  associate_public_ip_address = true
 
   user_data = templatefile("${path.module}/scripts/setup.sh", {})
 
@@ -74,24 +81,17 @@ resource "aws_instance" "app_server" {
   }
 }
 
-resource "aws_security_group" "ssh_access" {
-  name        = "${var.instance_name}-ssh-access"
-  description = "Allow SSH inbound traffic"
-
-  ingress {
-    description = "SSH from specified CIDR blocks"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["${var.connect_ip}"]
-  }
+resource "aws_security_group" "ssm_access" {
+  name        = "${var.instance_name}-ssm-access"
+  description = "Allow HTTP/HTTPS inbound; SSM managed, no SSH"
+  vpc_id      = var.vpc_id   # Existing VPC
 
   ingress {
     description = "HTTP from specified CIDR blocks"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["${var.connect_ip}"]
+    cidr_blocks = [var.connect_ip]
   }
 
   ingress {
@@ -99,7 +99,7 @@ resource "aws_security_group" "ssh_access" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["${var.connect_ip}"]
+    cidr_blocks = [var.connect_ip]
   }
 
   egress {
@@ -110,6 +110,6 @@ resource "aws_security_group" "ssh_access" {
   }
 
   tags = {
-    Name = "${var.instance_name}-ssh-access"
+    Name = "${var.instance_name}-ssm-access"
   }
 }
