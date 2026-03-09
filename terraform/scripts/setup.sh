@@ -77,6 +77,6 @@ sudo snap install astral-uv --classic >> $LOG_FILE 2>&1
 uv sync >> $LOG_FILE 2>&1
 
 # Note this will only import a small number of datasets for testing
-uv run scripts/ingest-data.py 30 >> $LOG_FILE 2>&1
+uv run scripts/ingest-data.py 100 >> $LOG_FILE 2>&1
 
 log "Serka setup completed"
