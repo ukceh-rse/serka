@@ -24,3 +24,8 @@ variable "subnet_id" {
   type        = string
   description = "Existing Subnet ID where the EC2 instance will be launched"
 }
+
+variable "public_subnet_ids" {
+  type        = list(string)
+  description = "Public subnet IDs for the ALB (minimum 2, across different AZs)"
+}
