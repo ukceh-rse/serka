@@ -12,23 +12,25 @@ services:
       - mongodb
       - mcp
     volumes:
-      - ./config-podman.yml:/app/config.yml
-      - ./.env:/app/.env
+      - ./config-podman.yml:/app/config.yml:ro
+      - ./.env:/app/.env:ro
+      - ${HOME}/.aws:/root/.aws:ro
     networks:
       - internal
 
   mcp:
     build:
-     context: ./mcp-server
-     dockerfile: Containerfile
+      context: ./mcp-server
+      dockerfile: Containerfile
     image: serka-mcp-image
     container_name: mcp-container
     ports:
-     - "8000:8000"
+      - "8000:8000"
     networks:
-     - internal
+      - internal
     volumes:
-      - ./.env:/app/.env
+      - ./.env:/app/.env:ro
+      - ${HOME}/.aws:/root/.aws:ro
 
   neo4j:
     image: neo4j:5.26.5
