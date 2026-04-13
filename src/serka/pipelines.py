@@ -149,8 +149,8 @@ class PipelineBuilder:
 		p.connect("eidc_fetcher", "text_extractor")
 		p.connect("eidc_fetcher", "legilo_fetcher")
 
-		p.connect("text_extractor", "joiner")
-		p.connect("legilo_fetcher", "joiner")
+		p.connect("text_extractor.documents", "joiner.documents")
+		p.connect("legilo_fetcher.documents", "joiner.documents")
 
 		p.connect("joiner", "splitter")
 		p.connect("splitter", "doc_emb")

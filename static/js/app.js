@@ -1,18 +1,16 @@
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 document.addEventListener("alpine:init", () => {
     Alpine.data("app", () => ({
         query: '',
         results: [],
         answer: {
             show: false,
-            tokens: [],
-            output_index: 0,
-            id: '',
-            html: '',
-            complete: false
+            raw: '',
+            content: '',
+            complete: false,
+        },
+        agentStatus: {
+            show: false,
+            message: '',
         },
         thinking: false,
         splash: true,
@@ -34,7 +32,7 @@ document.addEventListener("alpine:init", () => {
         async search() {
             this.splash = false;
             this.thinking = true;
-            this.ragSearch(this);
+            this.streamingChat();
             try {
                 const response = await fetch(`/query/semantic?q=${this.query}`);
                 this.results = await response.json();
@@ -44,43 +42,48 @@ document.addEventListener("alpine:init", () => {
                 this.thinking = false;
             }
         },
-        async pollRag() {
-            while (!this.answer.complete) {
-                await sleep(500); //Poll server every 500ms
-                const response = await fetch(`/query/rag?id=${this.answer.id}`);
-                const rag_response = await response.json();
-                this.answer.id = rag_response.id;
-                this.answer.tokens = rag_response.tokens;
-                this.answer.complete = rag_response.complete;
-                this.answer.show = this.answer.tokens.length > 0;
-            }
-        },
-        async updateRagOutput() {
-            while (!this.answer.complete) {
-                console.log("output_index=" + this.answer.output_index + " tokens.length=" + this.answer.tokens.length);
-                if (this.answer.output_index < this.answer.tokens.length) {
-                    while (this.answer.output_index < this.answer.tokens.length) {
-                        tokens_to_show = this.answer.tokens.slice(0, this.answer.output_index).join("");
-                        this.answer.content = marked.parse(tokens_to_show);
-                        this.answer.output_index++;
-                        await sleep(5);
+        async streamingChat() {
+            this.answer = { content: '', complete: false, show: false, raw: '' };
+            this.agentStatus = { show: true, message: 'Thinking...' };
+            try {
+                const response = await fetch('/chat/stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: this.query }),
+                });
+                if (!response.ok) {
+                    console.error('Chat stream error:', response.status);
+                    return;
+                }
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const event = JSON.parse(line.slice(6));
+                        if (event.type === 'tool') {
+                            this.agentStatus.message = `Using tool: ${event.name}…`;
+                        } else if (event.type === 'text') {
+                            this.agentStatus.show = false;
+                            this.answer.raw += event.delta;
+                            this.answer.content = marked.parse(this.answer.raw);
+                            this.answer.show = true;
+                        } else if (event.type === 'done') {
+                            this.agentStatus.show = false;
+                            this.answer.complete = true;
+                        }
                     }
                 }
-                await sleep(300); //RAG output exausted, sleep for a bit before polling again
-            }
-        },
-        async ragSearch() {
-            try {
-                this.answer = { id: '', content: '', complete: false, show: false, output_index: 0, tokens: [] };
-                const response = await fetch(`/query/rag?q=${this.query}`, { method: 'POST' });
-                const rag_response = await response.json();
-                this.answer.id = rag_response.id;
-                this.answer.content = rag_response.content;
-                this.answer.complete = rag_response.complete;
-                this.answer.tokens = rag_response.tokens;
-                Promise.all([this.pollRag(), this.updateRagOutput()]);
             } catch (e) {
                 console.error(e);
+            } finally {
+                this.agentStatus.show = false;
             }
         },
         async feedback(event) {

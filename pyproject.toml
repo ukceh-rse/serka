@@ -26,6 +26,8 @@ dependencies = [
     "amazon-bedrock-haystack>=3.9.1",
     "mcp[cli]>=1.13.0",
     "mcp-haystack>=0.5.0",
+    "pydantic-ai[bedrock]>=0.4.3",
+    "fastmcp>=2.11.3",
 ]
 
 [project.scripts]

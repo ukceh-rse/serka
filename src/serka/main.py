@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from serka.routers import query, feedback, graph
+from serka.routers import query, feedback, graph, chat
 
 
 app = FastAPI(
@@ -20,3 +20,4 @@ async def read_index():
 app.include_router(query.router)
 app.include_router(feedback.router)
 app.include_router(graph.router)
+app.include_router(chat.router)

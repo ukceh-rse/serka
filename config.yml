@@ -20,4 +20,4 @@ unified_metadata:
 models:
   provider: bedrock
   embedding: amazon.titan-embed-text-v2:0
-  llm: amazon.nova-lite-v1:0
+  llm: anthropic.claude-sonnet-4-6

@@ -1,9 +1,12 @@
 from requests import Response
 from typing import List, Dict, Any
+import logging
 import requests
 from tqdm import tqdm
 from haystack import component, Document
 from serka.graph.extractors import extract_doi
+
+logger = logging.getLogger(__name__)
 
 
 @component
@@ -76,21 +79,44 @@ class LegiloFetcher:
 			)
 		return extracted_docs
 
-	@component.output_types(supporting_docs=List[Document])
+	@component.output_types(documents=List[Document])
 	def run(self, datasets: List[Dict[Any, Any]]) -> List[Document]:
+		# Verify credentials on the first request before iterating all datasets
+		if datasets:
+			test_id = datasets[0].get("id")
+			test_url = self.legilo_url.format(id=test_id)
+			test_res: Response = requests.get(test_url, auth=self.auth)
+			if test_res.status_code == 401:
+				logger.error(
+					"Legilo authentication failed (401 Unauthorized). "
+					"Check LEGILO_USERNAME and LEGILO_PASSWORD environment variables."
+				)
+				return {"documents": []}
+			logger.debug(
+				"Legilo credential check passed (status %d) for dataset %s",
+				test_res.status_code,
+				test_id,
+			)
+
 		supporting_docs = []
 		for dataset in tqdm(datasets, desc="Fetching Legilo records", unit="dataset"):
-			id = dataset.get("id")
+			dataset_id = dataset.get("id")  # was "id" — field is "identifier"
 			dataset_uri = extract_doi(dataset["resourceIdentifiers"])
 			dataset_title = dataset.get("title", "")
-			url = self.legilo_url.format(id=id)
-			res: Response = requests.get(
-				url,
-				auth=self.auth,
-			)
+			url = self.legilo_url.format(id=dataset_id)
+			res: Response = requests.get(url, auth=self.auth)
 			if res.status_code == 200:
 				json_data = res.json()
-				supporting_docs.extend(
-					self.extract_docs(json_data, dataset_title, dataset_uri)
+				docs = self.extract_docs(json_data, dataset_title, dataset_uri)
+				logger.debug("Legilo: %d doc(s) for dataset %s", len(docs), dataset_id)
+				supporting_docs.extend(docs)
+			else:
+				logger.warning(
+					"Legilo request failed for dataset %s: HTTP %d",
+					dataset_id,
+					res.status_code,
 				)
-		return {"supporting_docs": supporting_docs}
+		logger.info(
+			"Legilo: %d supporting document(s) fetched in total", len(supporting_docs)
+		)
+		return {"documents": supporting_docs}

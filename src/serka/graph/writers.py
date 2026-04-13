@@ -16,10 +16,12 @@ class Neo4jGraphWriter:
 	def create_nodes(tx, nodes_and_types) -> Dict[str, int]:
 		nodes_created: Dict[str, int] = dict()
 		for node_type, node_list in nodes_and_types.items():
-			props = ", ".join(f"{key}: node.{key}" for key in node_list[0].keys())
+			# MERGE only on the stable unique key to avoid null-property errors.
+			# All other properties are written with SET after the merge.
 			query = (
 				"UNWIND $nodes as node "
-				f"MERGE (n:{node_type}:embedded {{{props}}}) "
+				f"MERGE (n:{node_type}:embedded {{uri: node.uri}}) "
+				"SET n += node "
 				"RETURN n"
 			)
 			result = tx.run(query, nodes=node_list)

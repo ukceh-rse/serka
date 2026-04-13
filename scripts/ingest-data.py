@@ -50,7 +50,17 @@ if __name__ == "__main__":
 		nargs="?",
 	)
 
+	parser.add_argument(
+		"--debug",
+		action="store_true",
+		help="Enable DEBUG logging",
+	)
 	args = parser.parse_args()
+
+	logging.basicConfig(
+		level=logging.DEBUG if args.debug else logging.INFO,
+		format="%(asctime)s %(name)s %(levelname)s %(message)s",
+	)
 
 	pb = create_pipeline_builder()
 

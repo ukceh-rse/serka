@@ -24,7 +24,8 @@ class EntityExtractor:
 				"west_boundary": bb["westBoundLongitude"],
 				"east_boundary": bb["eastBoundLongitude"],
 			}
-			return boundary
+			# Drop any keys whose value is None — Neo4j forbids MERGE on null properties
+			return {k: v for k, v in boundary.items() if v is not None}
 		except Exception as e:
 			logger.error(f"Error extracting boundary: {e}")
 			return {}
