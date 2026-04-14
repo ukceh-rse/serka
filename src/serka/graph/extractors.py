@@ -31,22 +31,25 @@ class EntityExtractor:
 			return {}
 
 	def _extract_dataset(self, record) -> Dict[str, str]:
-		return {
-			"uri": extract_doi(record["resourceIdentifiers"]),
-			"title": record["title"],
-			"citations": record["incomingCitationCount"],
-			"publication_date": record["publicationDate"],
+		dataset = {
+			"uri": extract_doi(record.get("resourceIdentifiers", [])),
+			"title": record.get("title", ""),
 			**self._extract_boundary(record),
 		}
+		if (citations := record.get("incomingCitationCount")) is not None:
+			dataset["citations"] = citations
+		if pub_date := record.get("publicationDate"):
+			dataset["publication_date"] = pub_date
+		return dataset
 
 	def _extract_authors(self, record):
 		author_list = record.get("authors", [])
 		authors = [
-			{"name": author["fullName"], "uri": author["nameIdentifier"]}
+			{"name": author.get("fullName", ""), "uri": author["nameIdentifier"]}
 			for author in author_list
 			if "nameIdentifier" in author
 		]
-		doi = extract_doi(record["resourceIdentifiers"])
+		doi = extract_doi(record.get("resourceIdentifiers", []))
 		authorship = [(doi, author["uri"]) for author in authors]
 		return authors, authorship
 
@@ -79,16 +82,19 @@ class EntityExtractor:
 		authored_by = []
 		affiliated_with = []
 		for record in data:
-			author_list = record.get("authors", [])
-			record_authors, authorship = self._extract_authors(record)
-			authors.extend(record_authors)
-			authored_by.extend(authorship)
+			try:
+				author_list = record.get("authors", [])
+				record_authors, authorship = self._extract_authors(record)
+				authors.extend(record_authors)
+				authored_by.extend(authorship)
 
-			record_orgs, affiliations = self._extract_organisations(author_list)
-			orgs.extend(record_orgs)
-			affiliated_with.extend(affiliations)
+				record_orgs, affiliations = self._extract_organisations(author_list)
+				orgs.extend(record_orgs)
+				affiliated_with.extend(affiliations)
 
-			datasets.append(self._extract_dataset(record))
+				datasets.append(self._extract_dataset(record))
+			except Exception as e:
+				logger.warning(f"Skipping record due to extraction error: {e} — record keys: {list(record.keys())}")
 
 		authors = list({author["uri"]: author for author in authors}.values())
 		orgs = list({org["uri"]: org for org in orgs}.values())
@@ -111,7 +117,7 @@ class TextExtractor:
 		self.fields = fields
 
 	def extract_text_fields(self, record) -> List[Document]:
-		uri = extract_doi(record["resourceIdentifiers"])
+		uri = extract_doi(record.get("resourceIdentifiers", []))
 		title = record.get("title", "")
 		docs = [
 			Document(
