@@ -1,239 +1,424 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Serka</title>
+        <script src="/static/js/tailwind.js"></script>
+        <script defer src="/static/js/alpine.js"></script>
+        <script src="/static/js/marked.js"></script>
+        <script src="/static/js/app.js?v=3"></script>
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+        />
+        <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap"
+        />
+        <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap"
+        />
+        <link rel="stylesheet" href="/static/css/style.css" />
+        <script>
+            window.onload = function () {
+                document.getElementById("searchInput").focus();
+            };
+            document.addEventListener("keydown", function (event) {
+                if (event.ctrlKey && event.shiftKey && event.key === "F") {
+                    event.preventDefault();
+                    document.getElementById("searchInput").focus();
+                }
+            });
+        </script>
+    </head>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Serka</title>
-    <script src="/static/js/tailwind.js"></script>
-    <script defer src="/static/js/alpine.js"></script>
-    <script src="/static/js/marked.js"></script>
-    <script src="/static/js/app.js?v=2"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="/static/css/style.css">
-    <script>
-        window.onload = function () {
-            document.getElementById('searchInput').focus();
-        };
-        document.addEventListener('keydown', function (event) {
-            if (event.ctrlKey && event.shiftKey && event.key === 'F') {
-                event.preventDefault();
-                document.getElementById('searchInput').focus();
-            }
-        });
-    </script>
-</head>
-
-<body class="flex flex-col items-center justify-center h-screen bg-gray-100" x-data="app">
-    <div x-show="splash">
-        <img src="/static/img/ukceh-logo.png" alt="UKCEH logo" />
-        <h1 class="text-3xl font-semibold">Serka <span class="text-xl">AI-Enhanced Search Tool</span></h1>
-    </div>
-    <div :class="!splash ? 'fixed top-0 left-0 w-full justify-center' : 'animate-fly-in w-100'" class="p-6 z-10">
-        <div class="flex">
-            <div class="pb-2 pr-2 pt-2" x-show="!splash">
-                <img width="40px" src="/static/img/ukceh-icon.png" alt="UKCEH logo" />
-            </div>
-            <div id="searchBox"
-                class="bg-white shadow-md p-2 flex items-center z-10 rounded-lg w-full border border-gray-200">
-                <input id="searchInput" :disabled="thinking" @keydown.enter="search" x-model="query" type="text"
-                    placeholder="Search..." class="w-full p-2 border-none focus:outline-none" />
-                <button :disabled="thinking" @click="search" class="hero-bg text-white px-4 py-2 rounded-lg">
-                    <i :class="thinking? 'fa-spinner fa-spin' : 'fa-search'" class="fas"></i>
-                </button>
+    <body
+        class="flex flex-col items-center justify-center h-screen bg-gray-100"
+        x-data="app"
+    >
+        <div x-show="splash">
+            <img src="/static/img/ukceh-logo.png" alt="UKCEH logo" />
+            <h1 class="text-3xl font-semibold">
+                Serka <span class="text-xl">AI-Enhanced Search Tool</span>
+            </h1>
+        </div>
+        <div
+            :class="!splash ? 'fixed top-0 left-0 w-full justify-center' : 'animate-fly-in w-100'"
+            class="p-6 z-10"
+        >
+            <div class="flex">
+                <div class="pb-2 pr-2 pt-2" x-show="!splash">
+                    <img
+                        width="40px"
+                        src="/static/img/ukceh-icon.png"
+                        alt="UKCEH logo"
+                    />
+                </div>
+                <div
+                    id="searchBox"
+                    class="bg-white shadow-md p-2 flex items-center z-10 rounded-lg w-full border border-gray-200"
+                >
+                    <input
+                        id="searchInput"
+                        :disabled="thinking"
+                        @keydown.enter="search"
+                        x-model="query"
+                        type="text"
+                        placeholder="Search..."
+                        class="w-full p-2 border-none focus:outline-none"
+                    />
+                    <button
+                        @click="aiEnabled = !aiEnabled"
+                        :disabled="thinking"
+                        :title="aiEnabled ? 'Click to disable AI-generative answers' : 'Click to enable AI-generative answers'"
+                        :class="aiEnabled ? 'hero-text' : 'text-gray-300'"
+                        class="px-3 py-2 text-lg transition-colors duration-150"
+                    >
+                        <i class="fa-solid fa-robot"></i>
+                    </button>
+                    <button
+                        :disabled="thinking"
+                        @click="search"
+                        class="hero-bg text-white px-4 py-2 rounded-lg"
+                    >
+                        <i
+                            :class="thinking? 'fa-spinner fa-spin' : 'fa-search'"
+                            class="fas"
+                        ></i>
+                    </button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <div x-show="results.length" class="absolute top-0 left-0 mt-20 p-6 pr-3 w-2/3 z-0 text-gray-500">
-        <div class="text-xs">Semantic Search Results:</div>
-        <template x-for="item in results">
-            <div class="bg-white p-5 rounded-lg shadow-md text-justify mb-6 border border-gray-200"
-                x-data="{ showDetails: false }">
-                <div class="text-lg font-semibold">
-                    <button @click="window.open(item.docs[0].document.metadata.url, '_blank')"
-                        class="hero-text hover:underline text-left focus:outline-none"
-                        x-text="item.docs[0].document.metadata.title"
-                        :title="item.docs[0].document.metadata.title"></button>
-                </div>
-                <div x-text="item.docs[0].document.metadata.url" class="text-xs h-5 ellipses break-all"></div>
-                <div class="max-h-18 ellipsis-multiline text-gray-900 mt-3" x-text="item.docs[0].document.content"
-                    :title="item.docs[0].document.content">
-                </div>
+        <div
+            x-show="thinking || results.length"
+            class="absolute top-0 left-0 mt-20 p-6 pr-3 w-2/3 z-0 text-gray-500"
+        >
+            <div class="text-xs">Semantic Search Results:</div>
+            <div
+                x-show="thinking"
+                class="flex items-center gap-2 text-sm text-gray-400 italic py-4"
+            >
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Searching...</span>
+            </div>
+            <template x-for="item in results">
+                <div
+                    class="bg-white p-5 rounded-lg shadow-md text-justify mb-6 border border-gray-200"
+                    x-data="{ showDetails: false }"
+                >
+                    <div class="text-lg font-semibold">
+                        <button
+                            @click="window.open(item.docs[0].document.metadata.url, '_blank')"
+                            class="hero-text hover:underline text-left focus:outline-none"
+                            x-text="item.docs[0].document.metadata.title"
+                            :title="item.docs[0].document.metadata.title"
+                        ></button>
+                    </div>
+                    <div
+                        x-text="item.docs[0].document.metadata.url"
+                        class="text-xs h-5 ellipses break-all"
+                    ></div>
+                    <div
+                        class="max-h-18 ellipsis-multiline text-gray-900 mt-3"
+                        x-text="item.docs[0].document.content"
+                        :title="item.docs[0].document.content"
+                    ></div>
 
-                <button @click="showDetails = !showDetails" class="hero-text text-xs my-2">
-                    <i :class="showDetails ? 'fa-chevron-up' : 'fa-chevron-down'" class="fas ml-1"></i>
-                    <span x-text="showDetails ? 'Hide details' : 'Show details'"></span>
-                </button>
+                    <button
+                        @click="showDetails = !showDetails"
+                        class="hero-text text-xs my-2"
+                    >
+                        <i
+                            :class="showDetails ? 'fa-chevron-up' : 'fa-chevron-down'"
+                            class="fas ml-1"
+                        ></i>
+                        <span
+                            x-text="showDetails ? 'Hide details' : 'Show details'"
+                        ></span>
+                    </button>
 
-                <div x-cloak x-show="showDetails" x-transition:enter="transition-all ease-out duration-300"
-                    x-transition:enter-start="max-h-0 overflow-hidden"
-                    x-transition:enter-end="max-h-96 overflow-visible"
-                    x-transition:leave="transition-all ease-in duration-200"
-                    x-transition:leave-start="max-h-96 overflow-visible"
-                    x-transition:leave-end="max-h-0 overflow-hidden">
-                    <div x-show="showDetails" x-transition:enter="transition ease-out duration-200 delay-200"
-                        x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
-                        x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100"
-                        x-transition:leave-end="opacity-0">
-                        <div class="flex">
-                            <div class="w-2/3 font-bold p-2">Document Content</div>
-                            <div class="w-1/9 font-bold p-2">Section</div>
-                            <div class="w-1/9 font-bold p-2">Subsection</div>
-                            <div class="w-1/9 font-bold p-2">Score</div>
-                        </div>
-                        <div class="max-h-96 overflow-scroll">
-                            <template x-for="doc in item.docs">
-                                <div x-data="{expand: false}" class="flex mb-3">
-                                    <div class="w-2/3 p-2" :class="expand ? '' : 'ellipsis-multiline max-h-22'">
-                                        <button @click="expand = !expand" class="hero-text text-xs my-2">
-                                            <i :class="expand ? 'fa-chevron-up' : 'fa-chevron-down'"
-                                                class="fas ml-1"></i>
-                                        </button>
-                                        <span x-text="doc.document.content"></span>
-                                    </div>
-                                    <div class="w-1/9 p-2 ellipses" x-text="doc.document.metadata.section">
-                                    </div>
-                                    <div class="w-1/9 p-2 break-all" x-text="doc.document.metadata.subsection">
-                                    </div>
-                                    <div class="w-1/9 p-2" x-text="parseFloat(doc.score).toFixed(3)">
-                                    </div>
+                    <div
+                        x-cloak
+                        x-show="showDetails"
+                        x-transition:enter="transition-all ease-out duration-300"
+                        x-transition:enter-start="max-h-0 overflow-hidden"
+                        x-transition:enter-end="max-h-96 overflow-visible"
+                        x-transition:leave="transition-all ease-in duration-200"
+                        x-transition:leave-start="max-h-96 overflow-visible"
+                        x-transition:leave-end="max-h-0 overflow-hidden"
+                    >
+                        <div
+                            x-show="showDetails"
+                            x-transition:enter="transition ease-out duration-200 delay-200"
+                            x-transition:enter-start="opacity-0"
+                            x-transition:enter-end="opacity-100"
+                            x-transition:leave="transition ease-in duration-100"
+                            x-transition:leave-start="opacity-100"
+                            x-transition:leave-end="opacity-0"
+                        >
+                            <div class="flex">
+                                <div class="w-2/3 font-bold p-2">
+                                    Document Content
                                 </div>
-                            </template>
+                                <div class="w-1/9 font-bold p-2">Section</div>
+                                <div class="w-1/9 font-bold p-2">
+                                    Subsection
+                                </div>
+                                <div class="w-1/9 font-bold p-2">Score</div>
+                            </div>
+                            <div class="max-h-96 overflow-scroll">
+                                <template x-for="doc in item.docs">
+                                    <div
+                                        x-data="{expand: false}"
+                                        class="flex mb-3"
+                                    >
+                                        <div
+                                            class="w-2/3 p-2"
+                                            :class="expand ? '' : 'ellipsis-multiline max-h-22'"
+                                        >
+                                            <button
+                                                @click="expand = !expand"
+                                                class="hero-text text-xs my-2"
+                                            >
+                                                <i
+                                                    :class="expand ? 'fa-chevron-up' : 'fa-chevron-down'"
+                                                    class="fas ml-1"
+                                                ></i>
+                                            </button>
+                                            <span
+                                                x-text="doc.document.content"
+                                            ></span>
+                                        </div>
+                                        <div
+                                            class="w-1/9 p-2 ellipses"
+                                            x-text="doc.document.metadata.section"
+                                        ></div>
+                                        <div
+                                            class="w-1/9 p-2 break-all"
+                                            x-text="doc.document.metadata.subsection"
+                                        ></div>
+                                        <div
+                                            class="w-1/9 p-2"
+                                            x-text="parseFloat(doc.score).toFixed(3)"
+                                        ></div>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
                     </div>
+                    <div class="mt-3" x-show="privacyNotice.accepted" x-data="{ vote: null, feedbackDone: false }">
+                        <span class="text-xs"> Feedback: </span>
+                        <span class="px-3">
+                            <button
+                                title="Helpful"
+                                @click="vote = 'UP'; give_feedback(Alpine.raw(item), 'search-result', query, 'UP', 'VOTE')"
+                                :class="vote === 'UP' ? 'text-green-700' : ''"
+                            >
+                                <i class="fa-regular fa-thumbs-up fa"></i>
+                            </button>
+                            <button
+                                title="Unhelpful"
+                                @click="vote = 'DOWN'; give_feedback(Alpine.raw(item), 'search-result', query, 'DOWN', 'VOTE')"
+                                :class="vote === 'DOWN' ? 'text-red-400' : ''"
+                            >
+                                <i class="fa-regular fa-thumbs-down fa"></i>
+                            </button>
+                        </span>
+                        <button
+                            title="Detailed Feedback"
+                            @click="openModal(Alpine.raw(item), 'search-result', () => feedbackDone = true)"
+                            :class="feedbackDone ? 'text-green-700' : ''"
+                        >
+                            <i class="fa-regular fa-pen-to-square"></i>
+                        </button>
+                    </div>
                 </div>
+            </template>
+        </div>
+        <div
+            x-show="agentStatus.show || answer.show"
+            class="absolute top-0 right-0 mt-20 p-6 pl-3 w-1/3 z-0 text-gray-500"
+        >
+            <div class="text-xs">Generative Answer:</div>
+            <div
+                class="rounded-lg p-3 mb-3 flex gap-2 text-xs"
+                style="background-color: #e8f5f8; border: 1px solid #b0d9e4; color: #575656; font-family: 'Lato', sans-serif;"
+            >
+                <i class="fa-solid fa-circle-info mt-0.5 shrink-0" style="color: #0483a4;"></i>
+                <span>AI-generated answers can contain mistakes. Always verify information using the provided links before relying on it.</span>
+            </div>
+            <div
+                x-show="agentStatus.show"
+                class="bg-white p-4 rounded-lg shadow-md border border-gray-200 mb-3 flex items-center gap-2 text-sm text-gray-400 italic"
+            >
+                <i class="fas fa-spinner fa-spin"></i>
+                <span x-text="agentStatus.message"></span>
+            </div>
+            <div
+                x-show="answer.show"
+                x-data="{ vote: null, feedbackDone: false }"
+                class="bg-white p-6 rounded-lg shadow-md text-justify border border-gray-200"
+            >
+                <div x-html="answer.content"></div>
                 <div class="mt-3" x-show="privacyNotice.accepted">
-                    <span class="text-xs">
-                        Feedback:
-                    </span>
+                    <span class="text-xs"> Feedback: </span>
                     <span class="px-3">
-                        <button title="Helpful"
-                            @click="give_feedback(Alpine.raw(item), 'search-result', query, 'UP', 'VOTE')">
-                            <i class="fa-regular fa-thumbs-up"></i>
+                        <button
+                            title="Helpful"
+                            @click="vote = 'UP'; give_feedback(answer, 'rag-response', query, 'UP', 'VOTE')"
+                            :class="vote === 'UP' ? 'text-green-700' : ''"
+                        >
+                            <i class="fa-regular fa-thumbs-up fa"></i>
                         </button>
-                        <button title="Unhelpful"
-                            @click="give_feedback(Alpine.raw(item), 'search-result', query, 'DOWN', 'VOTE')">
-                            <i class="fa-regular fa-thumbs-down"></i>
+                        <button
+                            title="Unhelpful"
+                            @click="vote = 'DOWN'; give_feedback(answer, 'rag-response', query, 'DOWN', 'VOTE')"
+                            :class="vote === 'DOWN' ? 'text-red-400' : ''"
+                        >
+                            <i class="fa-regular fa-thumbs-down fa"></i>
                         </button>
                     </span>
-                    <button title="Detailed Feedback" @click="openModal(Alpine.raw(item), 'search-result')">
+                    <button
+                        title="Detailed Feedback"
+                        @click="openModal(answer, 'rag-response', () => feedbackDone = true)"
+                        :class="feedbackDone ? 'text-green-700' : ''"
+                    >
                         <i class="fa-regular fa-pen-to-square"></i>
                     </button>
                 </div>
             </div>
-        </template>
-    </div>
-    <div x-show="agentStatus.show || answer.show" class="absolute top-0 right-0 mt-20 p-6 pl-3 w-1/3 z-0 text-gray-500">
-        <div class="text-xs">Generative Answer:</div>
-        <div x-show="agentStatus.show" class="bg-white p-4 rounded-lg shadow-md border border-gray-200 mb-3 flex items-center gap-2 text-sm text-gray-400 italic">
-            <i class="fas fa-spinner fa-spin"></i>
-            <span x-text="agentStatus.message"></span>
         </div>
-        <div x-show="answer.show" class="bg-white p-6 rounded-lg shadow-md text-justify border border-gray-200">
-            <div x-html="answer.content"></div>
-            <div class="mt-3" x-show="privacyNotice.accepted">
-                <span class="text-xs">
-                    Feedback:
-                </span>
-                <span class="px-3">
-                    <button title="Helpful" @click="give_feedback(answer, 'rag-response', query, 'UP', 'VOTE')">
-                        <i class="fa-regular fa-thumbs-up"></i>
-                    </button>
-                    <button title="Unhelpful" @click="give_feedback(answer, 'rag-response', query, 'DOWN', 'VOTE')">
-                        <i class="fa-regular fa-thumbs-down"></i>
-                    </button>
-                </span>
-                <button title="Detailed Feedback" @click="openModal(answer, 'rag-response')">
-                    <i class="fa-regular fa-pen-to-square"></i>
+
+        <div x-show="modal.show" class="modal">
+            <div
+                class="modal-content text-gray-500 rounded-lg border border-gray-200"
+            >
+                <button title="Close" class="float-right" @click="closeModal">
+                    <i class="fa-regular fa-x"></i>
+                </button>
+                <h2 class="text-xl font-bold mb-6">Feedback</h2>
+                <table class="w-full">
+                    <tr>
+                        <td class="align-top">Query:</td>
+                        <td>"<span x-text="query"></span>"</td>
+                    </tr>
+                    <tr>
+                        <td class="align-top">Item:</td>
+                        <td>
+                            <div
+                                class="italic max-w-90 ellipsis-multiline"
+                                x-text="JSON.stringify(modal.item)"
+                            ></div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="align-top">Type:</td>
+                        <td>
+                            <div
+                                class="italic max-w-90 ellipsis-multiline"
+                                x-text="modal.type"
+                            ></div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="align-top">Feedback:</td>
+                        <td>
+                            <textarea
+                                x-model="modal.text"
+                                placeholder="Please enter feedback about this item..."
+                                class="w-full h-16 p-2 border border-gray-300 rounded mb-4"
+                            ></textarea>
+                        </td>
+                    </tr>
+                </table>
+                <button
+                    class="hero-bg text-white px-4 py-2 rounded-lg"
+                    @click="submit_feedback_modal(modal.item, modal.type, query, modal.text, 'TEXT')"
+                >
+                    Submit
                 </button>
             </div>
         </div>
-    </div>
 
-    <div x-show="modal.show" class="modal">
-        <div class="modal-content text-gray-500 rounded-lg border border-gray-200">
-            <button title="Close" class="float-right" @click="closeModal">
-                <i class="fa-regular fa-x"></i>
-            </button>
-            <h2 class="text-xl font-bold mb-6">Feedback</h2>
-            <table class="w-full">
-                <tr>
-                    <td class="align-top">Query:</td>
-                    <td>
-                        "<span x-text="query"></span>"
-                    </td>
-                </tr>
-                <tr>
-                    <td class="align-top">Item:</td>
-                    <td>
-                        <div class="italic max-w-90 ellipsis-multiline" x-text="JSON.stringify(modal.item)"></div>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="align-top">Type:</td>
-                    <td>
-                        <div class="italic max-w-90 ellipsis-multiline" x-text="modal.type"></div>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="align-top">Feedback:</td>
-                    <td><textarea x-model="modal.text" placeholder="Please enter feedback about this item..."
-                            class="w-full h-16 p-2 border border-gray-300 rounded mb-4"></textarea></td>
-                </tr>
-            </table>
-            <button class="hero-bg text-white px-4 py-2 rounded-lg"
-                @click="submit_feedback_modal(modal.item, modal.type, query, modal.text, 'TEXT')">Submit</button>
+        <div
+            x-show="toast.show"
+            x-transition
+            class="fixed top-4 right-4 bg-blue-100 border-1 border-blue-300 px-4 py-2 rounded-lg shadow-lg max-w-70 z-100 text-gray-500"
+        >
+            <div x-text="toast.title" class="font-bold"></div>
+            <div x-text="toast.msg" class="text-sm ellipsis-multiline"></div>
         </div>
-    </div>
 
-    <div x-show="toast.show" x-transition
-        class="fixed top-4 right-4 bg-blue-100 border-1 border-blue-300 px-4 py-2 rounded-lg shadow-lg max-w-70 z-100 text-gray-500">
-        <div x-text="toast.title" class="font-bold"></div>
-        <div x-text="toast.msg" class="text-sm ellipsis-multiline"></div>
-    </div>
+        <div
+            x-show="privacyNotice.show"
+            class="fixed bg-white p-6 rounded-lg shadow-md text-justify border border-gray-200 w-lg z-100 right-6 bottom-6"
+        >
+            <h1 class="text-xl font-bold text-center mb-3">
+                <i class="fa-solid fa-lock"></i> Privacy Notice
+            </h1>
+            <h2>Welcome to Serka</h2>
+            <p class="mb-3">
+                Serka is an AI-enhanced search prototype tool. It is designed to
+                help you find information in the EIDC and other UKCEH data
+                sources. You can search for information in the search box. Serka
+                will show you the most relevant sources of data based on a
+                semantic search and will also attempt to answer any query you
+                pose to it using Retrieval Augmented Generation (RAG) in
+                conjunction with a Large Language Model (LLM).
+            </p>
+            <h2>Feedback</h2>
+            <p class="mb-3">
+                As Serka is just a prototype it is important that we get
+                feedback from you to help us improve it. You can provide
+                feedback by clicking on any of the upvote
+                <i class="fa-regular fa-thumbs-up"></i> / downvote
+                <i class="fa-regular fa-thumbs-down"></i> buttons that you see
+                in the search results, or you can provide more detailed feedback
+                on a particular item by clicking:
+                <i class="fa-regular fa-pen-to-square"></i>.
+            </p>
+            <p class="mb-3">
+                We will not log any personal information about you when you
+                provide feedback. We will not even track your IP address. This
+                means your usage of the tool is completely anonymous. However,
+                you will not be able to withdraw any feedback once provided.
+            </p>
 
-    <div x-show="privacyNotice.show"
-        class="fixed bg-white p-6 rounded-lg shadow-md text-justify border border-gray-200 w-lg z-100 right-6 bottom-6">
-        <h1 class="text-xl font-bold text-center mb-3"><i class="fa-solid fa-lock"></i> Privacy Notice</h1>
-        <h2>Welcome to Serka</h2>
-        <p class="mb-3">
-            Serka is an AI-enhanced search prototype tool. It is designed to help you find information in the EIDC
-            and other UKCEH data sources. You can search for information in the search box. Serka will show
-            you the most relevant sources of data based on a semantic search and will also attempt to answer any query
-            you pose to it using Retrieval Augmented Generation (RAG) in conjunction with a Large Language Model (LLM).
-        </p>
-        <h2>Feedback</h2>
-        <p class="mb-3">
-            As Serka is just a prototype it is important that we get feedback from you to help us improve it. You can
-            provide feedback by clicking on any of the upvote <i class="fa-regular fa-thumbs-up"></i> / downvote <i
-                class="fa-regular fa-thumbs-down"></i> buttons that you see in the search results, or
-            you can provide more detailed feedback on a particular item by clicking: <i
-                class="fa-regular fa-pen-to-square"></i>.
-        </p>
-        <p class="mb-3">
-            We will not log any personal information about you when you provide feedback. We will not even track your IP
-            address. This means your usage of the tool is completely anonymous. However, you will
-            not be able to withdraw any feedback once provided.
-        <p class="mb-3">
-            Your queries and feedback will be logged in a database and used to refine the future development of the
-            search tool. The feedback may also be used in academic publications about the search tool's development.
-        </p>
-        <p class="mb-3">
-            <input type="checkbox" id="privacyNoticeCheckbox" x-model="privacyNotice.accepted" class="mr-2">
-            <label for="privacyNoticeCheckbox" class="text-sm">
-                I consent to provide feedback and understand that my queries and feedback will be logged
-                for the purpose of improving the search tool and may be used in academic publications.
-            </label>
-        </p>
-        <button class="hero-bg text-white px-4 py-2 rounded-lg" @click="closePrivacyNotice">Close</button>
-    </div>
-    <button @click="openPrivacyNotice" x-show="!privacyNotice.show"
-        class="fixed bottom-6 right-6 bg-white p-2 rounded-lg shadow-md font-bold text-gray-500 border border-gray-200 z-100">
-        <i class="fa-solid fa-lock"></i> Privacy Notice
-    </button>
-</body>
-
+            <p class="mb-3">
+                Your queries and feedback will be logged in a database and used
+                to refine the future development of the search tool. The
+                feedback may also be used in academic publications about the
+                search tool's development.
+            </p>
+            <p class="mb-3">
+                <input
+                    type="checkbox"
+                    id="privacyNoticeCheckbox"
+                    x-model="privacyNotice.accepted"
+                    class="mr-2"
+                />
+                <label for="privacyNoticeCheckbox" class="text-sm">
+                    I consent to provide feedback and understand that my queries
+                    and feedback will be logged for the purpose of improving the
+                    search tool and may be used in academic publications.
+                </label>
+            </p>
+            <button
+                class="hero-bg text-white px-4 py-2 rounded-lg"
+                @click="closePrivacyNotice"
+            >
+                Close
+            </button>
+        </div>
+        <button
+            @click="openPrivacyNotice"
+            x-show="!privacyNotice.show"
+            class="fixed bottom-6 right-6 bg-white p-2 rounded-lg shadow-md font-bold text-gray-500 border border-gray-200 z-100"
+        >
+            <i class="fa-solid fa-lock"></i> Privacy Notice
+        </button>
+    </body>
 </html>

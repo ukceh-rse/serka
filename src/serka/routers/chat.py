@@ -1,95 +1,81 @@
 from __future__ import annotations
 
-import asyncio
-import json
-import re
-from typing import Any
+import uuid
 
+from ag_ui.core import RunAgentInput, UserMessage
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from starlette.responses import StreamingResponse
-
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStreamableHTTP
 from pydantic_ai.models.bedrock import BedrockConverseModel
+from pydantic_ai.ui import SSE_CONTENT_TYPE
+from pydantic_ai.ui.ag_ui import AGUIAdapter
+from starlette.requests import Request
+from starlette.responses import Response, StreamingResponse
 
 from serka.models import Config
-from serka.routers.dependencies import get_config
 from serka.prompts import AGENT_PROMPT
-
+from serka.routers.dependencies import get_config
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
-_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
-_DONE = object()  # sentinel to signal the queue is exhausted
 
-
-def _strip_thinking(text: str) -> str:
-	return _THINK_RE.sub("", text)
-
-
-class _TrackedMCPServer(MCPServerStreamableHTTP):
-	"""MCP server that emits a status event whenever a tool is called."""
-
-	def __init__(self, url: str, queue: asyncio.Queue) -> None:
-		super().__init__(url)
-		self._queue = queue
-
-	async def call_tool(
-		self,
-		tool_name: str,
-		arguments: dict[str, Any],
-		metadata: dict[str, Any] | None = None,
-	) -> Any:
-		await self._queue.put({"type": "tool", "name": tool_name})
-		return await super().call_tool(tool_name, arguments, metadata)
-
-
-class ChatRequest(BaseModel):
-	message: str
-	history: list[dict] = []
-
-
-@router.post("/stream", summary="Streaming chat via pydantic-ai agent with MCP tools")
-async def chat_stream(
-	req: ChatRequest,
-	config: Config = Depends(get_config),
-) -> StreamingResponse:
+def _build_agent(config: Config) -> Agent:
 	mcp_url = f"http://{config.mcp.host}:{config.mcp.port}/mcp"
+	return Agent(
+		BedrockConverseModel(config.models.llm),
+		instructions=AGENT_PROMPT,
+		toolsets=[MCPServerStreamableHTTP(mcp_url)],
+	)
 
-	async def event_stream():
-		queue: asyncio.Queue = asyncio.Queue()
 
-		mcp_server = _TrackedMCPServer(mcp_url, queue)
-		model = BedrockConverseModel(config.models.llm)
-		agent = Agent(model, instructions=AGENT_PROMPT, mcp_servers=[mcp_server])
+def _ag_ui_response(
+	agent: Agent, run_input: RunAgentInput, request: Request
+) -> StreamingResponse:
+	accept = request.headers.get("accept", SSE_CONTENT_TYPE)
+	adapter = AGUIAdapter(agent=agent, run_input=run_input, accept=accept)
+	return StreamingResponse(
+		adapter.encode_stream(adapter.run_stream()), media_type=accept
+	)
 
-		async def run_agent() -> None:
-			try:
-				async with agent.run_mcp_servers():
-					# Tool calls from _TrackedMCPServer are enqueued synchronously
-					# during the agent loop before the final turn begins streaming,
-					# so tool events always arrive in the queue before text events.
-					async with agent.run_stream(req.message) as result:
-						async for chunk in result.stream_text(delta=True):
-							clean = _strip_thinking(chunk)
-							if clean:
-								await queue.put({"type": "text", "delta": clean})
-			finally:
-				await queue.put(_DONE)
 
-		task = asyncio.create_task(run_agent())
-		try:
-			while True:
-				event = await queue.get()
-				if event is _DONE:
-					break
-				data = json.dumps(event)
-				yield f"data: {data}\n\n"
-		except Exception:
-			task.cancel()
-			raise
+class QueryRequest(BaseModel):
+	message: str
 
-		yield 'data: {"type": "done"}\n\n'
 
-	return StreamingResponse(event_stream(), media_type="text/event-stream")
+@router.post(
+	"/stream",
+	summary="Ask the EIDC agent a question",
+	description="Send a plain-text query. The agent searches the EIDC catalogue and streams back a response.",
+)
+async def chat_stream(
+	body: QueryRequest,
+	request: Request,
+	config: Config = Depends(get_config),
+) -> Response:
+	run_input = RunAgentInput(
+		threadId=str(uuid.uuid4()),
+		runId=str(uuid.uuid4()),
+		state=None,
+		messages=[UserMessage(id=str(uuid.uuid4()), content=body.message)],
+		tools=[],
+		context=[],
+		forwardedProps=None,
+	)
+	return _ag_ui_response(_build_agent(config), run_input, request)
+
+
+@router.post(
+	"/stream/agui",
+	summary="AG-UI streaming chat (multi-turn)",
+	description=(
+		"Full AG-UI protocol endpoint. Accepts a complete RunAgentInput including message history, "
+		"for use in multi-turn conversation."
+	),
+)
+async def chat_stream_agui(
+	body: RunAgentInput,
+	request: Request,
+	config: Config = Depends(get_config),
+) -> Response:
+	return _ag_ui_response(_build_agent(config), body, request)
