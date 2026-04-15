@@ -11,9 +11,12 @@ services:
       - neo4j
       - mongodb
       - mcp
+    env_file: .env
+    environment:
+      - NEO4J_HOST=neo4j-container
+      - MONGO_HOST=mongodb-container
+      - MCP_HOST=mcp-container
     volumes:
-      - ./config-podman.yml:/app/config.yml:ro
-      - ./.env:/app/.env:ro
       - ${HOME}/.aws:/root/.aws:ro
     networks:
       - internal
@@ -26,11 +29,11 @@ services:
     container_name: mcp-container
     ports:
       - "8000:8000"
+    env_file: .env
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro
     networks:
       - internal
-    volumes:
-      - ./.env:/app/.env:ro
-      - ${HOME}/.aws:/root/.aws:ro
 
   neo4j:
     image: neo4j:5.26.5

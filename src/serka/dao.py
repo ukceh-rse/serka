@@ -6,7 +6,6 @@ from serka.models import (
 	RAGResponse,
 	GroupedDocuments,
 	ScoredDocument,
-	ModelServerConfig,
 )
 from serka.pipelines import PipelineBuilder
 from haystack.dataclasses import ChatMessage
@@ -26,7 +25,8 @@ class DAO:
 		neo4j_password: str,
 		legilo_user: str,
 		legilo_password: str,
-		model_server_config: ModelServerConfig,
+		models_embedding: str,
+		models_llm: str,
 		neo4j_host: str = "localhost",
 		neo4j_port: int = 7687,
 		mcp_host: str = "localhost",
@@ -41,7 +41,8 @@ class DAO:
 			mcp_port=mcp_port,
 			legilo_user=legilo_user,
 			legilo_password=legilo_password,
-			models=model_server_config,
+			models_embedding=models_embedding,
+			models_llm=models_llm,
 			chunk_length=150,
 			chunk_overlap=50,
 		)
@@ -95,7 +96,7 @@ class DAO:
 		answer: Optional[RAGResponse] = None,
 	) -> str:
 		def callback(x):
-			if answer == None:
+			if answer is None:
 				return
 			if answer.thinking:
 				answer.thinking_tokens.append(x.content)

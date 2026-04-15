@@ -1,53 +1,10 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Any, Literal, Union
-
-
-class ServiceConfig(BaseModel):
-	host: str
-	port: int
-
-
-class BasModelServerConfig(BaseModel):
-	provider: Literal["ollama", "bedrock"]
-	embedding: str
-	llm: str
-
-
-class OllamaModelServerConfig(BasModelServerConfig):
-	provider: Literal["ollama"] = "ollama"
-	host: str
-	port: int
-
-
-class BedrockModelServerConfig(BasModelServerConfig):
-	provider: Literal["bedrock"] = "bedrock"
-	region: Literal["eu-west-2"] = "eu-west-2"
-
-
-ModelServerConfig = Union[OllamaModelServerConfig, BedrockModelServerConfig]
-
-
-class Config(BaseModel):
-	mongo: ServiceConfig
-	neo4j: ServiceConfig
-	mcp: ServiceConfig
-	models: ModelServerConfig
-	rag_enabled: bool
-	unified_metadata: List[str]
-
-	def __hash__(self):
-		return hash(self.model_dump_json())
+from typing import List, Dict, Optional, Any
 
 
 class Result(BaseModel):
 	success: bool
 	msg: str
-
-
-class TaskStatus(BaseModel):
-	id: str
-	status: Literal["pending", "running", "complete", "failed"] = "pending"
-	result: Result = None
 
 
 class Document(BaseModel):

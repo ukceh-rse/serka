@@ -2430,33 +2430,6 @@ wheels = [
 ]
 
 [[package]]
-name = "ollama"
-version = "0.5.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "httpx" },
-    { name = "pydantic" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/91/6d/ae96027416dcc2e98c944c050c492789502d7d7c0b95a740f0bb39268632/ollama-0.5.3.tar.gz", hash = "sha256:40b6dff729df3b24e56d4042fd9d37e231cee8e528677e0d085413a1d6692394", size = 43331 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/f6/2091e50b8b6c3e6901f6eab283d5efd66fb71c86ddb1b4d68766c3eeba0f/ollama-0.5.3-py3-none-any.whl", hash = "sha256:a8303b413d99a9043dbf77ebf11ced672396b59bec27e6d5db67c88f01b279d2", size = 13490 },
-]
-
-[[package]]
-name = "ollama-haystack"
-version = "3.4.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "haystack-ai" },
-    { name = "ollama" },
-    { name = "pydantic" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/15/bc4fbfad5149fc820e41d3267259217b2ebec7b0b18dffadb3618537951d/ollama_haystack-3.4.0.tar.gz", hash = "sha256:de4a29a1a94facc45bf99988d853b7afb2fb7ff7a98e48cb08a7def23b2530e6", size = 26083 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/78/a1/5b10c16051355640ccaf123014a690d4ee377abada180ad4b4d2c31bba1e/ollama_haystack-3.4.0-py3-none-any.whl", hash = "sha256:0e2598cb95f330c6424d8e0885e5633e819406a7c8a7d5ab05bb4c33f569a827", size = 20530 },
-]
-
-[[package]]
 name = "onnxruntime"
 version = "1.20.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3892,12 +3865,9 @@ dependencies = [
     { name = "mcp-haystack" },
     { name = "neo4j-haystack" },
     { name = "neomodel" },
-    { name = "ollama" },
-    { name = "ollama-haystack" },
     { name = "pydantic-ai" },
+    { name = "pydantic-settings" },
     { name = "pymongo" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
     { name = "scrapy" },
     { name = "trafilatura" },
 ]
@@ -3926,12 +3896,9 @@ requires-dist = [
     { name = "mcp-haystack", specifier = ">=0.5.0" },
     { name = "neo4j-haystack", specifier = ">=2.2.1" },
     { name = "neomodel", specifier = ">=5.4.5" },
-    { name = "ollama", specifier = ">=0.4.5" },
-    { name = "ollama-haystack", specifier = ">=2.3.0" },
     { name = "pydantic-ai", extras = ["bedrock"], specifier = ">=1.0" },
+    { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pymongo", specifier = ">=4.11.1" },
-    { name = "python-dotenv", specifier = ">=1.0.1" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "scrapy", specifier = ">=2.12.0" },
     { name = "trafilatura", specifier = ">=2.0.0" },
 ]

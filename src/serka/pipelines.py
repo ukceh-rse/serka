@@ -1,42 +1,30 @@
 from dataclasses import dataclass
 from haystack import Pipeline
 from haystack.components.preprocessors import DocumentSplitter
-from serka.graph.embedders import OllamaNodeEmbedder
+from serka.graph.embedders import BedrockNodeEmbedder
 from serka.graph.writers import Neo4jGraphWriter
-from serka.graph.extractors import (
-	EntityExtractor,
-	TextExtractor,
-)
+from serka.graph.extractors import EntityExtractor, TextExtractor
 from serka.fetchers import EIDCFetcher, LegiloFetcher
 from typing import Optional, Callable
-from haystack_integrations.components.embedders.ollama import OllamaDocumentEmbedder
-from haystack_integrations.components.embedders.ollama import OllamaTextEmbedder
-from haystack_integrations.components.generators.amazon_bedrock import (
-	AmazonBedrockGenerator,
-)
 from haystack_integrations.components.embedders.amazon_bedrock import (
+	AmazonBedrockDocumentEmbedder,
 	AmazonBedrockTextEmbedder,
 )
-from haystack_integrations.components.generators.ollama.generator import OllamaGenerator
+from haystack_integrations.components.generators.amazon_bedrock import (
+	AmazonBedrockGenerator,
+	AmazonBedrockChatGenerator,
+)
 from haystack.dataclasses import StreamingChunk
 from haystack.components.joiners import DocumentJoiner
 from serka.graph.readers import Neo4jGraphReader
-from serka.graph.embedders import HypotheticalDocumentEmbedder
-from .models import ModelServerConfig
-from serka.graph.embedders import BedrockNodeEmbedder
-from haystack_integrations.components.embedders.amazon_bedrock import (
-	AmazonBedrockDocumentEmbedder,
-)
 from haystack_integrations.tools.mcp import MCPToolset, StreamableHttpServerInfo
-from haystack_integrations.components.generators.amazon_bedrock import (
-	AmazonBedrockChatGenerator,
-)
 from haystack.components.agents import Agent
 
 
 @dataclass
 class PipelineBuilder:
-	models: ModelServerConfig
+	models_embedding: str
+	models_llm: str
 	neo4j_host: str
 	neo4j_port: int
 	neo4j_user: str
@@ -49,74 +37,29 @@ class PipelineBuilder:
 	chunk_overlap: int
 
 	def _create_text_embedder(self):
-		if self.models.provider == "ollama":
-			return OllamaTextEmbedder(
-				url=f"http://{self.models.host}:{self.models.port}",
-				model=self.models.embedding,
-			)
-		elif self.models.provider == "bedrock":
-			return AmazonBedrockTextEmbedder(model=self.models.embedding)
-		else:
-			raise Exception("Unknown language model provider.")
+		return AmazonBedrockTextEmbedder(model=self.models_embedding)
 
 	def _create_node_embedder(self):
-		if self.models.provider == "ollama":
-			return OllamaNodeEmbedder(
-				url=f"http://{self.models.host}:{self.models.port}"
-			)
-		elif self.models.provider == "bedrock":
-			return BedrockNodeEmbedder(model=self.models.embedding)
-		else:
-			raise Exception("Unknown language model provider.")
+		return BedrockNodeEmbedder(model=self.models_embedding)
 
 	def _create_document_embedder(self):
-		if self.models.provider == "ollama":
-			return OllamaDocumentEmbedder(
-				url=f"http://{self.models.host}:{self.models.port}",
-				model=self.models.embedding,
-				meta_fields_to_embed=["title", "field"],
-			)
-		elif self.models.provider == "bedrock":
-			return AmazonBedrockDocumentEmbedder(model=self.models.embedding)
-		else:
-			raise Exception("Unknown language model provider.")
+		return AmazonBedrockDocumentEmbedder(model=self.models_embedding)
 
 	def _create_llm_generator(
-		self,
-		streaming_callback: Optional[Callable[[StreamingChunk], None]] = None,
+		self, streaming_callback: Optional[Callable[[StreamingChunk], None]] = None
 	):
-		if self.models.provider == "ollama":
-			return OllamaGenerator(
-				model=self.models.llm,
-				generation_kwargs={"num_ctx": 16384, "temperature": 0.0},
-				url=f"http://{self.models.host}:{self.models.port}",
-				streaming_callback=streaming_callback,
-			)
-		elif self.models.provider == "bedrock":
-			return AmazonBedrockGenerator(
-				model=self.models.llm,
-				streaming_callback=streaming_callback,
-				max_length=500,
-			)
-		else:
-			raise Exception("Unknown language model provider.")
-
-	def _create_embedder(self, hyde: bool = False):
-		if hyde:
-			return HypotheticalDocumentEmbedder(
-				url=f"http://{self.models.host}:{self.models.port}",
-				llm_model=self.models.llm,
-				embedding_model=self.models.embedding,
-			)
-		else:
-			return self._create_text_embedder()
+		return AmazonBedrockGenerator(
+			model=self.models_llm,
+			streaming_callback=streaming_callback,
+			max_length=500,
+		)
 
 	def agent(self) -> Agent:
 		server_info = StreamableHttpServerInfo(
 			url=f"http://{self.mcp_host}:{self.mcp_port}/mcp"
 		)
 		toolset = MCPToolset(server_info=server_info)
-		generator = AmazonBedrockChatGenerator(model=self.models.llm)
+		generator = AmazonBedrockChatGenerator(model=self.models_llm)
 		return Agent(chat_generator=generator, tools=toolset, exit_conditions=["text"])
 
 	def build_graph_pipeline(self) -> Pipeline:
@@ -161,7 +104,7 @@ class PipelineBuilder:
 		p.connect("ent_extractor.relationships", "graph_writer.relations")
 		return p
 
-	def query_pipeline(self):
+	def query_pipeline(self) -> Pipeline:
 		p = Pipeline()
 		p.add_component("embedder", self._create_text_embedder())
 		p.add_component(
