@@ -1,17 +1,13 @@
-from typing import List, Dict, Optional
 import logging
+from typing import Dict, List
+
 from serka.models import (
 	Document,
-	Result,
-	RAGResponse,
 	GroupedDocuments,
+	Result,
 	ScoredDocument,
 )
 from serka.pipelines import PipelineBuilder
-from haystack.dataclasses import ChatMessage
-from haystack.components.agents import Agent
-from serka.prompts import AGENT_PROMPT
-
 
 logger = logging.getLogger(__name__)
 
@@ -89,32 +85,3 @@ class DAO:
 				grouped[groupby_val] = GroupedDocuments(docs=[], groupedby=groupby)
 			grouped[groupby_val].docs.append(doc)
 		return list(grouped.values())
-
-	def rag_query(
-		self,
-		query: str,
-		answer: Optional[RAGResponse] = None,
-	) -> str:
-		def callback(x):
-			if answer is None:
-				return
-			if answer.thinking:
-				answer.thinking_tokens.append(x.content)
-				if "".join(answer.thinking_tokens).strip().endswith("</thinking>"):
-					answer.thinking = False
-			else:
-				answer.tokens.append(x.content)
-
-		agent: Agent = self._pipeline_builder.agent()
-
-		agent.warm_up()
-		messages = [
-			ChatMessage.from_system(AGENT_PROMPT),
-			ChatMessage.from_user(query),
-		]
-		result = agent.run(messages=messages, streaming_callback=callback)
-
-		if answer:
-			answer.complete = True
-			answer.answer = result["messages"][-1].text
-		return result
