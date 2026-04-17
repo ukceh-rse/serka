@@ -27,17 +27,17 @@ geolocator: Nominatim = Nominatim(user_agent="serka_geocoder")
 
 
 def create_neo4j_driver(
-	uri: str = "<NEO4J_URI missing!!!>",
-	user: str = "<NEO4J_USERNAME missing!!!>",
-	password: str = "<NEO4J_PASSWORD missing!!!>",
+	uri: str,
+	user: str,
+	password: str,
 ) -> Driver:
 	return GraphDatabase.driver(uri, auth=(user, password))
 
 
 neo4j_driver: Driver = create_neo4j_driver(
-	os.getenv("NEO4J_URI"), os.getenv("NEO4J_USERNAME"), os.getenv("NEO4J_PASSWORD")
+	f"bolt://{os.getenv('NEO4J_HOST')}:{os.getenv('NEO4J_PORT')}",
+	f"{os.getenv('NEO4J_USERNAME')}",
+	f"{os.getenv('NEO4J_PASSWORD')}",
 )
 
-embedder = AmazonBedrockTextEmbedder(
-	model=os.getenv("AWS_EMBEDDING_MODEL", "<AWS_EMBEDDING_MODEL missing!!!>")
-)
+embedder = AmazonBedrockTextEmbedder(model=f"{os.getenv('MODELS_EMBEDDING')}")

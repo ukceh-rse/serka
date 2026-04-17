@@ -4,7 +4,6 @@ services:
       context: .
       dockerfile: Containerfile
     image: serka-image
-    container_name: serka-container
     ports:
       - "8080:8000"
     depends_on:
@@ -13,9 +12,9 @@ services:
       - mcp
     env_file: .env
     environment:
-      - NEO4J_HOST=neo4j-container
-      - MONGO_HOST=mongodb-container
-      - MCP_HOST=mcp-container
+      - NEO4J_HOST=neo4j
+      - MONGO_HOST=mongodb
+      - MCP_HOST=mcp
     volumes:
       - ${HOME}/.aws:/root/.aws:ro
     networks:
@@ -26,10 +25,10 @@ services:
       context: ./mcp-server
       dockerfile: Containerfile
     image: serka-mcp-image
-    container_name: mcp-container
     ports:
       - "8000:8000"
-    env_file: .env
+    environment:
+      - NEO4J_HOST=neo4j
     volumes:
       - ${HOME}/.aws:/root/.aws:ro
     networks:
@@ -37,7 +36,6 @@ services:
 
   neo4j:
     image: neo4j:5.26.5
-    container_name: neo4j-container
     ports:
       - "7687:7687"
     environment:
