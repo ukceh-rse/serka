@@ -41,4 +41,3 @@ neo4j_driver: Driver = create_neo4j_driver(
 embedder = AmazonBedrockTextEmbedder(
 	model=os.getenv("AWS_EMBEDDING_MODEL", "<AWS_EMBEDDING_MODEL missing!!!>")
 )
-embedder.warm_up()
