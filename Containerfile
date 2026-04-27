@@ -2,7 +2,6 @@ FROM python:3.12-slim
 WORKDIR /app
 RUN pip install uv
 COPY pyproject.toml uv.lock README.md .env /app/
-COPY config-podman.yml /app/config.yml
 COPY src /app/src
 COPY static /app/static
 RUN uv sync

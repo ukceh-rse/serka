@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,12 +19,12 @@ class Settings(BaseSettings):
 	mcp_port: int = 8000
 
 	# Models (Bedrock)
-	models_embedding: str
-	models_llm: str
+	models_embedding: str = "amazon.titan-embed-text-v2:0"
+	models_llm: str = "anthropic.claude-sonnet-4-6"
 
 	# External services
-	legilo_username: str
-	legilo_password: str
+	legilo_username: Optional[str] = None
+	legilo_password: Optional[str] = None
 
 	# App
 	test_mode: bool = False
