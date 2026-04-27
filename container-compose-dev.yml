@@ -15,13 +15,6 @@ services:
     networks:
       - internal
 
-  mongo:
-    image: mongo:8.0.6
-    ports:
-      - "27017:27017"
-    networks:
-      - internal
-
 networks:
   internal:
     driver: bridge

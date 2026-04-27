@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
 
@@ -16,10 +16,3 @@ def log_feedback(
 ) -> Result:
 	feedback_logger.log_feedback(feedback)
 	return Result(success=True, msg="Feedback logged")
-
-
-@router.get("/list", summary="List logged feedback")
-def list_feedback(
-	feedback_logger: FeedbackLogger = Depends(get_feedback_logger),
-) -> List[Dict[str, Any]]:
-	return feedback_logger.get_feedback()

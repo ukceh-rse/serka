@@ -8,12 +8,10 @@ services:
       - "8080:8000"
     depends_on:
       - neo4j
-      - mongodb
       - mcp
     env_file: .env
     environment:
       - NEO4J_HOST=neo4j
-      - MONGO_HOST=mongodb
       - MCP_HOST=mcp
     volumes:
       - ${HOME}/.aws:/root/.aws:ro
@@ -27,6 +25,7 @@ services:
     image: serka-mcp-image
     ports:
       - "8000:8000"
+    env_file: .env
     environment:
       - NEO4J_HOST=neo4j
     volumes:
@@ -41,12 +40,6 @@ services:
     environment:
       - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["apoc"]
-    networks:
-      - internal
-
-  mongo:
-    image: mongo:8.0.6
-    container_name: mongodb-container
     networks:
       - internal
 

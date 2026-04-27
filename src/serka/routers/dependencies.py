@@ -42,7 +42,7 @@ def get_dao(settings: Settings = Depends(get_settings)) -> DAO:
 def get_feedback_logger(settings: Settings = Depends(get_settings)) -> FeedbackLogger:
 	global _feedback_logger
 	if _feedback_logger is None:
-		_feedback_logger = FeedbackLogger(settings.mongo_host, settings.mongo_port)
+		_feedback_logger = FeedbackLogger(settings.feedback_log_path)
 	return _feedback_logger
 
 

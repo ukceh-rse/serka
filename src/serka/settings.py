@@ -10,9 +10,8 @@ class Settings(BaseSettings):
 	neo4j_username: str
 	neo4j_password: str
 
-	# MongoDB
-	mongo_host: str = "localhost"
-	mongo_port: int = 27017
+	# Feedback
+	feedback_log_path: str = "feedback.jsonl"
 
 	# MCP server
 	mcp_host: str = "localhost"
