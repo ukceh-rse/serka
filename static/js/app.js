@@ -39,7 +39,7 @@ document.addEventListener("alpine:init", () => {
       this.thinking = true;
       if (this.aiEnabled) this.streamingChat();
       try {
-        const response = await fetch(`/query/semantic?q=${this.query}`);
+        const response = await fetch(`/v1/query/semantic?q=${this.query}`);
         this.results = await response.json();
       } catch (e) {
         console.error(e);
@@ -50,7 +50,7 @@ document.addEventListener("alpine:init", () => {
     async streamingChat() {
       this.agentStatus = { show: true, message: "Thinking..." };
       try {
-        const response = await fetch("/chat/stream", {
+        const response = await fetch("/v1/chat/stream", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -131,7 +131,7 @@ document.addEventListener("alpine:init", () => {
         type: feedbackType,
       };
       console.log(feedback_obj);
-      const response = await fetch(`/feedback/submit`, {
+      const response = await fetch(`/v1/feedback/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

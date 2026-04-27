@@ -1,6 +1,6 @@
 [project]
 name = "serka"
-version = "0.1.0"
+version = "0.1.0rc1"
 description = "Serka (serĉi ekologio) is a protoype search tool for the UKCEH NCUK project. It uses modern AI techniques (LLMs, RAG, Vector Stores) to enhance the EIDC catalogue's search functionality."
 readme = "README.md"
 authors = [
