@@ -65,7 +65,11 @@ NEO4J_PORT=7687
 AWS_DEFAULT_REGION=eu-west-2
 MODELS_EMBEDDING=amazon.titan-embed-text-v2:0
 MODELS_LLM=anthropic.claude-sonnet-4-6
+NEO4J_DATA_DIR=/opt/serka/neo4j
+FEEDBACK_DATA_DIR=/opt/serka/feedback
 ENV_CONTENT
+
+mkdir -p /opt/serka/neo4j/data /opt/serka/neo4j/logs /opt/serka/feedback
 
 git checkout rc-alpha >> $LOG_FILE 2>&1
 EOF_UBUNTU
