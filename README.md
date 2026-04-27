@@ -1,60 +1,69 @@
 # Serka
-Serka (serĉi ekologio) is a protoype search tool for the UKCEH NCUK project. It uses modern AI techniques (LLMs, RAG, Vector Stores) to enhance the EIDC catalogue's search functionality.
+Serka (serĉi ekologio) is a prototype search tool for the UKCEH NCUK project. It uses modern AI techniques (LLMs, RAG, knowledge graphs) to enhance the EIDC catalogue's search functionality.
+
+It is built with [FastAPI](https://fastapi.tiangolo.com/), [Neo4j](https://neo4j.com/), [Haystack](https://haystack.deepset.ai/), and [Pydantic AI](https://ai.pydantic.dev/), using Amazon Bedrock for LLM and embedding models.
 
 ## AWS Deployment
-Serka is now deployable on AWS infrastructure. For instructions see [`terraform/README.md`](terraform/README.md).
+For AWS deployment instructions see [`terraform/README.md`](terraform/README.md).
 
-## Podman Deployment
-Serka can be deployed using [podman](https://podman.io/). You must ensure you have `podman`, `podman-compose` and [`nvidia-container-toolkit`](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html) installed.
+## Running with Podman
 
-To run Serka and it's dependent services ([Ollama](https://ollama.com/), [Neo4j](https://neo4j.com/), [MondgoDB](https://www.mongodb.com/)) defined in `podman-compose.yml` use:
+Ensure you have [`podman`](https://podman.io/) and `podman-compose` installed.
+
+Copy `.env.example` to `.env` and fill in the required values:
 ```
-podman-compose --profile app up -d
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=<your password>
 ```
-> Note: Initially the Ollama service will download the required models listed in `config.yml`. This can take some time, but once the models are downloaded they should not need to be downloaded again.
 
-To stop the running services:
+### Run all services
+```
+podman-compose up -d
+```
+
+### Run only specific services
+
+To run just Neo4j (e.g. for local development while running the app outside of a container):
+```
+podman-compose up neo4j -d
+```
+
+To run Neo4j and the MCP server only:
+```
+podman-compose up neo4j mcp -d
+```
+
+The Neo4j browser UI is available at http://localhost:7474 when running locally.
+
+### Stop services
 ```
 podman-compose down
 ```
-> ⚠️ **Warning:** Serka is designed to work with a GPU and you may find certain features slow if running without access to a GPU. The GPU configuration is declared in `podman-compose.yml` via: `devices: nvidia.com/gpu=all` in the `ollama` service definition.
-
-## Ingest Data
-Data is ingested into Serka from the EIDC catalogue and the Legilo API. A convenience script `scripts/ingest-data.py` is provided to ingest data through a data pipeline that will parse, construct a knowledge graph, create embeddings and save to the neo4j database. To run the script you must ensure that you have configured the correct variable in a local `.env` file:
-```
-LEGILO_USERNAME=yourusername
-LEGILO_PASSWORD=yourpassword
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=password
-```
-The legilo username and password should be those that you use to access the legilo service. If you do not have access this stage will be skipped with a warning. The neo4j username should always be `neo4j` and the password can be any of your choosing.
-
-Once your `.env` file is set up you can run the ingestion pipeline:
-```
-uv run scripts/ingest-data.py <n>
-```
-Where `<n>` is the number of records from the EIDC catalogue you wish to ingest. Ingesting all records (over 2,000) from the EIDC can take several hours so for testing you may want to ingest a small number (default is 10).
 
 ## Development
+
 Ensure you have [uv](https://docs.astral.sh/uv/) installed and run:
 ```
 uv sync
 ```
-This will create a virtual environment and install the required dependencies. You can then activate the virtual environment with:
+
+For local development, start Neo4j via podman-compose and run the app directly:
 ```
-source .venv/bin/activate
-```
-Alternatively you can prepend commands with:
-```
-uv run
+podman-compose up neo4j -d
+uv run fastapi dev src/serka/main.py --port 8080
 ```
 
-### Running Locally
-The best way to run the Serka tool for development is to use podman to start the necessary services through podman-compose using the `dev` profile and then run the FastAPI Serka service locally:
-```
-podman-compose --profile dev up -d
-# or
-podman-compose up neo4j ollama mongodb -d
+## Ingest Data
 
-uv run fastapi run src/serka/main.py --port 8080
+Data is ingested from the EIDC catalogue and optionally the Legilo API. Ensure your `.env` contains the required Neo4j credentials and Legilo credentials (to ingest supporting docs):
 ```
+LEGILO_USERNAME=yourusername
+LEGILO_PASSWORD=yourpassword
+```
+
+Run the ingestion pipeline:
+```
+uv run scripts/ingest-data.py <n>
+```
+
+Where `<n>` is the number of EIDC records to ingest. Ingesting all records (2,000+) can take several hours — use a small number (default: 10) for testing.
