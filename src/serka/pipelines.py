@@ -3,7 +3,7 @@ from haystack import Pipeline
 from haystack.components.preprocessors import DocumentSplitter
 from serka.graph.embedders import BedrockNodeEmbedder
 from serka.graph.writers import Neo4jGraphWriter
-from serka.graph.extractors import EntityExtractor, TextExtractor
+from serka.graph.extractors import EntityExtractor, TextExtractor, DocumentTruncator
 from serka.fetchers import EIDCFetcher, LegiloFetcher
 from typing import Optional, Callable
 from haystack_integrations.components.embedders.amazon_bedrock import (
@@ -76,6 +76,7 @@ class PipelineBuilder:
 			"splitter",
 			DocumentSplitter(split_by="word", split_length=150, split_overlap=50),
 		)
+		p.add_component("truncator", DocumentTruncator())
 		p.add_component("doc_emb", self._create_document_embedder())
 		p.add_component("node_emb", self._create_node_embedder())
 		p.add_component(
@@ -96,7 +97,8 @@ class PipelineBuilder:
 		p.connect("legilo_fetcher.documents", "joiner.documents")
 
 		p.connect("joiner", "splitter")
-		p.connect("splitter", "doc_emb")
+		p.connect("splitter", "truncator")
+		p.connect("truncator", "doc_emb")
 		p.connect("doc_emb", "graph_writer.docs")
 
 		p.connect("ent_extractor", "node_emb")

@@ -112,6 +112,27 @@ class EntityExtractor:
 
 
 @component
+class DocumentTruncator:
+	def __init__(self, max_chars: int = 45_000):
+		self.max_chars = max_chars
+
+	@component.output_types(documents=List[Document])
+	def run(self, documents: List[Document]) -> Dict[str, List[Document]]:
+		truncated = []
+		for doc in documents:
+			if doc.content and len(doc.content) > self.max_chars:
+				logger.warning(
+					"Truncating document '%s' from %d to %d characters",
+					doc.meta.get("uri", "unknown"),
+					len(doc.content),
+					self.max_chars,
+				)
+				doc = Document(content=doc.content[: self.max_chars], meta=doc.meta)
+			truncated.append(doc)
+		return {"documents": truncated}
+
+
+@component
 class TextExtractor:
 	def __init__(self, fields: str):
 		self.fields = fields

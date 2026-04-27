@@ -67,14 +67,27 @@ class LegiloFetcher:
 		self.legilo_url = legilo_url
 		self.auth = (username, password)
 
+	@staticmethod
+	def _is_prose(content: str, min_whitespace_ratio: float = 0.05) -> bool:
+		if not content:
+			return False
+		return sum(c.isspace() for c in content) / len(content) >= min_whitespace_ratio
+
 	def extract_docs(self, json_data, title, uri):
 		extracted_docs = []
 		docs = json_data.get("success", {})
 		for filename, content in docs.items():
+			if not self._is_prose(content):
+				logger.warning(
+					"Skipping non-prose supporting document '%s' for '%s' (insufficient whitespace)",
+					filename,
+					uri,
+				)
+				continue
 			extracted_docs.append(
 				Document(
 					content=content,
-					meta={"title": title, "field": "SUPPORTING_DOC", "uri": uri},
+					meta={"title": title, "field": "SUPPORTING_DOC", "uri": uri, "filename": filename},
 				)
 			)
 		return extracted_docs
