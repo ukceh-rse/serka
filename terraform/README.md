@@ -52,8 +52,18 @@ To tear down the deployment simply use:
 terraform destroy
 ```
 
+## Teardown
+Currently the ALB needs to remain in operation when tearing down the deployment. To teardown and restart the EC2 instance alone use:
+```
+terraform destroy -target=aws_lb_target_group_attachment.app -target=aws_instance.app_server
+```
+The EC2 instance can then be restarted and associated back with the ALB using `terraform apply` again.
+
 ## Connect
-Currently the deployment does not have a publicly accessible domain. To access the web portal you must first install the [Session Manager Plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-debian-and-ubuntu.html) and then set up an ssm session using the `<EC2_INSTANCE_ID>` of the deployment:
+### URL
+The ALB can be connected to via the url: [https://serka.ceh.ac.uk](https://serka.ceh.ac.uk)
+### Using SMP and SSM via private IP
+The web portal can be accessed using [Session Manager Plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-debian-and-ubuntu.html) and then set up as an ssm session using the `<EC2_INSTANCE_ID>` of the deployment:
 ```
 aws ssm start-session \
   --target <EC2_INSTANCE_ID> \
