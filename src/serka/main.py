@@ -20,6 +20,11 @@ if os.path.isdir(_STATIC_DIR):
 	app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
+@app.get("/health")
+async def health():
+	return {"status": "ok"}
+
+
 @app.get("/")
 async def read_index():
 	return FileResponse(f"{_STATIC_DIR}/html/index.html")
