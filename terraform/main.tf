@@ -151,6 +151,10 @@ resource "aws_lb" "app" {
   subnets            = var.public_subnet_ids
 
   tags = { Name = "${var.instance_name}-alb" }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_lb_target_group" "app" {
