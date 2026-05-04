@@ -1,13 +1,12 @@
 from dataclasses import dataclass
 from haystack import Pipeline
 from haystack.components.preprocessors import DocumentSplitter
-from serka.graph.embedders import BedrockNodeEmbedder
+from serka.graph.embedders import BedrockNodeEmbedder, CachedDocumentEmbedder
 from serka.graph.writers import Neo4jGraphWriter
 from serka.graph.extractors import EntityExtractor, TextExtractor, DocumentTruncator
 from serka.fetchers import EIDCFetcher, LegiloFetcher
 from typing import Optional, Callable
 from haystack_integrations.components.embedders.amazon_bedrock import (
-	AmazonBedrockDocumentEmbedder,
 	AmazonBedrockTextEmbedder,
 )
 from haystack_integrations.components.generators.amazon_bedrock import (
@@ -43,7 +42,7 @@ class PipelineBuilder:
 		return BedrockNodeEmbedder(model=self.models_embedding)
 
 	def _create_document_embedder(self):
-		return AmazonBedrockDocumentEmbedder(model=self.models_embedding)
+		return CachedDocumentEmbedder(model=self.models_embedding)
 
 	def _create_llm_generator(
 		self, streaming_callback: Optional[Callable[[StreamingChunk], None]] = None

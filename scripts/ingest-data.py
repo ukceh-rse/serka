@@ -1,5 +1,6 @@
 import argparse
 import logging
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from serka.pipelines import PipelineBuilder
 from serka.settings import Settings
@@ -48,8 +49,13 @@ if __name__ == "__main__":
 		level=logging.DEBUG if args.debug else logging.INFO,
 		format="%(asctime)s %(name)s %(levelname)s %(message)s",
 	)
+	file_handler = logging.FileHandler("ingest.log")
+	file_handler.setLevel(logging.WARNING)
+	file_handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+	logging.getLogger().addHandler(file_handler)
 
 	pb = create_pipeline_builder()
 	p = pb.build_graph_pipeline()
-	result = p.run(data={"eidc_fetcher": {"rows": args.n}})
+	with logging_redirect_tqdm():
+		result = p.run(data={"eidc_fetcher": {"rows": args.n}})
 	logger.info(f"{result['graph_writer']}")
