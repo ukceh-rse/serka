@@ -1,5 +1,5 @@
-podman-compose -f container-compose-dev.yml down
-podman-compose -f container-compose-dev.yml up -d
+podman-compose down
+podman-compose up neo4j -d
 
 cd mcp-server
 pkill -f "src/serka-mcp/main.py" 2>/dev/null || true
