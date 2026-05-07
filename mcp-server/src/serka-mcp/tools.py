@@ -1,8 +1,7 @@
 from typing import Annotated, List, Literal, Optional, Union
 
+from app import embedder, geolocator, logger, mcp, neo4j_driver, reranker
 from geopy.location import Location
-
-from app import embedder, geolocator, logger, mcp, neo4j_driver
 from models import (
 	BoundingBox,
 	Dataset,
@@ -119,6 +118,7 @@ def search(
 	min_citations: Annotated[
 		Optional[int], "Minimum number of citations a dataset must have to be included."
 	] = None,
+	result_limit: Annotated[int, "How many result to return."] = 25,
 ) -> Union[List[SearchResult], Error]:
 	"""Performs a semantic search on the EIDC catalogue using the given search term.
 
@@ -150,6 +150,7 @@ def search(
 			nodes = session.execute_read(
 				search_query,
 				embedding=embedding,
+				limit=result_limit * 4,
 				bounding_box=bounding_box,
 				published_after=published_after,
 				published_before=published_before,
@@ -194,6 +195,21 @@ def search(
 							description=n["relationship_type"],
 						)
 					)
+			if len(search_results) > 1:
+				pairs = [
+					(
+						search_term,
+						sr.result.item.content
+						if sr.result.type == "TextChunk"
+						else f"{sr.result.item.name} {sr.dataset.title}",
+					)
+					for sr in search_results
+				]
+				ce_scores = reranker.predict(pairs, batch_size=128, show_progress_bar=False)
+				for sr, score in zip(search_results, ce_scores):
+					sr.score = float(score)
+				search_results.sort(key=lambda sr: sr.score, reverse=True)
+				search_results = search_results[:result_limit]
 			return search_results
 	except Exception as e:
 		logger.error(f'Error performing semantic search for "{search_term}": {str(e)}')

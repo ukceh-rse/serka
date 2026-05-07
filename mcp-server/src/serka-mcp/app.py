@@ -9,6 +9,7 @@ from haystack_integrations.components.embedders.amazon_bedrock import (
 	AmazonBedrockTextEmbedder,
 )
 from neo4j import Driver, GraphDatabase
+from sentence_transformers import CrossEncoder
 
 load_dotenv()
 
@@ -41,3 +42,4 @@ neo4j_driver: Driver = create_neo4j_driver(
 )
 
 embedder = AmazonBedrockTextEmbedder(model=f"{os.getenv('MODELS_EMBEDDING')}")
+reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", backend="onnx")
