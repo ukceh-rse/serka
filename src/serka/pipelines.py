@@ -15,7 +15,6 @@ from haystack_integrations.components.generators.amazon_bedrock import (
 )
 from haystack.dataclasses import StreamingChunk
 from haystack.components.joiners import DocumentJoiner
-from serka.graph.readers import Neo4jGraphReader
 from haystack_integrations.tools.mcp import MCPToolset, StreamableHttpServerInfo
 from haystack.components.agents import Agent
 
@@ -105,16 +104,3 @@ class PipelineBuilder:
 		p.connect("ent_extractor.relationships", "graph_writer.relations")
 		return p
 
-	def query_pipeline(self) -> Pipeline:
-		p = Pipeline()
-		p.add_component("embedder", self._create_text_embedder())
-		p.add_component(
-			"reader",
-			Neo4jGraphReader(
-				url=f"bolt://{self.neo4j_host}:{self.neo4j_port}",
-				username=self.neo4j_user,
-				password=self.neo4j_password,
-			),
-		)
-		p.connect("embedder", "reader")
-		return p

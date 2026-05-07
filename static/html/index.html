@@ -111,20 +111,20 @@
                 >
                     <div class="text-lg font-semibold">
                         <button
-                            @click="window.open(item.docs[0].document.metadata.url, '_blank')"
+                            @click="window.open(item.dataset.uri, '_blank')"
                             class="hero-text hover:underline text-left focus:outline-none"
-                            x-text="item.docs[0].document.metadata.title"
-                            :title="item.docs[0].document.metadata.title"
+                            x-text="item.dataset.title"
+                            :title="item.dataset.title"
                         ></button>
                     </div>
                     <div
-                        x-text="item.docs[0].document.metadata.url"
+                        x-text="item.dataset.uri"
                         class="text-xs h-5 ellipses break-all"
                     ></div>
                     <div
                         class="max-h-18 ellipsis-multiline text-gray-900 mt-3"
-                        x-text="item.docs[0].document.content"
-                        :title="item.docs[0].document.content"
+                        x-text="item.items[0].result.item.content"
+                        :title="item.items[0].result.item.content"
                     ></div>
 
                     <button
@@ -164,13 +164,10 @@
                                     Document Content
                                 </div>
                                 <div class="w-1/9 font-bold p-2">Section</div>
-                                <div class="w-1/9 font-bold p-2">
-                                    Subsection
-                                </div>
                                 <div class="w-1/9 font-bold p-2">Score</div>
                             </div>
                             <div class="max-h-96 overflow-scroll">
-                                <template x-for="doc in item.docs">
+                                <template x-for="chunk in item.items">
                                     <div
                                         x-data="{expand: false}"
                                         class="flex mb-3"
@@ -189,20 +186,16 @@
                                                 ></i>
                                             </button>
                                             <span
-                                                x-text="doc.document.content"
+                                                x-text="chunk.result.item.content"
                                             ></span>
                                         </div>
                                         <div
                                             class="w-1/9 p-2 ellipses"
-                                            x-text="doc.document.metadata.section"
-                                        ></div>
-                                        <div
-                                            class="w-1/9 p-2 break-all"
-                                            x-text="doc.document.metadata.subsection"
+                                            x-text="chunk.description"
                                         ></div>
                                         <div
                                             class="w-1/9 p-2"
-                                            x-text="parseFloat(doc.score).toFixed(3)"
+                                            x-text="parseFloat(chunk.score).toFixed(3)"
                                         ></div>
                                     </div>
                                 </template>

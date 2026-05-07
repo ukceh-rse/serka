@@ -40,7 +40,8 @@ document.addEventListener("alpine:init", () => {
       if (this.aiEnabled) this.streamingChat();
       try {
         const response = await fetch(`/v1/query/semantic?q=${this.query}`);
-        this.results = await response.json();
+        const flat = await response.json();
+        this.results = this.groupResults(flat);
       } catch (e) {
         console.error(e);
       } finally {
@@ -166,6 +167,15 @@ document.addEventListener("alpine:init", () => {
     },
     closePrivacyNotice() {
       this.privacyNotice.show = false;
+    },
+    groupResults(flat) {
+      const groups = {};
+      for (const item of flat) {
+        const key = item.dataset.uri;
+        if (!groups[key]) groups[key] = { dataset: item.dataset, items: [] };
+        groups[key].items.push(item);
+      }
+      return Object.values(groups);
     },
   }));
 });

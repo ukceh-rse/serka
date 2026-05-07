@@ -35,16 +35,16 @@ class Dataset(BaseModel):
 		None, description="Date when the dataset was published"
 	)
 	north_boundary: Optional[float] = Field(
-		description="The northern most latitude of the datasets spatial boundary."
+		None, description="The northern most latitude of the datasets spatial boundary."
 	)
 	south_boundary: Optional[float] = Field(
-		description="The southern most latitude of the datasets spatial boundary."
+		None, description="The southern most latitude of the datasets spatial boundary."
 	)
 	west_boundary: Optional[float] = Field(
-		description="The western most longitude of the datasets spatial boundary."
+		None, description="The western most longitude of the datasets spatial boundary."
 	)
 	east_boundary: Optional[float] = Field(
-		description="The eastern most longitude of the datasets spatial boundary."
+		None, description="The eastern most longitude of the datasets spatial boundary."
 	)
 
 

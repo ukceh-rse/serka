@@ -1,7 +1,7 @@
-"""Mock implementations of DAO, FeedbackLogger, and the chat stream function.
+"""Mock implementations for test mode.
 
 Applied via app.dependency_overrides when TEST_MODE=true, allowing the frontend
-to be developed and tested without Neo4j, MongoDB, Bedrock, or the MCP server.
+to be developed and tested without Neo4j, Bedrock, or the MCP server.
 """
 
 import asyncio
@@ -11,88 +11,64 @@ from typing import Any, Dict, List
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 
-from serka.models import Document, GroupedDocuments, ScoredDocument
-
-_MOCK_RESULTS: List[GroupedDocuments] = [
-	GroupedDocuments(
-		groupedby="Long-term soil carbon stocks across UK upland ecosystems, 1978-2019",
-		docs=[
-			ScoredDocument(
-				score=0.951,
-				document=Document(
-					content=(
-						"This dataset contains measurements of organic carbon stocks in upland "
-						"soils across the UK, collected between 1978 and 2019. Samples were taken "
-						"at 0–10 cm, 10–20 cm, and 20–30 cm depths using standardised coring "
-						"methods. Sites span peatlands, heathlands, and montane grasslands."
-					),
-					metadata={
-						"title": "Long-term soil carbon stocks across UK upland ecosystems, 1978-2019",
-						"url": "https://catalogue.ceh.ac.uk/documents/soil-carbon-upland-1978-2019",
-						"section": "Abstract",
-						"subsection": "Overview",
-					},
+_MOCK_RESULTS: List[dict] = [
+	{
+		"result": {
+			"item": {
+				"doc_id": "mock-1",
+				"content": (
+					"This dataset contains measurements of organic carbon stocks in upland "
+					"soils across the UK, collected between 1978 and 2019. Samples were taken "
+					"at 0–10 cm, 10–20 cm, and 20–30 cm depths using standardised coring "
+					"methods. Sites span peatlands, heathlands, and montane grasslands."
 				),
-			),
-			ScoredDocument(
-				score=0.887,
-				document=Document(
-					content=(
-						"Field sampling followed the Countryside Survey protocol. Carbon content "
-						"was determined by loss-on-ignition at 550°C for 4 hours. Bulk density "
-						"was measured on undisturbed cores."
-					),
-					metadata={
-						"title": "Long-term soil carbon stocks across UK upland ecosystems, 1978-2019",
-						"url": "https://catalogue.ceh.ac.uk/documents/soil-carbon-upland-1978-2019",
-						"section": "Methods",
-						"subsection": "Sample Processing",
-					},
+			},
+			"type": "TextChunk",
+		},
+		"dataset": {
+			"uri": "https://catalogue.ceh.ac.uk/documents/soil-carbon-upland-1978-2019",
+			"title": "Long-term soil carbon stocks across UK upland ecosystems, 1978-2019",
+		},
+		"score": 0.951,
+		"description": "HAS_CHUNK",
+	},
+	{
+		"result": {
+			"item": {
+				"doc_id": "mock-2",
+				"content": (
+					"Macroinvertebrate community composition data collected from 47 sites "
+					"within the River Wye catchment. Kick-net sampling was conducted in "
+					"spring and autumn following standard EA methodology."
 				),
-			),
-		],
-	),
-	GroupedDocuments(
-		groupedby="Freshwater macroinvertebrate assemblages, River Wye catchment, 2015-2022",
-		docs=[
-			ScoredDocument(
-				score=0.913,
-				document=Document(
-					content=(
-						"Macroinvertebrate community composition data collected from 47 sites "
-						"within the River Wye catchment. Kick-net sampling was conducted in "
-						"spring and autumn following standard EA methodology."
-					),
-					metadata={
-						"title": "Freshwater macroinvertebrate assemblages, River Wye catchment, 2015-2022",
-						"url": "https://catalogue.ceh.ac.uk/documents/macroinvert-wye-2015-2022",
-						"section": "Abstract",
-						"subsection": "Overview",
-					},
+			},
+			"type": "TextChunk",
+		},
+		"dataset": {
+			"uri": "https://catalogue.ceh.ac.uk/documents/macroinvert-wye-2015-2022",
+			"title": "Freshwater macroinvertebrate assemblages, River Wye catchment, 2015-2022",
+		},
+		"score": 0.913,
+		"description": "HAS_CHUNK",
+	},
+	{
+		"result": {
+			"item": {
+				"doc_id": "mock-3",
+				"content": (
+					"Weekly transect counts of butterfly species from over 2,500 sites across "
+					"the UK, recorded by volunteer recorders between April and September each year."
 				),
-			),
-		],
-	),
-	GroupedDocuments(
-		groupedby="UK Butterfly Monitoring Scheme transect counts, 2000-2023",
-		docs=[
-			ScoredDocument(
-				score=0.872,
-				document=Document(
-					content=(
-						"Weekly transect counts of butterfly species from over 2,500 sites across "
-						"the UK, recorded by volunteer recorders between April and September each year."
-					),
-					metadata={
-						"title": "UK Butterfly Monitoring Scheme transect counts, 2000-2023",
-						"url": "https://catalogue.ceh.ac.uk/documents/ukbms-transects-2000-2023",
-						"section": "Abstract",
-						"subsection": "Overview",
-					},
-				),
-			),
-		],
-	),
+			},
+			"type": "TextChunk",
+		},
+		"dataset": {
+			"uri": "https://catalogue.ceh.ac.uk/documents/ukbms-transects-2000-2023",
+			"title": "UK Butterfly Monitoring Scheme transect counts, 2000-2023",
+		},
+		"score": 0.872,
+		"description": "HAS_CHUNK",
+	},
 ]
 
 _MOCK_STREAM_EVENTS = [
@@ -115,9 +91,11 @@ _MOCK_STREAM_EVENTS = [
 ]
 
 
-class MockDAO:
-	def query(self, query: str) -> List[GroupedDocuments]:
+async def get_mock_mcp_search():
+	async def _search(q: str) -> list:
 		return _MOCK_RESULTS
+
+	return _search
 
 
 class MockFeedbackLogger:

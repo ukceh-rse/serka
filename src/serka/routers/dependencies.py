@@ -1,17 +1,17 @@
+import json
 from functools import lru_cache
 from typing import Any, Callable
 
 from fastapi import Depends
+from fastmcp import Client
 from starlette.requests import Request
 from starlette.responses import Response
 
-from serka.dao import DAO
 from serka.feedback import FeedbackLogger
 from serka.settings import Settings
 
 StreamFn = Callable[[Any, Request], Response]
 
-_dao: DAO | None = None
 _feedback_logger: FeedbackLogger | None = None
 _stream_fn: StreamFn | None = None
 
@@ -21,22 +21,13 @@ def get_settings() -> Settings:
 	return Settings()
 
 
-def get_dao(settings: Settings = Depends(get_settings)) -> DAO:
-	global _dao
-	if _dao is None:
-		_dao = DAO(
-			neo4j_host=settings.neo4j_host,
-			neo4j_port=settings.neo4j_port,
-			neo4j_user=settings.neo4j_username,
-			neo4j_password=settings.neo4j_password,
-			mcp_host=settings.mcp_host,
-			mcp_port=settings.mcp_port,
-			legilo_user=settings.legilo_username,
-			legilo_password=settings.legilo_password,
-			models_embedding=settings.models_embedding,
-			models_llm=settings.models_llm,
-		)
-	return _dao
+async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable:
+	async def _search(q: str) -> list:
+		async with Client(f"http://{settings.mcp_host}:{settings.mcp_port}/mcp") as client:
+			result = await client.call_tool("search", {"search_term": q})
+		return json.loads(result.content[0].text)
+
+	return _search
 
 
 def get_feedback_logger(settings: Settings = Depends(get_settings)) -> FeedbackLogger:
