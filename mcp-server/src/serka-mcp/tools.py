@@ -1,6 +1,7 @@
+import time
 from typing import Annotated, List, Literal, Optional, Union
 
-from app import embedder, geolocator, logger, mcp, neo4j_driver, reranker
+from app import embedder, geolocator, logger, mcp, neo4j_driver, reranker, reranking_enabled
 from geopy.location import Location
 from models import (
 	BoundingBox,
@@ -14,13 +15,71 @@ from models import (
 	SupportingDocument,
 	TextChunk,
 )
-from queries import dataset_cypher_query, list_query, search_query
+from queries import dataset_cypher_query, escape_fts_query, fulltext_search_query, list_query, search_query
 
 _RESULT_TYPE_LABEL: dict[str, str] = {
 	"dataset": "TextChunk",
 	"person": "Person",
 	"organisation": "Organisation",
 }
+
+
+def _result_key(sr: SearchResult) -> str:
+	if sr.result.type == "TextChunk":
+		return f"TextChunk::{hash(sr.result.item.content)}"
+	return f"{sr.result.type}::{sr.result.item.uri}"
+
+
+def _rrf_merge(lists: list[list[SearchResult]], k: int = 60) -> list[SearchResult]:
+	scores: dict[str, float] = {}
+	items: dict[str, SearchResult] = {}
+	for ranked_list in lists:
+		for rank, sr in enumerate(ranked_list, start=1):
+			key = _result_key(sr)
+			scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
+			if key not in items:
+				items[key] = sr
+	return [items[k] for k in sorted(scores, key=lambda k: scores[k], reverse=True)]
+
+
+def _build_search_results(
+	nodes: list[dict], label_filter: str | None
+) -> list[SearchResult]:
+	results: list[SearchResult] = []
+	for n in nodes:
+		labels = n["start_labels"]
+		if label_filter and label_filter not in labels:
+			continue
+		if "TextChunk" in labels:
+			results.append(
+				SearchResult(
+					result=ResultItem(item=TextChunk(**n["start_node"]), type="TextChunk"),
+					dataset=Dataset(**n["connected_node"]),
+					score=n["score"],
+					description=n["relationship_type"],
+				)
+			)
+		elif "Person" in labels and "Dataset" in n["connected_labels"]:
+			results.append(
+				SearchResult(
+					result=ResultItem(item=Person(**n["start_node"]), type="Person"),
+					dataset=Dataset(**n["connected_node"]),
+					score=n["score"],
+					description=n["relationship_type"],
+				)
+			)
+		elif "Organisation" in labels and "Dataset" in n["connected_labels"]:
+			results.append(
+				SearchResult(
+					result=ResultItem(
+						item=Organisation(**n["start_node"]), type="Organisation"
+					),
+					dataset=Dataset(**n["connected_node"]),
+					score=n["score"],
+					description=n["relationship_type"],
+				)
+			)
+	return results
 
 
 @mcp.resource("dataset://{uri}")
@@ -144,10 +203,15 @@ def search(
 		f"after={published_after}, before={published_before}, min_citations={min_citations}]"
 	)
 	try:
+		t0 = time.perf_counter()
+
 		label_filter = _RESULT_TYPE_LABEL.get(result_type) if result_type else None
 		embedding = embedder.run(search_term)["embedding"]
+		logger.info(f"  embed:    {(time.perf_counter() - t0) * 1000:.0f}ms")
+
 		with neo4j_driver.session(database="neo4j") as session:
-			nodes = session.execute_read(
+			t1 = time.perf_counter()
+			vector_nodes = session.execute_read(
 				search_query,
 				embedding=embedding,
 				limit=result_limit * 4,
@@ -156,61 +220,48 @@ def search(
 				published_before=published_before,
 				min_citations=min_citations,
 			)
-			search_results: List[SearchResult] = []
-			for n in nodes:
-				labels = n["start_labels"]
-				if label_filter and label_filter not in labels:
-					continue
-				if "TextChunk" in labels:
-					search_results.append(
-						SearchResult(
-							result=ResultItem(
-								item=TextChunk(**n["start_node"]), type="TextChunk"
-							),
-							dataset=Dataset(**n["connected_node"]),
-							score=n["score"],
-							description=n["relationship_type"],
-						)
-					)
-				elif "Person" in labels and "Dataset" in n["connected_labels"]:
-					search_results.append(
-						SearchResult(
-							result=ResultItem(
-								item=Person(**n["start_node"]), type="Person"
-							),
-							dataset=Dataset(**n["connected_node"]),
-							score=n["score"],
-							description=n["relationship_type"],
-						)
-					)
-				elif "Organisation" in labels and "Dataset" in n["connected_labels"]:
-					search_results.append(
-						SearchResult(
-							result=ResultItem(
-								item=Organisation(**n["start_node"]),
-								type="Organisation",
-							),
-							dataset=Dataset(**n["connected_node"]),
-							score=n["score"],
-							description=n["relationship_type"],
-						)
-					)
-			if len(search_results) > 1:
-				pairs = [
-					(
-						search_term,
-						sr.result.item.content
-						if sr.result.type == "TextChunk"
-						else f"{sr.result.item.name} {sr.dataset.title}",
-					)
-					for sr in search_results
-				]
-				ce_scores = reranker.predict(pairs, batch_size=128, show_progress_bar=False)
-				for sr, score in zip(search_results, ce_scores):
-					sr.score = float(score)
-				search_results.sort(key=lambda sr: sr.score, reverse=True)
-				search_results = search_results[:result_limit]
-			return search_results
+			logger.info(f"  vector:   {(time.perf_counter() - t1) * 1000:.0f}ms ({len(vector_nodes)} rows)")
+
+			t2 = time.perf_counter()
+			try:
+				ft_nodes = session.execute_read(
+					fulltext_search_query,
+					search_term=escape_fts_query(search_term),
+					limit=result_limit * 4,
+					bounding_box=bounding_box,
+					published_after=published_after,
+					published_before=published_before,
+					min_citations=min_citations,
+				)
+				logger.info(f"  fts:      {(time.perf_counter() - t2) * 1000:.0f}ms ({len(ft_nodes)} rows)")
+			except Exception as fts_err:
+				logger.warning(f"FTS query failed, falling back to vector-only: {fts_err}")
+				ft_nodes = []
+
+			vector_results = _build_search_results(vector_nodes, label_filter)
+			ft_results = _build_search_results(ft_nodes, label_filter)
+			search_results = _rrf_merge([vector_results, ft_results])
+
+		if reranking_enabled and len(search_results) > 1:
+			t3 = time.perf_counter()
+			pairs = [
+				(
+					search_term,
+					sr.result.item.content
+					if sr.result.type == "TextChunk"
+					else f"{sr.result.item.name} {sr.dataset.title}",
+				)
+				for sr in search_results
+			]
+			ce_scores = reranker.predict(pairs, batch_size=128, show_progress_bar=False)
+			for sr, score in zip(search_results, ce_scores):
+				sr.score = float(score)
+			search_results.sort(key=lambda sr: sr.score, reverse=True)
+			search_results = search_results[:result_limit]
+			logger.info(f"  rerank:   {(time.perf_counter() - t3) * 1000:.0f}ms ({len(pairs)} pairs → {len(search_results)} results)")
+
+		logger.info(f"  total:    {(time.perf_counter() - t0) * 1000:.0f}ms")
+		return search_results
 	except Exception as e:
 		logger.error(f'Error performing semantic search for "{search_term}": {str(e)}')
 		return Error(

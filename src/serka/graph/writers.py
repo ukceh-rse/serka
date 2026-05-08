@@ -100,6 +100,14 @@ class Neo4jGraphWriter:
 		return result
 
 	@staticmethod
+	def create_fulltext_index(tx):
+		tx.run(
+			"CREATE FULLTEXT INDEX ft_search IF NOT EXISTS "
+			"FOR (n:Dataset|TextChunk|Person|Organisation) ON EACH [n.title, n.content, n.name] "
+			"OPTIONS {indexConfig: {`fulltext.analyzer`: 'english'}}"
+		)
+
+	@staticmethod
 	def create_graph(
 		tx,
 		nodes_and_types: Dict[str, List[Dict[str, Any]]],
@@ -129,6 +137,7 @@ class Neo4jGraphWriter:
 		) as driver:
 			with driver.session(database="neo4j") as session:
 				index_created = session.execute_write(Neo4jGraphWriter.create_index)
+				session.execute_write(Neo4jGraphWriter.create_fulltext_index)
 				print(index_created)
 				node_result, relation_result = session.execute_write(
 					Neo4jGraphWriter.create_graph, nodes, relations, docs

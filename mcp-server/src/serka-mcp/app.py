@@ -43,3 +43,4 @@ neo4j_driver: Driver = create_neo4j_driver(
 
 embedder = AmazonBedrockTextEmbedder(model=f"{os.getenv('MODELS_EMBEDDING')}")
 reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", backend="onnx")
+reranking_enabled = os.getenv("RERANKING_ENABLED", "true").lower() == "true"
