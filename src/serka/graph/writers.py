@@ -2,6 +2,13 @@ from haystack import component, Document
 from typing import Dict, List, Any, Tuple
 from neo4j import GraphDatabase
 
+_BATCH_SIZE = 500
+
+
+def _batched(lst: list, n: int):
+    for i in range(0, len(lst), n):
+        yield lst[i : i + n]
+
 
 @component
 class Neo4jGraphWriter:
@@ -13,74 +20,69 @@ class Neo4jGraphWriter:
 		self.password = password
 
 	@staticmethod
-	def create_nodes(tx, nodes_and_types) -> Dict[str, int]:
-		nodes_created: Dict[str, int] = dict()
-		for node_type, node_list in nodes_and_types.items():
-			# MERGE only on the stable unique key to avoid null-property errors.
-			# All other properties are written with SET after the merge.
-			query = (
-				"UNWIND $nodes as node "
-				f"MERGE (n:{node_type}:embedded {{uri: node.uri}}) "
-				"SET n += node "
-				"RETURN n"
-			)
-			result = tx.run(query, nodes=node_list)
-			nodes_created[node_type] = len(result.data())
-		return nodes_created
-
-	@staticmethod
-	def create_relations(tx, relations_and_types) -> Dict[str, int]:
-		relations_created: Dict[str, int] = dict()
-		for relation_type, relation_list in relations_and_types.items():
-			query = (
-				"UNWIND $relations as relation "
-				f"MATCH (a), (b) "
-				"WHERE a.uri = relation[0] AND b.uri = relation[1] "
-				f"MERGE (a)-[:{relation_type}]->(b) "
-				"RETURN COUNT(*)"
-			)
-			result = tx.run(query, relations=relation_list)
-			relations_created[relation_type] = result.data()[0]["COUNT(*)"]
-		return relations_created
-
-	@staticmethod
-	def create_doc_nodes(tx, docs: List[Dict[str, Any]]) -> int:
-		query = (
-			"UNWIND $docs as doc "
-			"MERGE (d:TextChunk:embedded {doc_id: doc.id, content: doc.content, embedding: doc.embedding}) "
-			"RETURN d"
+	def _write_nodes(tx, node_type: str, batch: List[Dict[str, Any]]) -> int:
+		result = tx.run(
+			"UNWIND $nodes as node "
+			f"CREATE (n:{node_type}:embedded) "
+			"SET n = node "
+			"RETURN n",
+			nodes=batch,
 		)
-		result = tx.run(query, docs=docs)
-		docs_created = len(result.data())
-		return docs_created
+		return len(result.data())
 
 	@staticmethod
-	def unpack_doc_relations(
-		docs: List[Dict[str, Any]],
-	) -> Dict[str, List[Tuple[str, str]]]:
+	def _write_doc_nodes(tx, batch: List[Dict[str, Any]]) -> int:
+		result = tx.run(
+			"UNWIND $docs as doc "
+			"CREATE (d:TextChunk:embedded {doc_id: doc.id, content: doc.content, embedding: doc.embedding}) "
+			"RETURN d",
+			docs=batch,
+		)
+		return len(result.data())
+
+	@staticmethod
+	def _write_relations(tx, relation_type: str, batch: List[Tuple[str, str]]) -> int:
+		result = tx.run(
+			"UNWIND $relations as relation "
+			f"MATCH (a:embedded {{uri: relation[0]}}), (b:embedded {{uri: relation[1]}}) "
+			f"CREATE (a)-[:{relation_type}]->(b) "
+			"RETURN count(*) AS created",
+			relations=batch,
+		)
+		return result.data()[0]["created"]
+
+	@staticmethod
+	def _write_doc_relations(tx, relation_type: str, batch: List[Tuple[str, str]]) -> int:
+		result = tx.run(
+			"UNWIND $relations as relation "
+			f"MATCH (a:TextChunk {{doc_id: relation[0]}}), (b:embedded {{uri: relation[1]}}) "
+			f"CREATE (a)-[:{relation_type}]->(b) "
+			"RETURN count(*) AS created",
+			relations=batch,
+		)
+		return result.data()[0]["created"]
+
+	@staticmethod
+	def _unpack_doc_relations(docs: List[Dict[str, Any]]) -> Dict[str, List[Tuple[str, str]]]:
 		relations: Dict[str, List[Tuple[str, str]]] = {}
 		for doc in docs:
-			field = str(doc.get("field", "")).upper() + "_OF"
-			if field not in relations:
-				relations[field] = []
-			relations[field].append((doc["id"], doc["uri"]))
+			rel_type = str(doc.get("field", "")).upper() + "_OF"
+			relations.setdefault(rel_type, []).append((doc["id"], doc["uri"]))
 		return relations
 
 	@staticmethod
-	def create_doc_relations(tx, docs: List[Dict[str, Any]]) -> Dict[str, int]:
-		relations = Neo4jGraphWriter.unpack_doc_relations(docs)
-		relations_created: Dict[str, int] = dict()
-		for relation_type, relation_list in relations.items():
-			query = (
-				"UNWIND $relations as relation "
-				f"MATCH (a:TextChunk), (b) "
-				"WHERE a.doc_id = relation[0] AND b.uri = relation[1] "
-				f"MERGE (a)-[:{relation_type}]->(b) "
-				"RETURN COUNT(*)"
-			)
-			result = tx.run(query, relations=relation_list)
-			relations_created[relation_type] = result.data()[0]["COUNT(*)"]
-		return relations_created
+	def _create_lookup_indexes(tx) -> None:
+		tx.run("CREATE CONSTRAINT embedded_uri IF NOT EXISTS FOR (n:embedded) REQUIRE n.uri IS UNIQUE")
+		tx.run("CREATE INDEX textchunk_doc_id IF NOT EXISTS FOR (n:TextChunk) ON (n.doc_id)")
+
+	@staticmethod
+	def _create_search_indexes(tx) -> None:
+		tx.run("CREATE VECTOR INDEX vec_lookup IF NOT EXISTS FOR (n:embedded) ON n.embedding")
+		tx.run(
+			"CREATE FULLTEXT INDEX ft_search IF NOT EXISTS "
+			"FOR (n:Dataset|TextChunk|Person|Organisation) ON EACH [n.title, n.content, n.name] "
+			"OPTIONS {indexConfig: {`fulltext.analyzer`: 'english'}}"
+		)
 
 	@staticmethod
 	def doc_to_dict(doc: Document) -> Dict[str, Any]:
@@ -92,37 +94,6 @@ class Neo4jGraphWriter:
 			"embedding": doc.embedding,
 		}
 
-	@staticmethod
-	def create_index(tx):
-		query = "CREATE VECTOR INDEX vec_lookup IF NOT EXISTS FOR (n:embedded) ON n.embedding"
-		result = tx.run(query)
-		result = result.data()
-		return result
-
-	@staticmethod
-	def create_fulltext_index(tx):
-		tx.run(
-			"CREATE FULLTEXT INDEX ft_search IF NOT EXISTS "
-			"FOR (n:Dataset|TextChunk|Person|Organisation) ON EACH [n.title, n.content, n.name] "
-			"OPTIONS {indexConfig: {`fulltext.analyzer`: 'english'}}"
-		)
-
-	@staticmethod
-	def create_graph(
-		tx,
-		nodes_and_types: Dict[str, List[Dict[str, Any]]],
-		relations_and_types: Dict[str, List[Tuple[str, str]]],
-		docs: List[Document],
-	) -> Tuple[Dict[str, int], Dict[str, int]]:
-		nodes_created = Neo4jGraphWriter.create_nodes(tx, nodes_and_types)
-		relations_created = Neo4jGraphWriter.create_relations(tx, relations_and_types)
-
-		docs_as_dicts = [Neo4jGraphWriter.doc_to_dict(doc) for doc in docs]
-		nodes_created["Document"] = Neo4jGraphWriter.create_doc_nodes(tx, docs_as_dicts)
-		doc_relations_created = Neo4jGraphWriter.create_doc_relations(tx, docs_as_dicts)
-
-		return nodes_created, relations_created | doc_relations_created
-
 	@component.output_types(
 		nodes_created=Dict[str, int], relations_created=Dict[str, int]
 	)
@@ -132,14 +103,46 @@ class Neo4jGraphWriter:
 		relations: Dict[str, List[Tuple[str, str]]],
 		docs: List[Document],
 	) -> Dict[str, Any]:
-		with GraphDatabase.driver(
-			self.url, auth=(self.username, self.password)
-		) as driver:
+		docs_as_dicts = [self.doc_to_dict(doc) for doc in docs]
+
+		with GraphDatabase.driver(self.url, auth=(self.username, self.password)) as driver:
 			with driver.session(database="neo4j") as session:
-				index_created = session.execute_write(Neo4jGraphWriter.create_index)
-				session.execute_write(Neo4jGraphWriter.create_fulltext_index)
-				print(index_created)
-				node_result, relation_result = session.execute_write(
-					Neo4jGraphWriter.create_graph, nodes, relations, docs
+
+				# Phase 1: bulk-create nodes in batches
+				node_result: Dict[str, int] = {}
+				for node_type, node_list in nodes.items():
+					unique = list({n["uri"]: n for n in node_list}.values())
+					node_result[node_type] = sum(
+						session.execute_write(Neo4jGraphWriter._write_nodes, node_type, batch)
+						for batch in _batched(unique, _BATCH_SIZE)
+					)
+
+				unique_docs = list({d["id"]: d for d in docs_as_dicts}.values())
+				node_result["Document"] = sum(
+					session.execute_write(Neo4jGraphWriter._write_doc_nodes, batch)
+					for batch in _batched(unique_docs, _BATCH_SIZE)
 				)
+
+				# Phase 2: lookup indexes before relationship MATCH
+				session.execute_write(Neo4jGraphWriter._create_lookup_indexes)
+
+				# Phase 3: create relationships in batches
+				relation_result: Dict[str, int] = {}
+				for relation_type, relation_list in relations.items():
+					unique = list({(r[0], r[1]): r for r in relation_list}.values())
+					relation_result[relation_type] = sum(
+						session.execute_write(Neo4jGraphWriter._write_relations, relation_type, batch)
+						for batch in _batched(unique, _BATCH_SIZE)
+					)
+
+				for rel_type, rel_list in Neo4jGraphWriter._unpack_doc_relations(docs_as_dicts).items():
+					unique = list({(r[0], r[1]): r for r in rel_list}.values())
+					relation_result[rel_type] = sum(
+						session.execute_write(Neo4jGraphWriter._write_doc_relations, rel_type, batch)
+						for batch in _batched(unique, _BATCH_SIZE)
+					)
+
+				# Phase 4: build search indexes over the completed dataset
+				session.execute_write(Neo4jGraphWriter._create_search_indexes)
+
 		return {"nodes_created": node_result, "relations_created": relation_result}
