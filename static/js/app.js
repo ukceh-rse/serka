@@ -15,6 +15,8 @@ document.addEventListener("alpine:init", () => {
     aiEnabled: false,
     thinking: false,
     splash: true,
+    hasSearched: false,
+    showAiTooltip: false,
     modal: {
       show: false,
       item: "",
@@ -31,6 +33,15 @@ document.addEventListener("alpine:init", () => {
       show: true,
       accepted: false,
     },
+    async typeQuery(text) {
+      this.query = "";
+      for (const char of text) {
+        this.query += char;
+        await new Promise(r => setTimeout(r, 45));
+      }
+      this.aiEnabled = true;
+      this.search();
+    },
     async search() {
       this.splash = false;
       this.results = [];
@@ -42,6 +53,13 @@ document.addEventListener("alpine:init", () => {
         const response = await fetch(`/v1/query/semantic?q=${this.query}`);
         const flat = await response.json();
         this.results = this.groupResults(flat);
+        if (!this.hasSearched) {
+          this.hasSearched = true;
+          if (!this.aiEnabled) {
+            this.showAiTooltip = true;
+            setTimeout(() => { this.showAiTooltip = false; }, 5000);
+          }
+        }
       } catch (e) {
         console.error(e);
       } finally {

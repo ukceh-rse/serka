@@ -12,8 +12,8 @@
 
 @layer base {
     html {
-        font-family: 'Lato', sans-serif;
-        color: #575656;
+        font-family: 'Suisse International', Arial, sans-serif;
+        color: #1a1a1a;
     }
 
     h1,
@@ -22,7 +22,7 @@
     h4,
     h5,
     h6 {
-        font-family: 'Montserrat', sans-serif;
+        font-family: 'Suisse International', Arial, sans-serif;
         font-weight: 600;
     }
 }
@@ -53,21 +53,49 @@ button {
     cursor: pointer;
 }
 
+/* Water blue (#477AE2) — brand interactive colour, passes white-text contrast */
 .hero-text {
-    color: #0483a4;
+    color: #477AE2;
 }
 
 a {
-    color: #0483a4;
+    color: #477AE2;
     font-weight: bold;
 }
 
 a:hover {
-    text-decoration: underline;;
+    text-decoration: underline;
 }
 
 .hero-bg {
-    background-color: #0483a4;
+    background-color: #000000;
+}
+
+.result-card {
+    border-left: 3px solid #90A968;
+}
+
+.section-label {
+    color: #90A968;
+}
+
+/* Air tint (#D6EAE6) background with Land (#90A968) border — brand info/notice style */
+.example-query {
+    background-color: #f5f9f7;
+    border: 1px solid #c8d9b0;
+    color: #6b7280;
+    transition: background-color 0.15s ease;
+}
+
+.example-query:hover {
+    background-color: #e1ead9;
+    color: #1a1a1a;
+}
+
+.brand-notice {
+    background-color: #D6EAE6;
+    border: 1px solid #90A968;
+    color: #1a1a1a;
 }
 
 .modal {
