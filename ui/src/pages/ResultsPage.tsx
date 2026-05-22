@@ -1,18 +1,23 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Box, Container, Divider, Typography } from '@mui/material'
+import { Box, Container, Typography } from '@mui/material'
 import SearchBar from '../components/SearchBar'
 import ResultCard from '../components/ResultCard'
 import AISummary from '../components/AISummary'
 import { useSearchStore } from '../stores/searchStore'
 import { search } from '../api/search'
+import { streamSummary } from '../api/chat'
 
 export default function ResultsPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const q = params.get('q') ?? ''
-  const { query, results, loading, error, setQuery, setResults, setLoading, setError, resetAiSummary } =
-    useSearchStore()
+  const {
+    query, results, loading, error,
+    setQuery, setResults, setLoading, setError,
+    aiSummaryEnabled, aiSummary, aiLoading,
+    toggleAiSummary, appendAiSummary, setAiThinking, setAiLoading, resetAiSummary,
+  } = useSearchStore()
 
   useEffect(() => {
     if (!q) return
@@ -31,30 +36,49 @@ export default function ResultsPage() {
     navigate(`/search?q=${encodeURIComponent(newQ)}`)
   }
 
+  const handleAiSummary = async () => {
+    toggleAiSummary()
+    if (!aiSummaryEnabled && !aiSummary && !aiLoading) {
+      setAiLoading(true)
+      try {
+        await streamSummary(q, (event) => {
+          if (event.type === 'THINKING_START') setAiThinking(true)
+          if (event.type === 'THINKING_END') setAiThinking(false)
+          if (event.type === 'TEXT_MESSAGE_CONTENT' && event.delta) appendAiSummary(event.delta)
+          if (event.type === 'RUN_FINISHED') setAiLoading(false)
+        })
+      } catch {
+        setAiLoading(false)
+      }
+    }
+  }
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4, maxWidth: 720 }}>
-        <SearchBar onSearch={handleSearch} loading={loading} initialValue={q} />
+      <Box sx={{ mb: 4 }}>
+        <SearchBar
+          onSearch={handleSearch}
+          loading={loading}
+          initialValue={q}
+          onAiSummary={results.length > 0 ? handleAiSummary : undefined}
+          aiSummaryActive={aiSummaryEnabled}
+          aiSummaryLoading={aiLoading}
+        />
       </Box>
 
       {error && (
-        <Typography color="error" sx={{ mb: 2 }}>
+        <Typography color="error" sx={{ mt: 2 }}>
           {error}
         </Typography>
       )}
 
       {!loading && results.length > 0 && (
         <>
-          <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              {results.length} result{results.length !== 1 ? 's' : ''} for{' '}
-              <strong>"{q}"</strong>
-            </Typography>
-          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 3, mb: 2 }}>
+            {results.length} result{results.length !== 1 ? 's' : ''} for <strong>"{q}"</strong>
+          </Typography>
 
           <AISummary query={q} />
-
-          <Divider sx={{ mb: 3 }} />
 
           {results.map((r, i) => (
             <ResultCard key={r.result.item.doc_id + i} result={r} index={i} />
@@ -63,7 +87,9 @@ export default function ResultsPage() {
       )}
 
       {!loading && !error && results.length === 0 && q && (
-        <Typography color="text.secondary">No results found for "{q}".</Typography>
+        <Typography color="text.secondary" sx={{ mt: 2 }}>
+          No results found for "{q}".
+        </Typography>
       )}
     </Container>
   )

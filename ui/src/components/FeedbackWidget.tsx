@@ -4,6 +4,7 @@ import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined'
 import ThumbDownOutlinedIcon from '@mui/icons-material/ThumbDownOutlined'
 import ThumbUpIcon from '@mui/icons-material/ThumbUp'
 import ThumbDownIcon from '@mui/icons-material/ThumbDown'
+import CommentOutlinedIcon from '@mui/icons-material/CommentOutlined'
 import { submitFeedback } from '../api/feedback'
 import { useAppStore } from '../stores/appStore'
 
@@ -49,6 +50,13 @@ export default function FeedbackWidget({ context, size = 'small' }: Props) {
             {vote === 'down' ? <ThumbDownIcon fontSize={size} /> : <ThumbDownOutlinedIcon fontSize={size} />}
           </IconButton>
         </Tooltip>
+        {!submitted && (
+          <Tooltip title="Add comment">
+            <IconButton size={size} onClick={() => setShowText((v) => !v)} color={showText ? 'primary' : 'default'}>
+              <CommentOutlinedIcon fontSize={size} />
+            </IconButton>
+          </Tooltip>
+        )}
         {submitted && (
           <Typography variant="caption" color="text.secondary">
             Thanks!

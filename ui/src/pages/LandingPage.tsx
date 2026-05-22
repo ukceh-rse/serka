@@ -25,14 +25,14 @@ export default function LandingPage() {
           component="img"
           src="/ukceh-logo.png"
           alt="UKCEH"
-          sx={{ height: 48, mb: 4, opacity: 0.9 }}
+          sx={{ height: 72, mb: 4, opacity: 0.9 }}
         />
         <Typography
           variant="h3"
           component="h1"
           sx={{ fontWeight: 500, mb: 1, letterSpacing: '-0.5px' }}
         >
-          Dataset Search
+          Serka AI-enhanced search tool
         </Typography>
         <Typography
           variant="h6"

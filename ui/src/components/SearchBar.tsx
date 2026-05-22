@@ -1,15 +1,27 @@
 import { useState, type FormEvent } from 'react'
-import { CircularProgress, IconButton, InputBase, Paper } from '@mui/material'
+import { CircularProgress, Divider, IconButton, InputBase, Paper, Tooltip } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 
 interface Props {
   onSearch: (query: string) => void
   loading?: boolean
   initialValue?: string
   size?: 'normal' | 'large'
+  onAiSummary?: () => void
+  aiSummaryActive?: boolean
+  aiSummaryLoading?: boolean
 }
 
-export default function SearchBar({ onSearch, loading, initialValue = '', size = 'normal' }: Props) {
+export default function SearchBar({
+  onSearch,
+  loading,
+  initialValue = '',
+  size = 'normal',
+  onAiSummary,
+  aiSummaryActive,
+  aiSummaryLoading,
+}: Props) {
   const [value, setValue] = useState(initialValue)
 
   const handleSubmit = (e: FormEvent) => {
@@ -42,6 +54,24 @@ export default function SearchBar({ onSearch, loading, initialValue = '', size =
       <IconButton type="submit" aria-label="search" disabled={loading || !value.trim()}>
         {loading ? <CircularProgress size={20} /> : <SearchIcon />}
       </IconButton>
+      {onAiSummary && (
+        <>
+          <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 0.75 }} />
+          <Tooltip title={aiSummaryActive ? 'Hide AI summary' : 'Generate AI summary'}>
+            <span>
+              <IconButton
+                aria-label="AI summary"
+                onClick={onAiSummary}
+                disabled={aiSummaryLoading}
+                color={aiSummaryActive ? 'primary' : 'default'}
+                sx={{ opacity: aiSummaryActive ? 1 : 0.6 }}
+              >
+                {aiSummaryLoading ? <CircularProgress size={20} /> : <AutoAwesomeIcon />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        </>
+      )}
     </Paper>
   )
 }
