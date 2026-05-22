@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Box, Container, Typography } from '@mui/material'
+import Masonry from '@mui/lab/Masonry'
 import SearchBar from '../components/SearchBar'
 import DatasetResultCard, { type GroupedResult } from '../components/DatasetResultCard'
 import AISummary from '../components/AISummary'
@@ -100,9 +101,11 @@ export default function ResultsPage() {
 
           <AISummary query={q} />
 
-          {groupedResults.map((g, i) => (
-            <DatasetResultCard key={g.dataset.uri} group={g} index={i} />
-          ))}
+          <Masonry columns={{ xs: 1, md: 2 }} spacing={2}>
+            {groupedResults.map((g, i) => (
+              <DatasetResultCard key={g.dataset.uri} group={g} index={i} />
+            ))}
+          </Masonry>
         </>
       )}
 
