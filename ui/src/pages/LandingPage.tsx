@@ -25,22 +25,16 @@ export default function LandingPage() {
           component="img"
           src="/ukceh-logo.png"
           alt="UKCEH"
-          sx={{ height: 72, mb: 4, opacity: 0.9 }}
+          sx={{ height: 108, mb: 4, opacity: 0.9 }}
         />
-        <Typography
-          variant="h2"
-          component="h1"
-          sx={{ fontWeight: 600, mb: 0.5, letterSpacing: '-1px' }}
-        >
-          Serka
-        </Typography>
-        <Typography
-          variant="h5"
-          color="text.secondary"
-          sx={{ fontWeight: 400, mb: 5 }}
-        >
-          AI-enhanced search tool
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 1.5, mb: 5 }}>
+          <Typography variant="h2" component="h1" sx={{ fontWeight: 700, letterSpacing: '-1px' }}>
+            Serka
+          </Typography>
+          <Typography variant="h5" color="text.secondary" sx={{ fontWeight: 400 }}>
+            AI-enhanced search tool
+          </Typography>
+        </Box>
         <SearchBar
           size="large"
           onSearch={(q) => navigate(`/search?q=${encodeURIComponent(q)}`)}
