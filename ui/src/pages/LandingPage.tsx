@@ -41,15 +41,7 @@ export default function LandingPage() {
           size="large"
           onSearch={(q) => navigate(`/search?q=${encodeURIComponent(q)}`)}
         />
-        <Box
-          sx={{
-            mt: 6,
-            display: 'flex',
-            justifyContent: 'center',
-            gap: 2,
-            flexWrap: 'wrap',
-          }}
-        >
+        <Box sx={{ mt: 6, display: 'flex', gap: 2 }}>
           {[
             'How are butterflies monitored in the UK?',
             'What are the LCM classes?',
@@ -63,16 +55,19 @@ export default function LandingPage() {
                 navigate(`/search?q=${encodeURIComponent(t)}`)
               }}
               sx={{
+                flex: 1,
                 border: '1px solid',
                 borderColor: 'divider',
                 borderRadius: 2,
                 px: 2,
-                py: 0.75,
+                py: 1.5,
                 background: 'transparent',
                 color: 'text.secondary',
                 cursor: 'pointer',
                 fontSize: '0.875rem',
                 fontFamily: 'inherit',
+                textAlign: 'center',
+                whiteSpace: 'normal',
                 transition: 'border-color 0.15s, color 0.15s',
                 '&:hover': { borderColor: brand.water, color: brand.water },
               }}
