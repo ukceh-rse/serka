@@ -1,6 +1,12 @@
+import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Box, CircularProgress, Collapse, Divider, Link, Paper, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
+import {
+  Box, Button, CircularProgress, Collapse, Divider, Link, Paper,
+  Table, TableBody, TableCell, TableHead, TableRow, Typography,
+} from '@mui/material'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useSearchStore } from '../stores/searchStore'
 import FeedbackWidget from './FeedbackWidget'
 
@@ -12,41 +18,17 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
   li: ({ children }) => <Typography component="li" variant="body2" sx={{ mb: 0.25 }}>{children}</Typography>,
   a: ({ href, children }) => <Link href={href} target="_blank" rel="noopener noreferrer">{children}</Link>,
   code: ({ children }) => (
-    <Box
-      component="code"
-      sx={{
-        fontFamily: 'monospace',
-        fontSize: '0.8rem',
-        bgcolor: 'action.hover',
-        px: 0.5,
-        py: 0.25,
-        borderRadius: 0.5,
-      }}
-    >
+    <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.8rem', bgcolor: 'action.hover', px: 0.5, py: 0.25, borderRadius: 0.5 }}>
       {children}
     </Box>
   ),
   pre: ({ children }) => (
-    <Box
-      component="pre"
-      sx={{
-        fontFamily: 'monospace',
-        fontSize: '0.8rem',
-        bgcolor: 'action.hover',
-        p: 1.5,
-        borderRadius: 1,
-        overflowX: 'auto',
-        my: 1,
-      }}
-    >
+    <Box component="pre" sx={{ fontFamily: 'monospace', fontSize: '0.8rem', bgcolor: 'action.hover', p: 1.5, borderRadius: 1, overflowX: 'auto', my: 1 }}>
       {children}
     </Box>
   ),
   blockquote: ({ children }) => (
-    <Box
-      component="blockquote"
-      sx={{ borderLeft: '3px solid', borderColor: 'divider', pl: 1.5, ml: 0, my: 1, color: 'text.secondary' }}
-    >
+    <Box component="blockquote" sx={{ borderLeft: '3px solid', borderColor: 'divider', pl: 1.5, ml: 0, my: 1, color: 'text.secondary' }}>
       {children}
     </Box>
   ),
@@ -59,12 +41,8 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
   thead: ({ children }) => <TableHead>{children}</TableHead>,
   tbody: ({ children }) => <TableBody>{children}</TableBody>,
   tr: ({ children }) => <TableRow>{children}</TableRow>,
-  th: ({ children }) => (
-    <TableCell sx={{ fontWeight: 600, fontSize: '0.8rem' }}>{children}</TableCell>
-  ),
-  td: ({ children }) => (
-    <TableCell sx={{ fontSize: '0.8rem' }}>{children}</TableCell>
-  ),
+  th: ({ children }) => <TableCell sx={{ fontWeight: 600, fontSize: '0.8rem' }}>{children}</TableCell>,
+  td: ({ children }) => <TableCell sx={{ fontSize: '0.8rem' }}>{children}</TableCell>,
 }
 
 interface Props {
@@ -72,10 +50,16 @@ interface Props {
 }
 
 export default function AISummary({ query }: Props) {
-  const { aiSummaryEnabled, aiSummary, aiThinking, aiLoading } = useSearchStore()
+  const { aiSummary, aiThinking, aiLoading } = useSearchStore()
+  const [expanded, setExpanded] = useState(false)
+
+  // Collapse whenever a new summary starts generating
+  useEffect(() => { if (aiLoading) setExpanded(false) }, [aiLoading])
+
+  const visible = aiLoading || !!aiSummary
 
   return (
-    <Collapse in={aiSummaryEnabled} unmountOnExit>
+    <Collapse in={visible} unmountOnExit>
       <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
         {aiLoading && aiThinking && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -91,9 +75,26 @@ export default function AISummary({ query }: Props) {
         )}
         {aiSummary && (
           <>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-              {aiSummary}
-            </ReactMarkdown>
+            <Box sx={{
+              overflow: 'hidden',
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              WebkitLineClamp: expanded ? 'unset' : 5,
+            }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                {aiSummary}
+              </ReactMarkdown>
+            </Box>
+            <Button
+              size="small"
+              onClick={() => setExpanded((v) => !v)}
+              endIcon={expanded
+                ? <ExpandLessIcon sx={{ fontSize: '0.9rem !important' }} />
+                : <ExpandMoreIcon sx={{ fontSize: '0.9rem !important' }} />}
+              sx={{ mt: 0.5, fontSize: '0.7rem', p: '2px 6px', minWidth: 0, textTransform: 'none', color: 'text.secondary' }}
+            >
+              {expanded ? 'Show less' : 'Show more'}
+            </Button>
             {!aiLoading && (
               <>
                 <Divider sx={{ my: 1.5 }} />

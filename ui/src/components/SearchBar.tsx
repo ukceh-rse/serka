@@ -57,14 +57,23 @@ export default function SearchBar({
       {onAiSummary && (
         <>
           <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 0.75 }} />
-          <Tooltip title={aiSummaryActive ? 'Hide AI summary' : 'Generate AI summary'}>
+          <Tooltip title={aiSummaryActive ? 'Disable AI summary' : 'Enable AI summary'}>
             <span>
               <IconButton
                 aria-label="AI summary"
                 onClick={onAiSummary}
                 disabled={aiSummaryLoading}
                 color={aiSummaryActive ? 'primary' : 'default'}
-                sx={{ opacity: aiSummaryActive ? 1 : 0.6 }}
+                sx={{
+                  opacity: aiSummaryActive ? 1 : 0.6,
+                  ...(!aiSummaryActive && !aiSummaryLoading && {
+                    '@keyframes subtlePulse': {
+                      '0%, 100%': { opacity: 0.4 },
+                      '50%': { opacity: 0.85 },
+                    },
+                    animation: 'subtlePulse 2s ease-in-out infinite',
+                  }),
+                }}
               >
                 {aiSummaryLoading ? <CircularProgress size={20} /> : <AutoAwesomeIcon />}
               </IconButton>
