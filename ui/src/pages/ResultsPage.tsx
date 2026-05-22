@@ -82,6 +82,7 @@ export default function ResultsPage() {
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ mb: 4 }}>
         <SearchBar
+          key={q}
           onSearch={handleSearch}
           loading={loading}
           initialValue={q}
