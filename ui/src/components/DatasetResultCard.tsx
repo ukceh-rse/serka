@@ -99,12 +99,14 @@ export default function DatasetResultCard({ group, index, collapsedLines }: Prop
 
         {/* Footer */}
         <Divider sx={{ mt: 1, mb: 0.75 }} />
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Box sx={{ display: 'flex', gap: 0.5 }}>
             <Chip label={top.result.type} size="small" variant="outlined" sx={{ opacity: 0.55, fontSize: '0.65rem', height: 18 }} />
             <Chip label={top.score.toFixed(2)} size="small" variant="outlined" sx={{ opacity: 0.55, fontSize: '0.65rem', height: 18 }} />
           </Box>
-          <FeedbackWidget context={{ type: 'result', index, dataset_uri: dataset.uri }} />
+          <Box sx={{ ml: 'auto' }}>
+            <FeedbackWidget context={{ type: 'result', index, dataset_uri: dataset.uri }} />
+          </Box>
         </Box>
 
       </CardContent>

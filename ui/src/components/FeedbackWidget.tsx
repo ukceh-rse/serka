@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, IconButton, Tooltip, Typography, Collapse, TextField, Button } from '@mui/material'
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, TextField, Tooltip, Typography } from '@mui/material'
 import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined'
 import ThumbDownOutlinedIcon from '@mui/icons-material/ThumbDownOutlined'
 import ThumbUpIcon from '@mui/icons-material/ThumbUp'
@@ -16,29 +16,26 @@ interface Props {
 export default function FeedbackWidget({ context, size = 'small' }: Props) {
   const { consentGiven } = useAppStore()
   const [vote, setVote] = useState<'up' | 'down' | null>(null)
-  const [showText, setShowText] = useState(false)
+  const [commentOpen, setCommentOpen] = useState(false)
   const [text, setText] = useState('')
-  const [submitted, setSubmitted] = useState(false)
+  const [sent, setSent] = useState(false)
 
   if (!consentGiven) return null
 
   const handleVote = async (v: 'up' | 'down') => {
     const newVote = vote === v ? null : v
     setVote(newVote)
-    if (newVote) {
-      await submitFeedback({ ...context, vote: newVote }).catch(() => null)
-      setShowText(true)
-    }
+    if (newVote) await submitFeedback({ ...context, vote: newVote }).catch(() => null)
   }
 
-  const handleTextSubmit = async () => {
+  const handleCommentSend = async () => {
     await submitFeedback({ ...context, vote, comment: text }).catch(() => null)
-    setSubmitted(true)
-    setShowText(false)
+    setSent(true)
+    setTimeout(() => { setCommentOpen(false); setSent(false); setText('') }, 1500)
   }
 
   return (
-    <Box>
+    <>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         <Tooltip title="Helpful">
           <IconButton size={size} onClick={() => handleVote('up')} color={vote === 'up' ? 'primary' : 'default'}>
@@ -50,38 +47,39 @@ export default function FeedbackWidget({ context, size = 'small' }: Props) {
             {vote === 'down' ? <ThumbDownIcon fontSize={size} /> : <ThumbDownOutlinedIcon fontSize={size} />}
           </IconButton>
         </Tooltip>
-        {!submitted && (
-          <Tooltip title="Add comment">
-            <IconButton size={size} onClick={() => setShowText((v) => !v)} color={showText ? 'primary' : 'default'}>
-              <CommentOutlinedIcon fontSize={size} />
-            </IconButton>
-          </Tooltip>
-        )}
-        {submitted && (
-          <Typography variant="caption" color="text.secondary">
-            Thanks!
-          </Typography>
-        )}
+        <Tooltip title="Add comment">
+          <IconButton size={size} onClick={() => setCommentOpen(true)}>
+            <CommentOutlinedIcon fontSize={size} />
+          </IconButton>
+        </Tooltip>
       </Box>
-      <Collapse in={showText && !submitted}>
-        <Box sx={{ mt: 1, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-          <TextField
-            size="small"
-            placeholder="Optional comment…"
-            multiline
-            maxRows={3}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            sx={{ flex: 1 }}
-          />
-          <Button size="small" variant="outlined" onClick={handleTextSubmit}>
-            Send
-          </Button>
-          <Button size="small" onClick={() => setShowText(false)}>
-            Skip
-          </Button>
-        </Box>
-      </Collapse>
-    </Box>
+
+      <Dialog open={commentOpen} onClose={() => setCommentOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Add comment</DialogTitle>
+        <DialogContent>
+          {sent ? (
+            <Typography>Thanks for your feedback!</Typography>
+          ) : (
+            <TextField
+              autoFocus
+              fullWidth
+              multiline
+              rows={3}
+              placeholder="Tell us more…"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              variant="outlined"
+              sx={{ mt: 1 }}
+            />
+          )}
+        </DialogContent>
+        {!sent && (
+          <DialogActions>
+            <Button onClick={() => setCommentOpen(false)}>Cancel</Button>
+            <Button variant="contained" onClick={handleCommentSend} disabled={!text.trim()}>Send</Button>
+          </DialogActions>
+        )}
+      </Dialog>
+    </>
   )
 }

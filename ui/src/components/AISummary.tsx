@@ -83,7 +83,9 @@ export default function AISummary({ query }: Props) {
             {!aiLoading && (
               <>
                 <Divider sx={{ my: 1.5 }} />
-                <FeedbackWidget context={{ type: 'ai_summary', query }} />
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <FeedbackWidget context={{ type: 'ai_summary', query }} />
+                </Box>
               </>
             )}
           </>
