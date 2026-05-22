@@ -19,6 +19,20 @@ export default function ResultsPage() {
     toggleAiSummary, appendAiSummary, setAiThinking, setAiLoading, resetAiSummary,
   } = useSearchStore()
 
+  const runSummary = async (queryStr: string) => {
+    setAiLoading(true)
+    try {
+      await streamSummary(queryStr, (event) => {
+        if (event.type === 'THINKING_START') setAiThinking(true)
+        if (event.type === 'THINKING_END') setAiThinking(false)
+        if (event.type === 'TEXT_MESSAGE_CONTENT' && event.delta) appendAiSummary(event.delta)
+        if (event.type === 'RUN_FINISHED') setAiLoading(false)
+      })
+    } catch {
+      setAiLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!q) return
     if (q === query && results.length > 0) return
@@ -30,6 +44,10 @@ export default function ResultsPage() {
       .then(setResults)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
+    // Read state directly to avoid stale closure; resetAiSummary doesn't clear the enabled flag
+    if (useSearchStore.getState().aiSummaryEnabled) {
+      runSummary(q)
+    }
   }, [q])
 
   const groupedResults = useMemo<GroupedResult[]>(() => {
@@ -51,17 +69,7 @@ export default function ResultsPage() {
   const handleAiSummary = async () => {
     toggleAiSummary()
     if (!aiSummaryEnabled && !aiSummary && !aiLoading) {
-      setAiLoading(true)
-      try {
-        await streamSummary(q, (event) => {
-          if (event.type === 'THINKING_START') setAiThinking(true)
-          if (event.type === 'THINKING_END') setAiThinking(false)
-          if (event.type === 'TEXT_MESSAGE_CONTENT' && event.delta) appendAiSummary(event.delta)
-          if (event.type === 'RUN_FINISHED') setAiLoading(false)
-        })
-      } catch {
-        setAiLoading(false)
-      }
+      await runSummary(q)
     }
   }
 
