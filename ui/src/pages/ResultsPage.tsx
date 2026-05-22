@@ -101,7 +101,7 @@ export default function ResultsPage() {
 
           <AISummary query={q} />
 
-          <Masonry columns={{ xs: 1, md: 2 }} spacing={2}>
+          <Masonry columns={{ xs: 1, sm: 2, md: 3 }} spacing={2}>
             {groupedResults.map((g, i) => (
               <DatasetResultCard key={g.dataset.uri} group={g} index={i} />
             ))}
