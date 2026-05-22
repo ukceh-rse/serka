@@ -30,16 +30,16 @@ export default function LandingPage() {
         <Typography
           variant="h3"
           component="h1"
-          sx={{ fontWeight: 500, mb: 1, letterSpacing: '-0.5px' }}
+          sx={{ fontWeight: 500, mb: 0.5, letterSpacing: '-0.5px' }}
         >
-          Serka AI-enhanced search tool
+          Serka
         </Typography>
         <Typography
           variant="h6"
           color="text.secondary"
           sx={{ fontWeight: 400, mb: 5 }}
         >
-          Explore the EIDC environmental data catalogue
+          AI-enhanced search tool
         </Typography>
         <SearchBar
           size="large"

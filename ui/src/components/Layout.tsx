@@ -1,4 +1,4 @@
-import { AppBar, Box, IconButton, Toolbar, Tooltip } from '@mui/material'
+import { AppBar, Box, IconButton, Toolbar, Tooltip, Typography } from '@mui/material'
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined'
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined'
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline'
@@ -20,8 +20,14 @@ export default function Layout({ children }: Props) {
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="sticky" color="default" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar sx={{ gap: 1 }}>
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', gap: 12 }}>
             <img src="/ukceh-logo.png" alt="UKCEH" height={32} />
+            <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary', lineHeight: 1.2 }}>
+              Serka<br />
+              <Typography component="span" variant="caption" sx={{ fontWeight: 400, color: 'text.secondary' }}>
+                AI-enhanced search tool
+              </Typography>
+            </Typography>
           </Link>
           <Box sx={{ flex: 1 }} />
           <GeneralFeedback />
