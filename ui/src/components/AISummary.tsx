@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
-  Box, Button, CircularProgress, Collapse, Divider, Link, Paper,
+  Box, CircularProgress, Collapse, Divider, IconButton, Link, Paper,
   Table, TableBody, TableCell, TableHead, TableRow, Typography,
 } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
@@ -71,6 +71,13 @@ export default function AISummary({ query }: Props) {
             AI Summary
           </Typography>
           {aiLoading && <CircularProgress size={12} sx={{ ml: 0.5 }} />}
+          {aiSummary && (
+            <IconButton size="small" onClick={() => setExpanded((v) => !v)} sx={{ ml: 'auto', p: 0.25 }}>
+              {expanded
+                ? <ExpandLessIcon sx={{ fontSize: '1rem' }} />
+                : <ExpandMoreIcon sx={{ fontSize: '1rem' }} />}
+            </IconButton>
+          )}
         </Box>
 
         {/* Content — fixed height until expanded */}
@@ -99,17 +106,6 @@ export default function AISummary({ query }: Props) {
                 {aiSummary}
               </ReactMarkdown>
             </Box>
-
-            <Button
-              size="small"
-              onClick={() => setExpanded((v) => !v)}
-              endIcon={expanded
-                ? <ExpandLessIcon sx={{ fontSize: '0.9rem !important' }} />
-                : <ExpandMoreIcon sx={{ fontSize: '0.9rem !important' }} />}
-              sx={{ mt: 0.5, fontSize: '0.7rem', p: '2px 6px', minWidth: 0, textTransform: 'none', color: 'text.secondary' }}
-            >
-              {expanded ? 'Show less' : 'Show more'}
-            </Button>
 
             {!aiLoading && (
               <>

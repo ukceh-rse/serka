@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
-  Box, Button, Card, CardContent, Chip, Collapse,
-  Divider, Link, Typography,
+  Box, Card, CardContent, Chip, Collapse,
+  Divider, IconButton, Link, Typography,
 } from '@mui/material'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
@@ -32,7 +32,7 @@ export default function DatasetResultCard({ group, index, collapsedLines }: Prop
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
 
         {/* Title */}
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, mb: 1 }}>
           <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, flex: 1, lineHeight: 1.4 }}>
             <Link href={dataset.uri} target="_blank" rel="noopener noreferrer" underline="hover" color="primary">
               {dataset.title || dataset.uri}
@@ -43,8 +43,15 @@ export default function DatasetResultCard({ group, index, collapsedLines }: Prop
               label={chunks.length}
               size="small"
               variant="outlined"
-              sx={{ flexShrink: 0, opacity: 0.6, fontSize: '0.7rem', height: 18 }}
+              sx={{ flexShrink: 0, opacity: 0.6, fontSize: '0.7rem', height: 18, alignSelf: 'center' }}
             />
+          )}
+          {needsExpand && (
+            <IconButton size="small" onClick={() => setExpanded((v) => !v)} sx={{ p: 0.25, flexShrink: 0 }}>
+              {expanded
+                ? <ExpandLessIcon sx={{ fontSize: '1rem' }} />
+                : <ExpandMoreIcon sx={{ fontSize: '1rem' }} />}
+            </IconButton>
           )}
         </Box>
 
@@ -84,18 +91,6 @@ export default function DatasetResultCard({ group, index, collapsedLines }: Prop
             </Box>
           ))}
         </Collapse>
-
-        {/* Expand / collapse */}
-        {needsExpand && (
-          <Button
-            size="small"
-            onClick={() => setExpanded((v) => !v)}
-            endIcon={expanded ? <ExpandLessIcon sx={{ fontSize: '0.9rem !important' }} /> : <ExpandMoreIcon sx={{ fontSize: '0.9rem !important' }} />}
-            sx={{ mt: 0.5, fontSize: '0.7rem', p: '2px 6px', minWidth: 0, textTransform: 'none', color: 'text.secondary' }}
-          >
-            {expanded ? 'Less' : chunks.length > 1 ? `+${chunks.length - 1} more` : 'More'}
-          </Button>
-        )}
 
         {/* Footer */}
         <Divider sx={{ mt: 1, mb: 0.75 }} />
