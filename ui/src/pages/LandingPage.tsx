@@ -28,14 +28,14 @@ export default function LandingPage() {
           sx={{ height: 72, mb: 4, opacity: 0.9 }}
         />
         <Typography
-          variant="h3"
+          variant="h2"
           component="h1"
-          sx={{ fontWeight: 500, mb: 0.5, letterSpacing: '-0.5px' }}
+          sx={{ fontWeight: 600, mb: 0.5, letterSpacing: '-1px' }}
         >
           Serka
         </Typography>
         <Typography
-          variant="h6"
+          variant="h5"
           color="text.secondary"
           sx={{ fontWeight: 400, mb: 5 }}
         >

@@ -22,9 +22,9 @@ export default function Layout({ children }: Props) {
         <Toolbar sx={{ gap: 1 }}>
           <Link to="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', gap: 12 }}>
             <img src="/ukceh-logo.png" alt="UKCEH" height={32} />
-            <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary', lineHeight: 1.2 }}>
-              Serka<br />
-              <Typography component="span" variant="caption" sx={{ fontWeight: 400, color: 'text.secondary' }}>
+            <Typography variant="body1" sx={{ color: 'text.primary' }}>
+              <strong>Serka</strong>{' '}
+              <Typography component="span" variant="body1" sx={{ color: 'text.secondary' }}>
                 AI-enhanced search tool
               </Typography>
             </Typography>
