@@ -2,9 +2,11 @@ import { Box, Container, Typography } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import SearchBar from '../components/SearchBar'
 import { brand } from '../theme'
+import { useSearchStore } from '../stores/searchStore'
 
 export default function LandingPage() {
   const navigate = useNavigate()
+  const { aiSummaryEnabled, toggleAiSummary } = useSearchStore()
 
   return (
     <Box
@@ -48,11 +50,18 @@ export default function LandingPage() {
             flexWrap: 'wrap',
           }}
         >
-          {['Water quality', 'Land use', 'Biodiversity', 'Climate', 'Soil carbon'].map((t) => (
+          {[
+            'How are butterflies monitored in the UK?',
+            'What are the LCM classes?',
+            'What are the most popular datasets?',
+          ].map((t) => (
             <Box
               key={t}
               component="button"
-              onClick={() => navigate(`/search?q=${encodeURIComponent(t)}`)}
+              onClick={() => {
+                if (!aiSummaryEnabled) toggleAiSummary()
+                navigate(`/search?q=${encodeURIComponent(t)}`)
+              }}
               sx={{
                 border: '1px solid',
                 borderColor: 'divider',
