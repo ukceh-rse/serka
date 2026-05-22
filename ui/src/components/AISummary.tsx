@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Box, CircularProgress, Collapse, Divider, Link, Paper, Typography } from '@mui/material'
+import { Box, CircularProgress, Collapse, Divider, Link, Paper, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
 import { useSearchStore } from '../stores/searchStore'
 import FeedbackWidget from './FeedbackWidget'
 
@@ -51,6 +51,20 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
     </Box>
   ),
   hr: () => <Divider sx={{ my: 1.5 }} />,
+  table: ({ children }) => (
+    <Box sx={{ overflowX: 'auto', my: 1.5 }}>
+      <Table size="small">{children}</Table>
+    </Box>
+  ),
+  thead: ({ children }) => <TableHead>{children}</TableHead>,
+  tbody: ({ children }) => <TableBody>{children}</TableBody>,
+  tr: ({ children }) => <TableRow>{children}</TableRow>,
+  th: ({ children }) => (
+    <TableCell sx={{ fontWeight: 600, fontSize: '0.8rem' }}>{children}</TableCell>
+  ),
+  td: ({ children }) => (
+    <TableCell sx={{ fontSize: '0.8rem' }}>{children}</TableCell>
+  ),
 }
 
 interface Props {
