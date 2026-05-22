@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { CircularProgress, Divider, IconButton, InputBase, Paper, Tooltip } from '@mui/material'
+import { Divider, IconButton, InputBase, Paper, Tooltip } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 
@@ -51,8 +51,8 @@ export default function SearchBar({
         inputProps={{ 'aria-label': 'search datasets' }}
         autoFocus={size === 'large'}
       />
-      <IconButton type="submit" aria-label="search" disabled={loading || !value.trim()}>
-        {loading ? <CircularProgress size={20} /> : <SearchIcon />}
+      <IconButton type="submit" aria-label="search" disabled={!value.trim()}>
+        <SearchIcon />
       </IconButton>
       {onAiSummary && (
         <>
@@ -62,11 +62,10 @@ export default function SearchBar({
               <IconButton
                 aria-label="AI summary"
                 onClick={onAiSummary}
-                disabled={aiSummaryLoading}
                 color={aiSummaryActive ? 'primary' : 'default'}
                 sx={{
                   opacity: aiSummaryActive ? 1 : 0.6,
-                  ...(!aiSummaryActive && !aiSummaryLoading && {
+                  ...(!aiSummaryActive && {
                     '@keyframes subtlePulse': {
                       '0%, 100%': { opacity: 0.4 },
                       '50%': { opacity: 0.85 },
@@ -75,7 +74,7 @@ export default function SearchBar({
                   }),
                 }}
               >
-                {aiSummaryLoading ? <CircularProgress size={20} /> : <AutoAwesomeIcon />}
+                <AutoAwesomeIcon />
               </IconButton>
             </span>
           </Tooltip>

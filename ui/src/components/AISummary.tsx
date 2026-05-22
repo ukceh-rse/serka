@@ -70,21 +70,8 @@ export default function AISummary({ query }: Props) {
           <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'text.secondary' }}>
             AI Summary
           </Typography>
+          {aiLoading && <CircularProgress size={12} sx={{ ml: 0.5 }} />}
         </Box>
-
-        {/* Loading states */}
-        {aiLoading && aiThinking && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-            <CircularProgress size={14} />
-            <Typography variant="caption" color="text.secondary">Thinking…</Typography>
-          </Box>
-        )}
-        {aiLoading && !aiSummary && !aiThinking && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CircularProgress size={14} />
-            <Typography variant="caption" color="text.secondary">Generating summary…</Typography>
-          </Box>
-        )}
 
         {/* Content — fixed height until expanded */}
         {aiSummary && (

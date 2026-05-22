@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Box, Container, IconButton, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, CircularProgress, Container, IconButton, Stack, Tooltip, Typography } from '@mui/material'
 import ViewModuleIcon from '@mui/icons-material/ViewModule'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import Masonry from '@mui/lab/Masonry'
@@ -90,13 +90,17 @@ export default function ResultsPage() {
         <SearchBar
           key={q}
           onSearch={handleSearch}
-          loading={loading}
           initialValue={q}
           onAiSummary={results.length > 0 ? handleAiSummary : undefined}
           aiSummaryActive={aiSummaryEnabled}
-          aiSummaryLoading={aiLoading}
         />
       </Box>
+
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+          <CircularProgress />
+        </Box>
+      )}
 
       {error && (
         <Typography color="error" sx={{ mt: 2 }}>
