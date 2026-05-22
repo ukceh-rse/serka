@@ -16,6 +16,7 @@ interface SearchState {
   aiSummary: string
   aiThinking: boolean
   aiLoading: boolean
+  recentSearches: string[]
   setQuery: (q: string) => void
   setResults: (r: SearchResult[]) => void
   setLoading: (v: boolean) => void
@@ -25,6 +26,7 @@ interface SearchState {
   setAiThinking: (v: boolean) => void
   setAiLoading: (v: boolean) => void
   resetAiSummary: () => void
+  addRecentSearch: (q: string) => void
 }
 
 export const useSearchStore = create<SearchState>()((set) => ({
@@ -36,6 +38,7 @@ export const useSearchStore = create<SearchState>()((set) => ({
   aiSummary: '',
   aiThinking: false,
   aiLoading: false,
+  recentSearches: JSON.parse(localStorage.getItem('serka_recent') ?? '[]') as string[],
   setQuery: (q) => set({ query: q }),
   setResults: (r) => set({ results: r }),
   setLoading: (v) => set({ loading: v }),
@@ -45,4 +48,9 @@ export const useSearchStore = create<SearchState>()((set) => ({
   setAiThinking: (v) => set({ aiThinking: v }),
   setAiLoading: (v) => set({ aiLoading: v }),
   resetAiSummary: () => set({ aiSummary: '', aiThinking: false, aiLoading: false }),
+  addRecentSearch: (q) => set((s) => {
+    const updated = [q, ...s.recentSearches.filter((r) => r !== q)].slice(0, 5)
+    localStorage.setItem('serka_recent', JSON.stringify(updated))
+    return { recentSearches: updated }
+  }),
 }))

@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import SearchBar from '../components/SearchBar'
 import { brand } from '../theme'
 import { useSearchStore } from '../stores/searchStore'
+import { useAppStore } from '../stores/appStore'
+import { EXAMPLE_SEARCHES } from '../constants'
 
 export default function LandingPage() {
   const navigate = useNavigate()
   const { aiSummaryEnabled, toggleAiSummary } = useSearchStore()
+  const { themeMode } = useAppStore()
 
   return (
     <Box
@@ -25,7 +28,7 @@ export default function LandingPage() {
       <Container maxWidth="md" sx={{ textAlign: 'center', py: 8 }}>
         <Box
           component="img"
-          src="/ukceh-logo.png"
+          src={themeMode === 'dark' ? '/ukceh-logo_light.png' : '/ukceh-logo.png'}
           alt="UKCEH"
           sx={{ height: 108, mb: 4, opacity: 0.9 }}
         />
@@ -42,11 +45,7 @@ export default function LandingPage() {
           onSearch={(q) => navigate(`/search?q=${encodeURIComponent(q)}`)}
         />
         <Box sx={{ mt: 6, display: 'flex', gap: 2 }}>
-          {[
-            'How are butterflies monitored in the UK?',
-            'What are the LCM classes?',
-            'What are the most popular datasets?',
-          ].map((t) => (
+          {EXAMPLE_SEARCHES.map((t) => (
             <Box
               key={t}
               component="button"
@@ -57,7 +56,7 @@ export default function LandingPage() {
               sx={{
                 flex: 1,
                 border: '1px solid',
-                borderColor: 'divider',
+                borderColor: brand.air,
                 borderRadius: 2,
                 px: 2,
                 py: 1.5,

@@ -12,11 +12,11 @@ import { useSearchStore } from '../stores/searchStore'
 import FeedbackWidget from './FeedbackWidget'
 
 const mdComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
-  p: ({ children }) => <Typography variant="body2" sx={{ mb: 1, '&:last-child': { mb: 0 } }}>{children}</Typography>,
+  p: ({ children }) => <Typography variant="body2" sx={{ mb: 1, '&:last-child': { mb: 0 }, textAlign: 'justify' }}>{children}</Typography>,
   h1: ({ children }) => <Typography variant="h6" sx={{ mt: 1.5, mb: 0.5, fontWeight: 600 }}>{children}</Typography>,
   h2: ({ children }) => <Typography variant="subtitle1" sx={{ mt: 1.5, mb: 0.5, fontWeight: 600 }}>{children}</Typography>,
   h3: ({ children }) => <Typography variant="subtitle2" sx={{ mt: 1, mb: 0.5, fontWeight: 600 }}>{children}</Typography>,
-  li: ({ children }) => <Typography component="li" variant="body2" sx={{ mb: 0.25 }}>{children}</Typography>,
+  li: ({ children }) => <Typography component="li" variant="body2" sx={{ mb: 0.25, textAlign: 'justify' }}>{children}</Typography>,
   a: ({ href, children }) => <Link href={href} target="_blank" rel="noopener noreferrer">{children}</Link>,
   code: ({ children }) => (
     <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.8rem', bgcolor: 'action.hover', px: 0.5, py: 0.25, borderRadius: 0.5 }}>
@@ -29,7 +29,7 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
     </Box>
   ),
   blockquote: ({ children }) => (
-    <Box component="blockquote" sx={{ borderLeft: '3px solid', borderColor: 'divider', pl: 1.5, ml: 0, my: 1, color: 'text.secondary' }}>
+    <Box component="blockquote" sx={{ borderLeft: '3px solid', borderColor: 'primary.main', pl: 1.5, ml: 0, my: 1, color: 'text.secondary' }}>
       {children}
     </Box>
   ),
@@ -62,12 +62,12 @@ export default function AISummary({ query }: Props) {
 
   return (
     <Collapse in={visible} unmountOnExit>
-      <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+      <Paper variant="outlined" sx={{ p: 2, mb: 3, borderLeftColor: 'primary.main', borderLeftWidth: 3 }}>
 
         {/* Header */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.5 }}>
           <AutoAwesomeIcon sx={{ fontSize: '0.9rem', color: 'primary.main', opacity: 0.85 }} />
-          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'text.secondary' }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'primary.main', opacity: 0.85 }}>
             AI Summary
           </Typography>
           {aiLoading && <CircularProgress size={12} sx={{ ml: 0.5 }} />}
@@ -86,8 +86,6 @@ export default function AISummary({ query }: Props) {
             <Box
               sx={(theme) => ({
                 position: 'relative',
-                height: expanded ? 'auto' : COLLAPSED_HEIGHT,
-                overflow: 'hidden',
                 ...(!expanded && {
                   '&::after': {
                     content: '""',
@@ -102,9 +100,11 @@ export default function AISummary({ query }: Props) {
                 }),
               })}
             >
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                {aiSummary}
-              </ReactMarkdown>
+              <Collapse in={expanded} collapsedSize={COLLAPSED_HEIGHT}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                  {aiSummary}
+                </ReactMarkdown>
+              </Collapse>
             </Box>
             {!expanded && (
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: '6px' }}>

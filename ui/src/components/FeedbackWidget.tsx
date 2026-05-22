@@ -38,17 +38,17 @@ export default function FeedbackWidget({ context, size = 'small' }: Props) {
     <>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         <Tooltip title="Helpful">
-          <IconButton size={size} onClick={() => handleVote('up')} color={vote === 'up' ? 'primary' : 'default'}>
+          <IconButton size={size} onClick={() => handleVote('up')} sx={{ color: vote === 'up' ? '#90A968' : 'text.secondary' }}>
             {vote === 'up' ? <ThumbUpIcon fontSize={size} /> : <ThumbUpOutlinedIcon fontSize={size} />}
           </IconButton>
         </Tooltip>
         <Tooltip title="Not helpful">
-          <IconButton size={size} onClick={() => handleVote('down')} color={vote === 'down' ? 'error' : 'default'}>
+          <IconButton size={size} onClick={() => handleVote('down')} sx={{ color: vote === 'down' ? '#b07070' : 'text.secondary' }}>
             {vote === 'down' ? <ThumbDownIcon fontSize={size} /> : <ThumbDownOutlinedIcon fontSize={size} />}
           </IconButton>
         </Tooltip>
         <Tooltip title="Add comment">
-          <IconButton size={size} onClick={() => setCommentOpen(true)}>
+          <IconButton size={size} onClick={() => setCommentOpen(true)} sx={{ color: 'text.secondary' }}>
             <CommentOutlinedIcon fontSize={size} />
           </IconButton>
         </Tooltip>

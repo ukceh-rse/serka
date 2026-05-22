@@ -10,6 +10,7 @@ import AISummary from '../components/AISummary'
 import { useSearchStore } from '../stores/searchStore'
 import { search } from '../api/search'
 import { streamSummary } from '../api/chat'
+import { EXAMPLE_SEARCHES } from '../constants'
 
 export default function ResultsPage() {
   const [params] = useSearchParams()
@@ -20,7 +21,11 @@ export default function ResultsPage() {
     setQuery, setResults, setLoading, setError,
     aiSummaryEnabled, aiSummary, aiLoading,
     toggleAiSummary, appendAiSummary, setAiThinking, setAiLoading, resetAiSummary,
+    addRecentSearch,
   } = useSearchStore()
+
+  const [searchFocused, setSearchFocused] = useState(false)
+  useEffect(() => { setSearchFocused(false) }, [q])
 
   const summaryAbortRef = useRef<AbortController | null>(null)
 
@@ -44,6 +49,7 @@ export default function ResultsPage() {
   useEffect(() => {
     if (!q) return
     if (q === query && results.length > 0) return
+    if (!EXAMPLE_SEARCHES.includes(q)) addRecentSearch(q)
     setQuery(q)
     resetAiSummary()
     setLoading(true)
@@ -77,6 +83,11 @@ export default function ResultsPage() {
     navigate(`/search?q=${encodeURIComponent(newQ)}`)
   }
 
+  const handleExampleSearch = (newQ: string) => {
+    if (!aiSummaryEnabled) toggleAiSummary()
+    handleSearch(newQ)
+  }
+
   const handleAiSummary = async () => {
     toggleAiSummary()
     if (!aiSummaryEnabled && !aiSummary && !aiLoading) {
@@ -86,13 +97,19 @@ export default function ResultsPage() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4 }}>
+      {searchFocused && (
+        <Box sx={{ position: 'fixed', inset: 0, zIndex: 1101, bgcolor: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }} />
+      )}
+      <Box sx={{ mb: 4, position: 'relative', zIndex: searchFocused ? 1102 : 'auto' }}>
         <SearchBar
           key={q}
           onSearch={handleSearch}
           initialValue={q}
-          onAiSummary={results.length > 0 ? handleAiSummary : undefined}
+          onAiSummary={!loading && results.length > 0 ? handleAiSummary : undefined}
           aiSummaryActive={aiSummaryEnabled}
+          showSuggestions
+          onFocusChange={setSearchFocused}
+          onExampleSearch={handleExampleSearch}
         />
       </Box>
 
@@ -110,9 +127,11 @@ export default function ResultsPage() {
 
       {!loading && groupedResults.length > 0 && (
         <>
+          <AISummary query={q} />
+
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              {groupedResults.length} dataset{groupedResults.length !== 1 ? 's' : ''} ({results.length} result{results.length !== 1 ? 's' : ''}) for <strong>"{q}"</strong>
+            <Typography variant="subtitle2" color="text.secondary">
+              Hybrid (semantic/full-text) search results for "<strong>{q}</strong>" ({groupedResults.length} dataset{groupedResults.length !== 1 ? 's' : ''}, {results.length} result{results.length !== 1 ? 's' : ''}):
             </Typography>
             <Box>
               <Tooltip title="Grid view">
@@ -128,14 +147,12 @@ export default function ResultsPage() {
             </Box>
           </Box>
 
-          <AISummary query={q} />
-
           {viewMode === 'masonry' ? (
             <Masonry columns={{ xs: 1, sm: 2, md: 3 }} spacing={2}>
               {groupedResults.map((g, i) => (
                 <DatasetResultCard
                   key={g.dataset.uri} group={g} index={i}
-                  collapsedLines={Math.min(g.chunks.length * 2 + 1, 9)}
+                  collapsedLines={Math.min(g.chunks.length * 3 + 2, 20)}
                 />
               ))}
             </Masonry>
