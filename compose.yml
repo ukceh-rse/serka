@@ -35,6 +35,18 @@ services:
     networks:
       - internal
 
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Containerfile
+    image: serka-ui-image
+    ports:
+      - "3000:80"
+    depends_on:
+      - serka
+    networks:
+      - internal
+
   neo4j:
     image: neo4j:5.26.5
     ports:
