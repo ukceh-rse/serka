@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
-  Box, CircularProgress, Collapse, Divider, IconButton, Link, Paper,
+  Box, Button, CircularProgress, Collapse, Divider, IconButton, Link, Paper,
   Table, TableBody, TableCell, TableHead, TableRow, Typography,
 } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
@@ -105,6 +105,17 @@ export default function AISummary({ query }: Props) {
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                 {aiSummary}
               </ReactMarkdown>
+              {!expanded && (
+                <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 1 }}>
+                  <Button
+                    size="small"
+                    onClick={() => setExpanded(true)}
+                    sx={{ fontSize: '0.7rem', textTransform: 'none', color: 'text.secondary' }}
+                  >
+                    Show more
+                  </Button>
+                </Box>
+              )}
             </Box>
 
             {!aiLoading && (
