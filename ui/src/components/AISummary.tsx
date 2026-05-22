@@ -5,6 +5,7 @@ import {
   Box, Button, CircularProgress, Collapse, Divider, Link, Paper,
   Table, TableBody, TableCell, TableHead, TableRow, Typography,
 } from '@mui/material'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useSearchStore } from '../stores/searchStore'
@@ -45,6 +46,8 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
   td: ({ children }) => <TableCell sx={{ fontSize: '0.8rem' }}>{children}</TableCell>,
 }
 
+const COLLAPSED_HEIGHT = '7rem'
+
 interface Props {
   query: string
 }
@@ -53,7 +56,6 @@ export default function AISummary({ query }: Props) {
   const { aiSummary, aiThinking, aiLoading } = useSearchStore()
   const [expanded, setExpanded] = useState(false)
 
-  // Collapse whenever a new summary starts generating
   useEffect(() => { if (aiLoading) setExpanded(false) }, [aiLoading])
 
   const visible = aiLoading || !!aiSummary
@@ -61,6 +63,16 @@ export default function AISummary({ query }: Props) {
   return (
     <Collapse in={visible} unmountOnExit>
       <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+
+        {/* Header */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.5 }}>
+          <AutoAwesomeIcon sx={{ fontSize: '0.9rem', color: 'primary.main', opacity: 0.85 }} />
+          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'text.secondary' }}>
+            AI Summary
+          </Typography>
+        </Box>
+
+        {/* Loading states */}
         {aiLoading && aiThinking && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
             <CircularProgress size={14} />
@@ -73,18 +85,34 @@ export default function AISummary({ query }: Props) {
             <Typography variant="caption" color="text.secondary">Generating summary…</Typography>
           </Box>
         )}
+
+        {/* Content — fixed height until expanded */}
         {aiSummary && (
           <>
-            <Box sx={{
-              overflow: 'hidden',
-              display: '-webkit-box',
-              WebkitBoxOrient: 'vertical',
-              WebkitLineClamp: expanded ? 'unset' : 5,
-            }}>
+            <Box
+              sx={(theme) => ({
+                position: 'relative',
+                height: expanded ? 'auto' : COLLAPSED_HEIGHT,
+                overflow: 'hidden',
+                ...(!expanded && {
+                  '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: '2.5rem',
+                    background: `linear-gradient(transparent, ${theme.palette.background.paper})`,
+                    pointerEvents: 'none',
+                  },
+                }),
+              })}
+            >
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                 {aiSummary}
               </ReactMarkdown>
             </Box>
+
             <Button
               size="small"
               onClick={() => setExpanded((v) => !v)}
@@ -95,6 +123,7 @@ export default function AISummary({ query }: Props) {
             >
               {expanded ? 'Show less' : 'Show more'}
             </Button>
+
             {!aiLoading && (
               <>
                 <Divider sx={{ my: 1.5 }} />
@@ -105,6 +134,7 @@ export default function AISummary({ query }: Props) {
             )}
           </>
         )}
+
       </Paper>
     </Collapse>
   )
