@@ -28,10 +28,10 @@ export default function LandingPage() {
           sx={{ height: 108, mb: 4, opacity: 0.9 }}
         />
         <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 1.5, mb: 5 }}>
-          <Typography variant="h2" component="h1" sx={{ fontWeight: 700, letterSpacing: '-1px' }}>
+          <Typography variant="h2" component="h1" sx={{ fontWeight: 700, letterSpacing: '-1px', fontSize: '2.625rem' }}>
             Serka
           </Typography>
-          <Typography variant="h5" color="text.secondary" sx={{ fontWeight: 400 }}>
+          <Typography variant="h5" color="text.secondary" sx={{ fontWeight: 400, fontSize: '1.05rem' }}>
             AI-enhanced search tool
           </Typography>
         </Box>
