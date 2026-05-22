@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Box, Container, Typography } from '@mui/material'
 import SearchBar from '../components/SearchBar'
-import ResultCard from '../components/ResultCard'
+import DatasetResultCard, { type GroupedResult } from '../components/DatasetResultCard'
 import AISummary from '../components/AISummary'
 import { useSearchStore } from '../stores/searchStore'
 import { search } from '../api/search'
@@ -31,6 +31,18 @@ export default function ResultsPage() {
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [q])
+
+  const groupedResults = useMemo<GroupedResult[]>(() => {
+    const map = new Map<string, GroupedResult>()
+    for (const r of results) {
+      const key = r.dataset.uri
+      if (!map.has(key)) map.set(key, { dataset: r.dataset, chunks: [] })
+      map.get(key)!.chunks.push(r)
+    }
+    return Array.from(map.values())
+      .map((g) => ({ ...g, chunks: [...g.chunks].sort((a, b) => b.score - a.score) }))
+      .sort((a, b) => b.chunks[0].score - a.chunks[0].score)
+  }, [results])
 
   const handleSearch = (newQ: string) => {
     navigate(`/search?q=${encodeURIComponent(newQ)}`)
@@ -72,16 +84,16 @@ export default function ResultsPage() {
         </Typography>
       )}
 
-      {!loading && results.length > 0 && (
+      {!loading && groupedResults.length > 0 && (
         <>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 3, mb: 2 }}>
-            {results.length} result{results.length !== 1 ? 's' : ''} for <strong>"{q}"</strong>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {groupedResults.length} dataset{groupedResults.length !== 1 ? 's' : ''} ({results.length} result{results.length !== 1 ? 's' : ''}) for <strong>"{q}"</strong>
           </Typography>
 
           <AISummary query={q} />
 
-          {results.map((r, i) => (
-            <ResultCard key={r.result.item.doc_id + i} result={r} index={i} />
+          {groupedResults.map((g, i) => (
+            <DatasetResultCard key={g.dataset.uri} group={g} index={i} />
           ))}
         </>
       )}
