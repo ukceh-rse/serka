@@ -105,18 +105,19 @@ export default function AISummary({ query }: Props) {
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                 {aiSummary}
               </ReactMarkdown>
-              {!expanded && (
-                <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 1 }}>
-                  <Button
-                    size="small"
-                    onClick={() => setExpanded(true)}
-                    sx={{ fontSize: '0.7rem', textTransform: 'none', color: 'text.secondary' }}
-                  >
-                    Show more
-                  </Button>
-                </Box>
-              )}
             </Box>
+            {!expanded && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: '6px' }}>
+                <Button
+                  size="small"
+                  color="primary"
+                  onClick={() => setExpanded(true)}
+                  sx={{ fontSize: '0.7rem', textTransform: 'none' }}
+                >
+                  Show more
+                </Button>
+              </Box>
+            )}
 
             {!aiLoading && (
               <>
