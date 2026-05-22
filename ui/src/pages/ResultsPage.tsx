@@ -1,6 +1,8 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Box, Container, Typography } from '@mui/material'
+import { Box, Container, IconButton, Stack, Tooltip, Typography } from '@mui/material'
+import ViewModuleIcon from '@mui/icons-material/ViewModule'
+import ViewListIcon from '@mui/icons-material/ViewList'
 import Masonry from '@mui/lab/Masonry'
 import SearchBar from '../components/SearchBar'
 import DatasetResultCard, { type GroupedResult } from '../components/DatasetResultCard'
@@ -63,6 +65,8 @@ export default function ResultsPage() {
       .sort((a, b) => b.chunks[0].score - a.chunks[0].score)
   }, [results])
 
+  const [viewMode, setViewMode] = useState<'masonry' | 'list'>('masonry')
+
   const handleSearch = (newQ: string) => {
     navigate(`/search?q=${encodeURIComponent(newQ)}`)
   }
@@ -95,17 +99,39 @@ export default function ResultsPage() {
 
       {!loading && groupedResults.length > 0 && (
         <>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {groupedResults.length} dataset{groupedResults.length !== 1 ? 's' : ''} ({results.length} result{results.length !== 1 ? 's' : ''}) for <strong>"{q}"</strong>
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              {groupedResults.length} dataset{groupedResults.length !== 1 ? 's' : ''} ({results.length} result{results.length !== 1 ? 's' : ''}) for <strong>"{q}"</strong>
+            </Typography>
+            <Box>
+              <Tooltip title="Grid view">
+                <IconButton size="small" onClick={() => setViewMode('masonry')} color={viewMode === 'masonry' ? 'primary' : 'default'}>
+                  <ViewModuleIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="List view">
+                <IconButton size="small" onClick={() => setViewMode('list')} color={viewMode === 'list' ? 'primary' : 'default'}>
+                  <ViewListIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Box>
 
           <AISummary query={q} />
 
-          <Masonry columns={{ xs: 1, sm: 2, md: 3 }} spacing={2}>
-            {groupedResults.map((g, i) => (
-              <DatasetResultCard key={g.dataset.uri} group={g} index={i} />
-            ))}
-          </Masonry>
+          {viewMode === 'masonry' ? (
+            <Masonry columns={{ xs: 1, sm: 2, md: 3 }} spacing={2}>
+              {groupedResults.map((g, i) => (
+                <DatasetResultCard key={g.dataset.uri} group={g} index={i} />
+              ))}
+            </Masonry>
+          ) : (
+            <Stack spacing={2}>
+              {groupedResults.map((g, i) => (
+                <DatasetResultCard key={g.dataset.uri} group={g} index={i} />
+              ))}
+            </Stack>
+          )}
         </>
       )}
 

@@ -25,6 +25,8 @@ export default function DatasetResultCard({ group, index }: Props) {
   const { dataset, chunks } = group
   const top = chunks[0]
   const needsExpand = chunks.length > 1 || top.result.item.content.length > TRUNCATE_THRESHOLD
+  // More chunks → more lines visible collapsed, so taller cards naturally sort by density
+  const collapsedLines = Math.min(chunks.length + 1, 5)
 
   return (
     <Card variant="outlined">
@@ -47,7 +49,7 @@ export default function DatasetResultCard({ group, index }: Props) {
           )}
         </Box>
 
-        {/* Top chunk — truncated unless expanded */}
+        {/* Top chunk — line clamp scales with chunk count */}
         <Typography
           variant="body2"
           color="text.secondary"
@@ -58,7 +60,7 @@ export default function DatasetResultCard({ group, index }: Props) {
             overflow: 'hidden',
             display: '-webkit-box',
             WebkitBoxOrient: 'vertical',
-            WebkitLineClamp: expanded ? 'unset' : 2,
+            WebkitLineClamp: expanded ? 'unset' : collapsedLines,
           }}
         >
           {top.result.item.content}
@@ -84,13 +86,13 @@ export default function DatasetResultCard({ group, index }: Props) {
           ))}
         </Collapse>
 
-        {/* Expand / collapse button */}
+        {/* Expand / collapse */}
         {needsExpand && (
           <Button
             size="small"
             onClick={() => setExpanded((v) => !v)}
             endIcon={expanded ? <ExpandLessIcon sx={{ fontSize: '0.9rem !important' }} /> : <ExpandMoreIcon sx={{ fontSize: '0.9rem !important' }} />}
-            sx={{ mt: 0.5, mb: 0, fontSize: '0.7rem', p: '2px 6px', minWidth: 0, textTransform: 'none', color: 'text.secondary' }}
+            sx={{ mt: 0.5, fontSize: '0.7rem', p: '2px 6px', minWidth: 0, textTransform: 'none', color: 'text.secondary' }}
           >
             {expanded ? 'Less' : chunks.length > 1 ? `+${chunks.length - 1} more` : 'More'}
           </Button>
