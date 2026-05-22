@@ -122,13 +122,19 @@ export default function ResultsPage() {
           {viewMode === 'masonry' ? (
             <Masonry columns={{ xs: 1, sm: 2, md: 3 }} spacing={2}>
               {groupedResults.map((g, i) => (
-                <DatasetResultCard key={g.dataset.uri} group={g} index={i} />
+                <DatasetResultCard
+                  key={g.dataset.uri} group={g} index={i}
+                  collapsedLines={Math.min(g.chunks.length * 2 + 1, 9)}
+                />
               ))}
             </Masonry>
           ) : (
             <Stack spacing={2}>
               {groupedResults.map((g, i) => (
-                <DatasetResultCard key={g.dataset.uri} group={g} index={i} />
+                <DatasetResultCard
+                  key={g.dataset.uri} group={g} index={i}
+                  collapsedLines={5}
+                />
               ))}
             </Stack>
           )}

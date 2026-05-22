@@ -16,17 +16,16 @@ export interface GroupedResult {
 interface Props {
   group: GroupedResult
   index: number
+  collapsedLines: number
 }
 
 const TRUNCATE_THRESHOLD = 120
 
-export default function DatasetResultCard({ group, index }: Props) {
+export default function DatasetResultCard({ group, index, collapsedLines }: Props) {
   const [expanded, setExpanded] = useState(false)
   const { dataset, chunks } = group
   const top = chunks[0]
   const needsExpand = chunks.length > 1 || top.result.item.content.length > TRUNCATE_THRESHOLD
-  // More chunks → more lines visible collapsed, so taller cards naturally sort by density
-  const collapsedLines = Math.min(chunks.length + 1, 5)
 
   return (
     <Card variant="outlined">
