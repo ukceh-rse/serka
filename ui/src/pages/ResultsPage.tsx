@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Box, Container, IconButton, Stack, Tooltip, Typography } from '@mui/material'
 import ViewModuleIcon from '@mui/icons-material/ViewModule'
@@ -22,7 +22,12 @@ export default function ResultsPage() {
     toggleAiSummary, appendAiSummary, setAiThinking, setAiLoading, resetAiSummary,
   } = useSearchStore()
 
+  const summaryAbortRef = useRef<AbortController | null>(null)
+
   const runSummary = async (queryStr: string) => {
+    summaryAbortRef.current?.abort()
+    const controller = new AbortController()
+    summaryAbortRef.current = controller
     setAiLoading(true)
     try {
       await streamSummary(queryStr, (event) => {
@@ -30,9 +35,9 @@ export default function ResultsPage() {
         if (event.type === 'THINKING_END') setAiThinking(false)
         if (event.type === 'TEXT_MESSAGE_CONTENT' && event.delta) appendAiSummary(event.delta)
         if (event.type === 'RUN_FINISHED') setAiLoading(false)
-      })
-    } catch {
-      setAiLoading(false)
+      }, controller.signal)
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') setAiLoading(false)
     }
   }
 
@@ -51,6 +56,7 @@ export default function ResultsPage() {
     if (useSearchStore.getState().aiSummaryEnabled) {
       runSummary(q)
     }
+    return () => { summaryAbortRef.current?.abort() }
   }, [q])
 
   const groupedResults = useMemo<GroupedResult[]>(() => {

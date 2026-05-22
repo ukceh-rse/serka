@@ -42,12 +42,14 @@ async function* parseSSE(body: ReadableStream<Uint8Array>): AsyncGenerator<SSEEv
 
 export async function streamSummary(
   message: string,
-  onEvent: (e: SSEEvent) => void
+  onEvent: (e: SSEEvent) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   const res = await fetch('/v1/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message }),
+    signal,
   })
   if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.statusText}`)
   for await (const event of parseSSE(res.body)) {
