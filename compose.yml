@@ -5,7 +5,7 @@ services:
       dockerfile: Containerfile
     image: serka-image
     ports:
-      - "8080:8000"
+      - "9000:8000"
     depends_on:
       - neo4j
       - mcp
@@ -32,6 +32,19 @@ services:
       - NEO4J_HOST=neo4j
     volumes:
       - ${HOME}/.aws:/root/.aws:ro
+    networks:
+      - internal
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Containerfile
+    image: serka-ui-image
+    ports:
+      - "8080:80"
+    depends_on:
+      - serka
+    env_file: .env
     networks:
       - internal
 
