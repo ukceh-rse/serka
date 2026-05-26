@@ -18,7 +18,7 @@ export const createAppTheme = (mode: PaletteMode) =>
       secondary: { main: brand.land },
       ...(mode === 'dark'
         ? {
-            background: { default: '#0a0a0a', paper: '#111111' },
+            background: { default: '#141414', paper: '#1e1e1e' },
             text: { primary: brand.white, secondary: '#aaaaaa' },
           }
         : {

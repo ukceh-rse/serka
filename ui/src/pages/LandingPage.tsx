@@ -1,9 +1,20 @@
 import { Box, Container, Typography } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
+import NaturePeopleOutlinedIcon from '@mui/icons-material/NaturePeopleOutlined'
+import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined'
+import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined'
 import SearchBar from '../components/SearchBar'
 import { brand } from '../theme'
 import { useAppStore } from '../stores/appStore'
 import { EXAMPLE_SEARCHES } from '../constants'
+
+// Data lime (#DBFE52) is a dark-background colour per brand guidelines.
+// In dark mode it's used as the datasets icon; in light mode land green substitutes.
+const SEARCH_CARDS = [
+  { query: EXAMPLE_SEARCHES[0], Icon: NaturePeopleOutlinedIcon, color: brand.land },
+  { query: EXAMPLE_SEARCHES[1], Icon: LayersOutlinedIcon, color: brand.water },
+  { query: EXAMPLE_SEARCHES[2], Icon: LeaderboardOutlinedIcon, color: brand.land, darkColor: brand.data },
+]
 
 export default function LandingPage() {
   const navigate = useNavigate()
@@ -19,7 +30,7 @@ export default function LandingPage() {
         justifyContent: 'center',
         background: (theme) =>
           theme.palette.mode === 'dark'
-            ? 'linear-gradient(160deg, #0a0a0a 60%, #0d1a10 100%)'
+            ? 'linear-gradient(160deg, #141414 60%, #171f12 100%)'
             : 'linear-gradient(160deg, #f5f5f5 60%, #e8f0e4 100%)',
       }}
     >
@@ -28,7 +39,7 @@ export default function LandingPage() {
           component="img"
           src={themeMode === 'dark' ? '/ukceh-logo_light.png' : '/ukceh-logo.png'}
           alt="UKCEH"
-          sx={{ height: 108, mb: 4, opacity: 0.9 }}
+          sx={{ height: 162, mb: 4, opacity: 0.9 }}
         />
         <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 1.5, mb: 5 }}>
           <Typography variant="h2" component="h1" sx={{ fontWeight: 700, letterSpacing: '-1px', fontSize: '2.625rem' }}>
@@ -43,19 +54,22 @@ export default function LandingPage() {
           onSearch={(q) => navigate(`/search?${new URLSearchParams({ q })}`)}
         />
         <Box sx={{ mt: 6, display: 'flex', gap: 2 }}>
-          {EXAMPLE_SEARCHES.map((t) => (
+          {SEARCH_CARDS.map(({ query, Icon, color, darkColor }) => (
             <Box
-              key={t}
+              key={query}
               component="button"
-              onClick={() => navigate(`/search?${new URLSearchParams({ q: t, ai: 'true' })}`)}
-
+              onClick={() => navigate(`/search?${new URLSearchParams({ q: query, ai: 'true' })}`)}
               sx={{
                 flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 1,
                 border: '1px solid',
                 borderColor: brand.air,
                 borderRadius: 2,
                 px: 2,
-                py: 1.5,
+                py: 2,
                 background: 'transparent',
                 color: 'text.secondary',
                 cursor: 'pointer',
@@ -64,10 +78,11 @@ export default function LandingPage() {
                 textAlign: 'center',
                 whiteSpace: 'normal',
                 transition: 'border-color 0.15s, color 0.15s',
-                '&:hover': { borderColor: brand.water, color: brand.water },
+                '&:hover': { borderColor: brand.water, color: 'text.primary' },
               }}
             >
-              {t}
+              <Icon sx={{ fontSize: '1.5rem', color: (theme) => theme.palette.mode === 'dark' ? (darkColor ?? color) : color, opacity: 0.9 }} />
+              {query}
             </Box>
           ))}
         </Box>

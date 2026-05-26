@@ -1,6 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react'
 import {
   Box,
+  ButtonBase,
   CircularProgress,
   Container,
   Divider,
@@ -16,6 +17,14 @@ import { useChatStore, type ChatMessage } from '../stores/chatStore'
 import FeedbackWidget from '../components/FeedbackWidget'
 import { streamChat } from '../api/chat'
 import { useState } from 'react'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+
+const STARTER_PROMPTS = [
+  'What datasets are available on soil carbon?',
+  'How is freshwater quality monitored in the UK?',
+  'Which datasets cover land use change over time?',
+  'What bird population data is available?',
+]
 
 function MessageBubble({ msg, index }: { msg: ChatMessage; index: number }) {
   const isUser = msg.role === 'user'
@@ -119,10 +128,36 @@ export default function ChatPage() {
 
       <Box sx={{ flex: 1, overflowY: 'auto', pr: 1 }}>
         {messages.length === 0 && (
-          <Box sx={{ textAlign: 'center', mt: 8 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 8, gap: 3 }}>
             <Typography color="text.secondary" variant="body2">
               Ask a question about EIDC environmental datasets
             </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%', maxWidth: 480 }}>
+              {STARTER_PROMPTS.map((prompt) => (
+                <ButtonBase
+                  key={prompt}
+                  onClick={() => { setInput(prompt); inputRef.current?.focus() }}
+                  sx={{
+                    width: '100%',
+                    textAlign: 'left',
+                    px: 2,
+                    py: 1.25,
+                    borderRadius: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    '&:hover': { bgcolor: 'action.hover' },
+                  }}
+                >
+                  <AutoAwesomeIcon sx={{ fontSize: '0.9rem', color: 'primary.main', opacity: 0.7, flexShrink: 0 }} />
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+                    {prompt}
+                  </Typography>
+                </ButtonBase>
+              ))}
+            </Box>
           </Box>
         )}
         {messages.map((msg, i) => (

@@ -61,15 +61,10 @@ export default function DatasetResultCard({ group, index, collapsedLines }: Prop
           <Typography
             variant="body2"
             color="text.secondary"
-            sx={{ fontSize: '0.78rem', lineHeight: 1.5, mb: 0.75, textAlign: 'justify' }}
+            sx={{ fontSize: '0.78rem', lineHeight: 1.5, mb: 0.75, textAlign: 'left' }}
           >
             {top.result.item.content}
           </Typography>
-          {expanded && (
-            <Box sx={{ display: 'flex', gap: 0.5, mb: 0.75 }}>
-              <Chip label={`Score: ${top.score.toFixed(2)}`} size="small" variant="outlined" sx={{ opacity: 0.55, fontSize: '0.65rem', height: 18 }} />
-            </Box>
-          )}
 
           {chunks.slice(1).map((r, i) => (
             <Box key={r.result.item.doc_id + i}>
@@ -77,13 +72,10 @@ export default function DatasetResultCard({ group, index, collapsedLines }: Prop
               <Typography
                 variant="body2"
                 color="text.secondary"
-                sx={{ fontSize: '0.78rem', lineHeight: 1.5, mb: 0.75, textAlign: 'justify' }}
+                sx={{ fontSize: '0.78rem', lineHeight: 1.5, mb: 0.75, textAlign: 'left' }}
               >
                 {r.result.item.content}
               </Typography>
-              <Box sx={{ display: 'flex', gap: 0.5 }}>
-                <Chip label={`Score: ${r.score.toFixed(2)}`} size="small" variant="outlined" sx={{ opacity: 0.55, fontSize: '0.65rem', height: 18 }} />
-              </Box>
             </Box>
           ))}
         </Collapse>
@@ -91,11 +83,6 @@ export default function DatasetResultCard({ group, index, collapsedLines }: Prop
         {/* Footer */}
         <Divider sx={{ mt: 1, mb: 0.75 }} />
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          {!expanded && (
-            <Box sx={{ display: 'flex', gap: 0.5 }}>
-              <Chip label={`Score: ${top.score.toFixed(2)}`} size="small" variant="outlined" sx={{ opacity: 0.55, fontSize: '0.65rem', height: 18 }} />
-            </Box>
-          )}
           <Box sx={{ ml: 'auto' }}>
             <FeedbackWidget context={{ type: 'result', index, dataset_uri: dataset.uri }} />
           </Box>

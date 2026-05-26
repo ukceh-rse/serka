@@ -1,7 +1,9 @@
-import { AppBar, Box, IconButton, Toolbar, Tooltip, Typography } from '@mui/material'
+import { AppBar, Box, Button, IconButton, Toolbar, Tooltip, Typography } from '@mui/material'
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined'
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined'
-import { Link } from 'react-router-dom'
+import SearchIcon from '@mui/icons-material/Search'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import PrivacyConsent from './PrivacyConsent'
 import GeneralFeedback from './GeneralFeedback'
@@ -10,8 +12,17 @@ interface Props {
   children: React.ReactNode
 }
 
+const navLinkSx = (isActive: boolean) => ({
+  fontSize: '0.875rem',
+  textTransform: 'none' as const,
+  color: isActive ? 'primary.main' : 'text.secondary',
+  fontWeight: isActive ? 600 : 400,
+  '&:hover': { color: 'text.primary', bgcolor: 'transparent' },
+})
+
 export default function Layout({ children }: Props) {
   const { themeMode, toggleTheme } = useAppStore()
+  const { pathname } = useLocation()
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -26,6 +37,29 @@ export default function Layout({ children }: Props) {
               </Typography>
             </Typography>
           </Link>
+
+          {/* Page navigation — hidden on landing page */}
+          <Box sx={{ display: pathname === '/' ? 'none' : 'flex', alignItems: 'center', ml: 3, gap: 0.5 }}>
+            <NavLink to="/search" style={{ textDecoration: 'none' }}>
+              {({ isActive }) => (
+                <Button startIcon={<SearchIcon sx={{ fontSize: '1rem !important' }} />} sx={navLinkSx(isActive)}>
+                  Search
+                </Button>
+              )}
+            </NavLink>
+            <Tooltip title="Coming soon">
+              <span>
+                <Button
+                  startIcon={<AutoAwesomeIcon sx={{ fontSize: '1rem !important' }} />}
+                  disabled
+                  sx={{ fontSize: '0.875rem', textTransform: 'none' }}
+                >
+                  Chat
+                </Button>
+              </span>
+            </Tooltip>
+          </Box>
+
           <Box sx={{ flex: 1 }} />
           <GeneralFeedback />
           <Tooltip title={themeMode === 'dark' ? 'Light mode' : 'Dark mode'}>

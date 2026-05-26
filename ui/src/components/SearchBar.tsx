@@ -112,12 +112,20 @@ export default function SearchBar({
             <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 0.75 }} />
             <Tooltip title={aiSummaryActive ? 'Disable AI summary' : 'Enable AI summary'}>
               <span>
-                <IconButton
-                  aria-label="AI summary"
+                <ButtonBase
+                  aria-label={aiSummaryActive ? 'Disable AI summary' : 'Enable AI summary'}
                   onClick={() => { setAiButtonClicked(true); onAiSummary() }}
-                  color={aiSummaryActive ? 'primary' : 'default'}
                   sx={(theme) => ({
-                    opacity: aiSummaryActive ? 1 : 0.6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    px: 1,
+                    py: 0.5,
+                    borderRadius: 1.5,
+                    color: aiSummaryActive ? theme.palette.primary.main : theme.palette.text.secondary,
+                    opacity: aiSummaryActive ? 1 : 0.65,
+                    transition: 'opacity 0.15s, color 0.15s',
+                    '&:hover': { opacity: 1 },
                     ...(!aiSummaryActive && !aiButtonClicked && {
                       '@keyframes subtlePulse': {
                         '0%, 100%': { opacity: 0.4, color: theme.palette.text.secondary },
@@ -127,8 +135,11 @@ export default function SearchBar({
                     }),
                   })}
                 >
-                  <AutoAwesomeIcon />
-                </IconButton>
+                  <AutoAwesomeIcon sx={{ fontSize: '1.1rem' }} />
+                  <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', userSelect: 'none', lineHeight: 1 }}>
+                    AI
+                  </Typography>
+                </ButtonBase>
               </span>
             </Tooltip>
           </>

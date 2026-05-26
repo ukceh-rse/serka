@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Box, CircularProgress, Container, IconButton, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, Card, CardContent, Container, IconButton, Skeleton, Stack, Tooltip, Typography } from '@mui/material'
 import ViewModuleIcon from '@mui/icons-material/ViewModule'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import Masonry from '@mui/lab/Masonry'
@@ -88,7 +88,7 @@ export default function ResultsPage() {
       .sort((a, b) => b.chunks[0].score - a.chunks[0].score)
   }, [results])
 
-  const [viewMode, setViewMode] = useState<'masonry' | 'list'>('masonry')
+  const [viewMode, setViewMode] = useState<'masonry' | 'list'>('list')
 
   const handleSearch = (newQ: string) => {
     const sp = new URLSearchParams({ q: newQ })
@@ -129,9 +129,18 @@ export default function ResultsPage() {
       </Box>
 
       {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
-          <CircularProgress />
-        </Box>
+        <Stack spacing={2}>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Card key={i} variant="outlined">
+              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                <Skeleton variant="text" width="70%" sx={{ mb: 1 }} />
+                <Skeleton variant="text" width="100%" />
+                <Skeleton variant="text" width="100%" />
+                <Skeleton variant="text" width="55%" />
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
       )}
 
       {error && (
@@ -146,7 +155,7 @@ export default function ResultsPage() {
 
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <Typography variant="subtitle2" color="text.secondary">
-              Hybrid (semantic/full-text) search results for "<strong>{q}</strong>" ({groupedResults.length} dataset{groupedResults.length !== 1 ? 's' : ''}, {results.length} result{results.length !== 1 ? 's' : ''}):
+              {groupedResults.length} dataset{groupedResults.length !== 1 ? 's' : ''} found for "<strong>{q}</strong>"
             </Typography>
             <Box>
               <Tooltip title="Grid view">
@@ -185,9 +194,37 @@ export default function ResultsPage() {
       )}
 
       {!loading && !error && results.length === 0 && q && (
-        <Typography color="text.secondary" sx={{ mt: 2 }}>
-          No results found for "{q}".
-        </Typography>
+        <Box sx={{ mt: 4 }}>
+          <Typography color="text.secondary" sx={{ mb: 3 }}>
+            No results found for "<strong>{q}</strong>". Try one of these instead:
+          </Typography>
+          <Stack spacing={1} sx={{ maxWidth: 560 }}>
+            {EXAMPLE_SEARCHES.map((t) => (
+              <Box
+                key={t}
+                component="button"
+                onClick={() => handleExampleSearch(t)}
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  px: 2,
+                  py: 1.25,
+                  background: 'transparent',
+                  color: 'text.secondary',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontFamily: 'inherit',
+                  textAlign: 'left',
+                  transition: 'border-color 0.15s, color 0.15s',
+                  '&:hover': { borderColor: 'primary.main', color: 'text.primary' },
+                }}
+              >
+                {t}
+              </Box>
+            ))}
+          </Stack>
+        </Box>
       )}
     </Container>
   )
