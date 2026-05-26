@@ -53,7 +53,7 @@ interface Props {
 }
 
 export default function AISummary({ query }: Props) {
-  const { aiSummary, aiThinking, aiLoading } = useSearchStore()
+  const { aiSummary, aiLoading } = useSearchStore()
   const [expanded, setExpanded] = useState(false)
 
   useEffect(() => { if (aiLoading) setExpanded(false) }, [aiLoading])
