@@ -2,13 +2,11 @@ import { Box, Container, Typography } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import SearchBar from '../components/SearchBar'
 import { brand } from '../theme'
-import { useSearchStore } from '../stores/searchStore'
 import { useAppStore } from '../stores/appStore'
 import { EXAMPLE_SEARCHES } from '../constants'
 
 export default function LandingPage() {
   const navigate = useNavigate()
-  const { aiSummaryEnabled, toggleAiSummary } = useSearchStore()
   const { themeMode } = useAppStore()
 
   return (
@@ -42,17 +40,15 @@ export default function LandingPage() {
         </Box>
         <SearchBar
           size="large"
-          onSearch={(q) => navigate(`/search?q=${encodeURIComponent(q)}`)}
+          onSearch={(q) => navigate(`/search?${new URLSearchParams({ q })}`)}
         />
         <Box sx={{ mt: 6, display: 'flex', gap: 2 }}>
           {EXAMPLE_SEARCHES.map((t) => (
             <Box
               key={t}
               component="button"
-              onClick={() => {
-                if (!aiSummaryEnabled) toggleAiSummary()
-                navigate(`/search?q=${encodeURIComponent(t)}`)
-              }}
+              onClick={() => navigate(`/search?${new URLSearchParams({ q: t, ai: 'true' })}`)}
+
               sx={{
                 flex: 1,
                 border: '1px solid',

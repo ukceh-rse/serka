@@ -21,6 +21,7 @@ interface SearchState {
   setResults: (r: SearchResult[]) => void
   setLoading: (v: boolean) => void
   setError: (e: string | null) => void
+  setAiSummaryEnabled: (v: boolean) => void
   toggleAiSummary: () => void
   appendAiSummary: (delta: string) => void
   setAiThinking: (v: boolean) => void
@@ -43,6 +44,7 @@ export const useSearchStore = create<SearchState>()((set) => ({
   setResults: (r) => set({ results: r }),
   setLoading: (v) => set({ loading: v }),
   setError: (e) => set({ error: e }),
+  setAiSummaryEnabled: (v) => set({ aiSummaryEnabled: v }),
   toggleAiSummary: () => set((s) => ({ aiSummaryEnabled: !s.aiSummaryEnabled })),
   appendAiSummary: (delta) => set((s) => ({ aiSummary: s.aiSummary + delta })),
   setAiThinking: (v) => set({ aiThinking: v }),

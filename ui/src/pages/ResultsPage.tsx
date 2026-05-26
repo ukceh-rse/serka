@@ -13,19 +13,25 @@ import { streamSummary } from '../api/chat'
 import { EXAMPLE_SEARCHES } from '../constants'
 
 export default function ResultsPage() {
-  const [params] = useSearchParams()
+  const [params, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const q = params.get('q') ?? ''
+  const aiFromUrl = params.get('ai') === 'true'
   const {
     query, results, loading, error,
     setQuery, setResults, setLoading, setError,
     aiSummaryEnabled, aiSummary, aiLoading,
-    toggleAiSummary, appendAiSummary, setAiThinking, setAiLoading, resetAiSummary,
+    setAiSummaryEnabled, appendAiSummary, setAiThinking, setAiLoading, resetAiSummary,
     addRecentSearch,
   } = useSearchStore()
 
   const [searchFocused, setSearchFocused] = useState(false)
   useEffect(() => { setSearchFocused(false) }, [q])
+
+  // Keep store in sync with URL param
+  useEffect(() => {
+    if (aiFromUrl !== aiSummaryEnabled) setAiSummaryEnabled(aiFromUrl)
+  }, [aiFromUrl])
 
   const summaryAbortRef = useRef<AbortController | null>(null)
 
@@ -46,6 +52,7 @@ export default function ResultsPage() {
     }
   }
 
+  // Run search when q changes
   useEffect(() => {
     if (!q) return
     if (q === query && results.length > 0) return
@@ -58,12 +65,16 @@ export default function ResultsPage() {
       .then(setResults)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
-    // Read state directly to avoid stale closure; resetAiSummary doesn't clear the enabled flag
-    if (useSearchStore.getState().aiSummaryEnabled) {
-      runSummary(q)
-    }
+    if (aiFromUrl) runSummary(q)
     return () => { summaryAbortRef.current?.abort() }
   }, [q])
+
+  // Run summary when AI is toggled on for an already-loaded result set
+  useEffect(() => {
+    if (aiFromUrl && q && q === query && results.length > 0 && !aiSummary && !aiLoading) {
+      runSummary(q)
+    }
+  }, [aiFromUrl])
 
   const groupedResults = useMemo<GroupedResult[]>(() => {
     const map = new Map<string, GroupedResult>()
@@ -80,19 +91,23 @@ export default function ResultsPage() {
   const [viewMode, setViewMode] = useState<'masonry' | 'list'>('masonry')
 
   const handleSearch = (newQ: string) => {
-    navigate(`/search?q=${encodeURIComponent(newQ)}`)
+    const sp = new URLSearchParams({ q: newQ })
+    if (aiFromUrl) sp.set('ai', 'true')
+    navigate(`/search?${sp}`)
   }
 
   const handleExampleSearch = (newQ: string) => {
-    if (!aiSummaryEnabled) toggleAiSummary()
-    handleSearch(newQ)
+    const sp = new URLSearchParams({ q: newQ, ai: 'true' })
+    navigate(`/search?${sp}`)
   }
 
-  const handleAiSummary = async () => {
-    toggleAiSummary()
-    if (!aiSummaryEnabled && !aiSummary && !aiLoading) {
-      await runSummary(q)
-    }
+  const handleAiSummary = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (prev.get('ai') === 'true') next.delete('ai')
+      else next.set('ai', 'true')
+      return next
+    })
   }
 
   return (
@@ -106,7 +121,7 @@ export default function ResultsPage() {
           onSearch={handleSearch}
           initialValue={q}
           onAiSummary={!loading && results.length > 0 ? handleAiSummary : undefined}
-          aiSummaryActive={aiSummaryEnabled}
+          aiSummaryActive={aiFromUrl}
           showSuggestions
           onFocusChange={setSearchFocused}
           onExampleSearch={handleExampleSearch}
