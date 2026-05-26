@@ -13,7 +13,6 @@ class FeedbackLogger:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def log_feedback(self, feedback: Dict[str, Any]) -> None:
-        feedback["timestamp"] = datetime.now().isoformat()
-        feedback["version"] = _version
+        entry = {**feedback, "timestamp": datetime.now().isoformat(), "version": _version}
         with self.path.open("a") as f:
-            f.write(json.dumps(feedback) + "\n")
+            f.write(json.dumps(entry) + "\n")

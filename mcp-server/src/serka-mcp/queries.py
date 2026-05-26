@@ -5,6 +5,9 @@ from models import BoundingBox
 
 _LUCENE_SPECIAL = re.compile(r'([+\-&|!(){}\[\]^"~*?:\\/])')
 
+_ALLOWED_NODE_TYPES = {"Dataset", "Person", "Organisation", "TextChunk"}
+_ALLOWED_SORT_FIELDS = {"citations", "publication_date"}
+
 
 def escape_fts_query(query: str) -> str:
 	return _LUCENE_SPECIAL.sub(r"\\\1", query)
@@ -17,6 +20,10 @@ def list_query(
 	sort_by: Literal["citations", "publication_date"] = "citations",
 	order: Literal["ascending", "descending"] = "descending",
 ):
+	if type not in _ALLOWED_NODE_TYPES:
+		raise ValueError(f"Invalid node type: {type!r}")
+	if sort_by not in _ALLOWED_SORT_FIELDS:
+		raise ValueError(f"Invalid sort field: {sort_by!r}")
 	cypher_order = "ASC" if order == "ascending" else "DESC"
 	query = f"MATCH (n:{type}) RETURN apoc.map.removeKey(properties(n), 'embedding') AS dataset ORDER BY n.{sort_by} {cypher_order} LIMIT {limit}"
 	return tx.run(query).data()

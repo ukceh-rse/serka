@@ -9,6 +9,7 @@ class Neo4jGraphReader:
 		self.url = url
 		self.username = username
 		self.password = password
+		self._driver = GraphDatabase.driver(url, auth=(username, password))
 
 	@staticmethod
 	def query_nodes(tx, embedding: List[float]) -> List[Dict[str, Any]]:
@@ -88,12 +89,8 @@ class Neo4jGraphReader:
 
 	@component.output_types(nodes=List[Dict[str, Any]], markdown_nodes=str)
 	def run(self, embedding: List[float]):
-		with GraphDatabase.driver(
-			self.url, auth=(self.username, self.password)
-		) as driver:
-			with driver.session(database="neo4j") as session:
-				nodes = session.execute_read(
-					Neo4jGraphReader.query_nodes, embedding=embedding
-				)
-		# md_nodes = self.nodes_to_markdown(nodes)
+		with self._driver.session(database="neo4j") as session:
+			nodes = session.execute_read(
+				Neo4jGraphReader.query_nodes, embedding=embedding
+			)
 		return {"nodes": nodes, "markdown_nodes": ""}

@@ -18,6 +18,7 @@ class Neo4jGraphWriter:
 		self.url = f"bolt://{host}:{port}"
 		self.username = username
 		self.password = password
+		self._driver = GraphDatabase.driver(self.url, auth=(username, password))
 
 	@staticmethod
 	def _write_nodes(tx, node_type: str, batch: List[Dict[str, Any]]) -> int:
@@ -105,44 +106,42 @@ class Neo4jGraphWriter:
 	) -> Dict[str, Any]:
 		docs_as_dicts = [self.doc_to_dict(doc) for doc in docs]
 
-		with GraphDatabase.driver(self.url, auth=(self.username, self.password)) as driver:
-			with driver.session(database="neo4j") as session:
-
-				# Phase 1: bulk-create nodes in batches
-				node_result: Dict[str, int] = {}
-				for node_type, node_list in nodes.items():
-					unique = list({n["uri"]: n for n in node_list}.values())
-					node_result[node_type] = sum(
-						session.execute_write(Neo4jGraphWriter._write_nodes, node_type, batch)
-						for batch in _batched(unique, _BATCH_SIZE)
-					)
-
-				unique_docs = list({d["id"]: d for d in docs_as_dicts}.values())
-				node_result["Document"] = sum(
-					session.execute_write(Neo4jGraphWriter._write_doc_nodes, batch)
-					for batch in _batched(unique_docs, _BATCH_SIZE)
+		with self._driver.session(database="neo4j") as session:
+			# Phase 1: bulk-create nodes in batches
+			node_result: Dict[str, int] = {}
+			for node_type, node_list in nodes.items():
+				unique = list({n["uri"]: n for n in node_list}.values())
+				node_result[node_type] = sum(
+					session.execute_write(Neo4jGraphWriter._write_nodes, node_type, batch)
+					for batch in _batched(unique, _BATCH_SIZE)
 				)
 
-				# Phase 2: lookup indexes before relationship MATCH
-				session.execute_write(Neo4jGraphWriter._create_lookup_indexes)
+			unique_docs = list({d["id"]: d for d in docs_as_dicts}.values())
+			node_result["Document"] = sum(
+				session.execute_write(Neo4jGraphWriter._write_doc_nodes, batch)
+				for batch in _batched(unique_docs, _BATCH_SIZE)
+			)
 
-				# Phase 3: create relationships in batches
-				relation_result: Dict[str, int] = {}
-				for relation_type, relation_list in relations.items():
-					unique = list({(r[0], r[1]): r for r in relation_list}.values())
-					relation_result[relation_type] = sum(
-						session.execute_write(Neo4jGraphWriter._write_relations, relation_type, batch)
-						for batch in _batched(unique, _BATCH_SIZE)
-					)
+			# Phase 2: lookup indexes before relationship MATCH
+			session.execute_write(Neo4jGraphWriter._create_lookup_indexes)
 
-				for rel_type, rel_list in Neo4jGraphWriter._unpack_doc_relations(docs_as_dicts).items():
-					unique = list({(r[0], r[1]): r for r in rel_list}.values())
-					relation_result[rel_type] = sum(
-						session.execute_write(Neo4jGraphWriter._write_doc_relations, rel_type, batch)
-						for batch in _batched(unique, _BATCH_SIZE)
-					)
+			# Phase 3: create relationships in batches
+			relation_result: Dict[str, int] = {}
+			for relation_type, relation_list in relations.items():
+				unique = list({(r[0], r[1]): r for r in relation_list}.values())
+				relation_result[relation_type] = sum(
+					session.execute_write(Neo4jGraphWriter._write_relations, relation_type, batch)
+					for batch in _batched(unique, _BATCH_SIZE)
+				)
 
-				# Phase 4: build search indexes over the completed dataset
-				session.execute_write(Neo4jGraphWriter._create_search_indexes)
+			for rel_type, rel_list in Neo4jGraphWriter._unpack_doc_relations(docs_as_dicts).items():
+				unique = list({(r[0], r[1]): r for r in rel_list}.values())
+				relation_result[rel_type] = sum(
+					session.execute_write(Neo4jGraphWriter._write_doc_relations, rel_type, batch)
+					for batch in _batched(unique, _BATCH_SIZE)
+				)
+
+			# Phase 4: build search indexes over the completed dataset
+			session.execute_write(Neo4jGraphWriter._create_search_indexes)
 
 		return {"nodes_created": node_result, "relations_created": relation_result}

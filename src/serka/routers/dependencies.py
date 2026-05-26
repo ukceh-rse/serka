@@ -14,6 +14,7 @@ StreamFn = Callable[[Any, Request], Response]
 
 _feedback_logger: FeedbackLogger | None = None
 _stream_fn: StreamFn | None = None
+_mcp_search_fn: Callable | None = None
 
 
 @lru_cache
@@ -22,12 +23,19 @@ def get_settings() -> Settings:
 
 
 async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable:
+	global _mcp_search_fn
+	if _mcp_search_fn is not None:
+		return _mcp_search_fn
+
+	mcp_url = f"http://{settings.mcp_host}:{settings.mcp_port}/mcp"
+
 	async def _search(q: str) -> list:
-		async with Client(f"http://{settings.mcp_host}:{settings.mcp_port}/mcp") as client:
+		async with Client(mcp_url) as client:
 			result = await client.call_tool("search", {"search_term": q})
 		return json.loads(result.content[0].text)
 
-	return _search
+	_mcp_search_fn = _search
+	return _mcp_search_fn
 
 
 def get_feedback_logger(settings: Settings = Depends(get_settings)) -> FeedbackLogger:

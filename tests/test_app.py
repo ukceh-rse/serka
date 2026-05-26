@@ -71,6 +71,22 @@ def test_feedback_submit_logs_and_returns_success(client):
 	mock_logger.log_feedback.assert_called_once_with(payload)
 
 
+def test_feedback_submit_rejects_unknown_fields(client):
+	app.dependency_overrides[get_feedback_logger] = lambda: MagicMock()
+	response = client.post(
+		"/v1/feedback/submit", json={"query": "q", "type": "VOTE", "injected": "bad"}
+	)
+	assert response.status_code == 422
+
+
+def test_feedback_submit_rejects_oversized_query(client):
+	app.dependency_overrides[get_feedback_logger] = lambda: MagicMock()
+	response = client.post(
+		"/v1/feedback/submit", json={"query": "x" * 2001, "type": "VOTE"}
+	)
+	assert response.status_code == 422
+
+
 
 # --- /chat/stream ---
 

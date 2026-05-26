@@ -3,9 +3,11 @@ import logging
 import requests_cache
 from tqdm import tqdm
 from haystack import component, Document
+from serka.cache import root as _cache_root
 from serka.graph.extractors import extract_doi
 
 logger = logging.getLogger(__name__)
+
 
 class _TimeoutSession(requests_cache.CachedSession):
 	def request(self, method, url, **kwargs):
@@ -13,7 +15,7 @@ class _TimeoutSession(requests_cache.CachedSession):
 		return super().request(method, url, **kwargs)
 
 
-_session = _TimeoutSession(".cache/http", backend="filesystem")
+_session = _TimeoutSession(str(_cache_root / "http"), backend="filesystem")
 
 
 def _eidc_url(id: str) -> str:

@@ -88,7 +88,9 @@ def get_dataset(uri: str) -> Union[Dataset, Error]:
 	try:
 		with neo4j_driver.session(database="neo4j") as session:
 			result = session.execute_read(dataset_cypher_query, uri=uri)
-			return Dataset(**result["d"])
+		if result is None:
+			return Error(msg=f"Dataset '{uri}' not found")
+		return Dataset(**result["d"])
 	except Exception as e:
 		logger.error(f"Error retrieving dataset {uri}: {str(e)}")
 		return Error(msg=f"Error retrieving dataset {uri}: {str(e)}")
@@ -116,6 +118,8 @@ def geocode_location(location: str) -> Union[GeoCodedLocation, Error]:
 	"""
 	try:
 		result: Location = geolocator.geocode(location, country_codes="GB")
+		if result is None:
+			return Error(msg=f"Location '{location}' not found")
 		boundary: BoundingBox = BoundingBox.from_nominatim(result.raw["boundingbox"])
 		return GeoCodedLocation(name=result.raw["display_name"], boundary=boundary)
 	except Exception as e:

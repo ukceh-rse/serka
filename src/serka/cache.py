@@ -1,12 +1,13 @@
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-root = Path(".cache")
+root = Path(os.environ.get("SERKA_CACHE_DIR", ".cache"))
 
 
 def _dir(*parts: str) -> Path:
