@@ -74,6 +74,7 @@ export default function ChatPage() {
     useChatStore()
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -180,7 +181,7 @@ export default function ChatPage() {
           multiline
           maxRows={4}
           sx={{ flex: 1, px: 1 }}
-          inputProps={{ 'aria-label': 'chat input' }}
+          inputProps={{ 'aria-label': 'chat input', ref: inputRef }}
         />
         <IconButton onClick={send} disabled={!input.trim() || loading} color="primary">
           {loading ? <CircularProgress size={20} /> : <SendIcon />}
