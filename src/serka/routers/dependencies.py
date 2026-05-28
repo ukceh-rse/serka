@@ -1,4 +1,5 @@
 import json
+from collections.abc import AsyncGenerator
 from functools import lru_cache
 from typing import Any, Callable
 
@@ -45,6 +46,12 @@ def get_feedback_logger(settings: Settings = Depends(get_settings)) -> FeedbackL
 	return _feedback_logger
 
 
+async def _prepend_metadata(stream: AsyncGenerator[bytes, None], model_id: str) -> AsyncGenerator[bytes, None]:
+	yield f'event: RUN_METADATA\ndata: {json.dumps({"type": "RUN_METADATA", "model": model_id})}\n\n'.encode()
+	async for chunk in stream:
+		yield chunk
+
+
 def get_stream_fn(settings: Settings = Depends(get_settings)) -> StreamFn:
 	"""Builds and returns the chat stream handler for the current config.
 	Override this dependency to swap in a mock stream without touching the chat router."""
@@ -72,9 +79,8 @@ def get_stream_fn(settings: Settings = Depends(get_settings)) -> StreamFn:
 	def stream(run_input: Any, request: Request) -> Response:
 		accept = request.headers.get("accept", SSE_CONTENT_TYPE)
 		adapter = AGUIAdapter(agent=agent, run_input=run_input, accept=accept)
-		return StreamingResponse(
-			adapter.encode_stream(adapter.run_stream()), media_type=accept
-		)
+		encoded = adapter.encode_stream(adapter.run_stream())
+		return StreamingResponse(_prepend_metadata(encoded, settings.models_llm), media_type=accept)
 
 	_stream_fn = stream
 	return _stream_fn

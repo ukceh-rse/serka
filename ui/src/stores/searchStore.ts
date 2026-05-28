@@ -14,6 +14,8 @@ interface SearchState {
   error: string | null
   aiSummaryEnabled: boolean
   aiSummary: string
+  aiModel: string
+  aiDate: string
   aiThinking: boolean
   aiLoading: boolean
   recentSearches: string[]
@@ -24,6 +26,8 @@ interface SearchState {
   setAiSummaryEnabled: (v: boolean) => void
   toggleAiSummary: () => void
   appendAiSummary: (delta: string) => void
+  setAiModel: (model: string) => void
+  setAiDate: (date: string) => void
   setAiThinking: (v: boolean) => void
   setAiLoading: (v: boolean) => void
   resetAiSummary: () => void
@@ -37,6 +41,8 @@ export const useSearchStore = create<SearchState>()((set) => ({
   error: null,
   aiSummaryEnabled: false,
   aiSummary: '',
+  aiModel: '',
+  aiDate: '',
   aiThinking: false,
   aiLoading: false,
   recentSearches: JSON.parse(localStorage.getItem('serka_recent') ?? '[]') as string[],
@@ -47,9 +53,11 @@ export const useSearchStore = create<SearchState>()((set) => ({
   setAiSummaryEnabled: (v) => set({ aiSummaryEnabled: v }),
   toggleAiSummary: () => set((s) => ({ aiSummaryEnabled: !s.aiSummaryEnabled })),
   appendAiSummary: (delta) => set((s) => ({ aiSummary: s.aiSummary + delta })),
+  setAiModel: (model) => set({ aiModel: model }),
+  setAiDate: (date) => set({ aiDate: date }),
   setAiThinking: (v) => set({ aiThinking: v }),
   setAiLoading: (v) => set({ aiLoading: v }),
-  resetAiSummary: () => set({ aiSummary: '', aiThinking: false, aiLoading: false }),
+  resetAiSummary: () => set({ aiSummary: '', aiModel: '', aiDate: '', aiThinking: false, aiLoading: false }),
   addRecentSearch: (q) => set((s) => {
     const updated = [q, ...s.recentSearches.filter((r) => r !== q)].slice(0, 5)
     localStorage.setItem('serka_recent', JSON.stringify(updated))

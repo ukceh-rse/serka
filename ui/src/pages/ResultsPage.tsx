@@ -21,7 +21,7 @@ export default function ResultsPage() {
     query, results, loading, error,
     setQuery, setResults, setLoading, setError,
     aiSummaryEnabled, aiSummary, aiLoading,
-    setAiSummaryEnabled, appendAiSummary, setAiThinking, setAiLoading, resetAiSummary,
+    setAiSummaryEnabled, appendAiSummary, setAiModel, setAiDate, setAiThinking, setAiLoading, resetAiSummary,
     addRecentSearch,
   } = useSearchStore()
 
@@ -42,10 +42,14 @@ export default function ResultsPage() {
     setAiLoading(true)
     try {
       await streamSummary(queryStr, (event) => {
+        if (event.type === 'RUN_METADATA' && event.model) setAiModel(event.model)
         if (event.type === 'THINKING_START') setAiThinking(true)
         if (event.type === 'THINKING_END') setAiThinking(false)
         if (event.type === 'TEXT_MESSAGE_CONTENT' && event.delta) appendAiSummary(event.delta)
-        if (event.type === 'RUN_FINISHED') setAiLoading(false)
+        if (event.type === 'RUN_FINISHED') {
+          setAiDate(new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))
+          setAiLoading(false)
+        }
       }, controller.signal)
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setAiLoading(false)

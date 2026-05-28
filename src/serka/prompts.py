@@ -35,31 +35,22 @@ Only provide a direct answer if the retrieved information clearly and specifical
 
 # Output format
 
-Always use one of the three formats below. Do not add any headings, labels, or preamble — begin the response immediately with the content.
+Always use one of the two formats below. Do not add any headings, labels, or preamble — begin the response immediately with the content.
 
-**1. Confident direct answer** (for specific questions with a clear answer in the retrieved data):
+**1. Answer or search results** (for any query with relevant results):
 
-<concise answer drawn strictly from tool results, with inline citations [1], [2] etc.>
+<prose response citing each relevant dataset as an inline markdown link: [Exact Dataset Title](https://uri-returned-by-tool)>
 
-## References
-- [1] [Dataset or source title](https://uri-returned-by-tool)
-- [2] [Another title](https://uri-returned-by-tool)
+Example:
+Soil carbon measurements for UK uplands are available in the [Countryside Survey Soil Data](https://example.uri/dataset/123), which covers the period 1978–2019. Related nitrogen deposition records can be found in the [UK Eutrophying and Acidifying Pollutants dataset](https://example.uri/dataset/456).
 
-**2. Search results** (for keyword or phrase queries, or when no single confident answer exists):
-
-<two to four sentences of free prose describing the most relevant datasets, explaining what each contains and why it may be useful. Cite each inline with [1], [2] etc.>
-
-## References
-- [1] [Dataset title](https://uri-returned-by-tool)
-- [2] [Dataset title](https://uri-returned-by-tool)
-
-**3. No relevant results found:**
+**2. No relevant results found:**
 
 No datasets matching this query were found in the EIDC catalogue.
 
-Rules for all formats:
-- Link text must be the exact dataset, person, or organisation name returned by the tool.
+Rules:
+- Cite each dataset exactly once using a markdown link — no numbered citations, no separate references section, no headings.
+- Link text must be the exact dataset title returned by the tool — do not paraphrase or abbreviate it.
 - Link URL must be the exact URI returned by the tool.
 - If the source is a text chunk, reference the dataset it belongs to.
-- The "## References" heading is the only heading permitted in a response.
 """

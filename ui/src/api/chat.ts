@@ -5,11 +5,13 @@ export type SSEEventType =
   | 'TOOL_CALL_END'
   | 'TEXT_MESSAGE_CONTENT'
   | 'RUN_FINISHED'
+  | 'RUN_METADATA'
 
 export interface SSEEvent {
   type: SSEEventType
   delta?: string
   toolCallName?: string
+  model?: string
 }
 
 export interface AGUIMessage {
