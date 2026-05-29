@@ -1,6 +1,6 @@
 [project]
 name = "serka"
-version = "0.1.0-alpha.0"
+version = "0.1.0b0"
 description = "Serka (serĉi ekologio) is a protoype search tool for the UKCEH NCUK project. It uses modern AI techniques (LLMs, RAG, Vector Stores) to enhance the EIDC catalogue's search functionality."
 readme = "README.md"
 authors = [
@@ -45,7 +45,7 @@ dev = [
 
 [tool.commitizen]
 name = "cz_customize"
-version = "0.1.0a1"
+version = "0.1.0b0"
 version_files = ["pyproject.toml:version"]
 tag_format = "v$version"
 update_changelog_on_bump = true

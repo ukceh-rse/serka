@@ -1,3 +1,38 @@
+## v0.1.0b0 (2026-05-29)
+
+
+- chore: remove stale files
+- chore(all): merge rc-alpha
+- fix(feedback): ensures feedback is logged with additional details
+- AI-Assisted: Claude Code
+Reviewed-by: mpc
+- feat(ui): clean citation source display in ai summary
+- AI-Assisted: Claude Code
+Reviewed-by: mpc
+- fix(ui): fix template chat page build issue
+- AI-Assisted: Claude Code
+Reviewed-by: mpc
+- feat(ui): ux improvemnets, icons, ai summary
+- AI-Assisted: Claude Code
+Reviewed-by: mpc
+- fix(mcp logger): singleton for mcp and logger connectors
+- AI-Assisted: Claude Code
+Reviewed-by: mcp
+- feat(ui): encode url params for link sharing
+- AI-Assisted: Claude Code
+Reviewed-by: mpc
+- feat: add privacy policy notice
+- AI-Assisted: Claude Code
+Reviewed-by: mpc
+- Geocoding (#61)
+- * Added geocoding tool to mcp server
+- * Extracted bounding box data from EIDC
+- * Tweaked boundary attribute names
+- * Updated RAG response to handle LLM tooling
+- * Corrected filename in setup aws setup script
+- * Added embedding model to deployed .env
+- * Enabled geospatial filtering on mcp search
+
 ## v0.1.0a1 (2026-05-26)
 
 
