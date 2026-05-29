@@ -1,21 +1,18 @@
-from pymongo import MongoClient
-from bson import json_util
-from typing import Dict, Any
 import json
 from datetime import datetime
+from importlib.metadata import version
+from pathlib import Path
+from typing import Any, Dict
+
+_version = version("serka")
 
 
 class FeedbackLogger:
-	def __init__(self, host: str, port: int):
-		self.client = MongoClient(host, port)
-		self.db = self.client.serka
-		self.collection = self.db.feedback
+    def __init__(self, path: str):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
 
-	def log_feedback(self, feedback: Dict[str, Any]):
-		feedback["timestamp"] = datetime.now()
-		self.collection.insert_one(feedback)
-
-	def get_feedback(self):
-		feedback = [obj for obj in self.collection.find({}, limit=10)]
-		json_str = json_util.dumps(feedback)
-		return json.loads(json_str)
+    def log_feedback(self, feedback: Dict[str, Any]) -> None:
+        entry = {**feedback, "timestamp": datetime.now().isoformat(), "version": _version}
+        with self.path.open("a") as f:
+            f.write(json.dumps(entry) + "\n")

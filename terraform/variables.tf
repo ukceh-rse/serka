@@ -10,12 +10,22 @@ variable "instance_type" {
   default     = "t3.micro"
 }
 
-variable "ssh_key_name" {
-  description = "Name of the existing AWS EC2 Key Pair to use for SSH"
-  type        = string
-}
-
 variable "connect_ip" {
   description = "IP address to allow connections from"
   type = string
+}
+
+variable "vpc_id" {
+  type        = string
+  description = "Existing VPC ID where resources will be deployed"
+}
+
+variable "subnet_id" {
+  type        = string
+  description = "Existing Subnet ID where the EC2 instance will be launched"
+}
+
+variable "public_subnet_ids" {
+  type        = list(string)
+  description = "Public subnet IDs for the ALB (minimum 2, across different AZs)"
 }

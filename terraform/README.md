@@ -1,12 +1,24 @@
 # AWS Deployment with Terraform
 This folder contains configuration files needed to deploy the Serka application to [AWS](https://aws.amazon.com/) using [Terraform](https://developer.hashicorp.com/terraform).
 
-## Setup
+## Requirements
 To deploy you will need to install:
 - [Terraform](https://developer.hashicorp.com/terraform/install)
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 
-You will also need an AWS account set up with appropriate permissions for [Bedrock](https://aws.amazon.com/bedrock/) and [EC2](https://aws.amazon.com/ec2/) (check infromation on [IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction.html) roles to set up).
+## Setup
+To deploy you will need access permission to an AWS account. To [configure SSO login](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html):
+```
+aws configure sso
+```
+You will then need to choose a session name and provide `<START_URL>` (speak to IT Support for details) and `<AWS_DEFAULT_REGION>`. You will then be provided with a `<PROFILE_NAME>`. Then to ensure this profile is used:
+```
+export AWS_PROFILE=<PROFILE_NAME>
+```
+You can log back in later using:
+```
+aws sso login --profile '<PROFILE_NAME>'
+```
 
 ## Configure
 Once you have got everything above installed and setup you need to initialize terraform which will install the appropriate providers based on `main.tf`. Run the following command from the `terraform/` directory:
@@ -15,13 +27,15 @@ terraform init
 ```
 Next you will need to create a new file to hold values for a few variables. Create a file called `terraform/terraform.tfvars` and populate it with the following:
 ```
-ssh_key_name = <SSH_KEY_NAME>
-connect_ip = <YOUR_IP_ADDRESS>
+connect_ip = <IP_ADDRESS(ES)>
 instance_type = <INSTANCE_TYPE>
+vpc_id = <VPC_ID>
+subnet_id = <SUBNET_ID>
 ```
-These variables are defined in the `terraform/variables.tf`. `<SSH_KEY_NAME>` is the name of an SSH key that you have already created in your AWS account so that you can SSH into the EC2 instance once it is created. `<YOUR_IP_ADDRESS>` is to secure the EC2 instance so that only you can connect. `<INSTANCE_TYPE>` is the type of EC2 instance to deploy (recommended option are `t3.micro` or `t3.small`).
+These variables are defined in the `terraform/variables.tf`. `<IP_ADDRESS(ES)>` is to secure the EC2 instance so that only certain addresses can connect based on CIDR notation e.g. for all fully open use `"0.0.0.0/0"`. `<INSTANCE_TYPE>` is the type of EC2 instance to deploy (recommended option are `"t3.micro"` or `"t3.small"`). `<VPC_ID>` and `<SUBNET_ID>` accept the IDs of pre-existing subnets (check with AWS account admin if these are not set up).
+
 ## Deploy
-Once you have configured everything you can deploy with the command:
+You should now be able to deploy using:
 ```
 terraform apply
 ```
@@ -31,9 +45,32 @@ The initial deployment of the resources defined in the terraform setup should be
 instance_url = "http://<EC2_IP>"
 ```
 Deployment of the Serka application on the EC2 instance may take several minutes (makes use of `terraforms/scripts/setup.sh`) so connecting to the application may not be possible immediately.
-> **Note**: The basic deployment will only import a small sample set of data from the EIDC for testing (10 datasets).
+> **Note**: The basic deployment will only import a small sample set of data from the EIDC for testing (30 datasets).
 
 To tear down the deployment simply use:
 ```
-tf destroy
+terraform destroy
+```
+
+## Teardown
+Currently the ALB needs to remain in operation when tearing down the deployment. To teardown and restart the EC2 instance alone use:
+```
+terraform destroy -target=aws_lb_target_group_attachment.app -target=aws_instance.app_server
+```
+The EC2 instance can then be restarted and associated back with the ALB using `terraform apply` again.
+
+## Connect
+### URL
+The ALB can be connected to via the url: [https://serka.ceh.ac.uk](https://serka.ceh.ac.uk)
+### Using SMP and SSM via private IP
+The web portal can be accessed using [Session Manager Plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-debian-and-ubuntu.html) and then set up as an ssm session using the `<EC2_INSTANCE_ID>` of the deployment:
+```
+aws ssm start-session \
+  --target <EC2_INSTANCE_ID> \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["80"],"localPortNumber":["8080"]}'
+```
+You should then be able to connect to the web portal using:
+```
+http://localhost:8080
 ```

@@ -1,7 +1,7 @@
-from haystack import component, Document
-from typing import List, Dict, Tuple, Any
 import logging
+from typing import Any, Dict, List, Tuple
 
+from haystack import Document, component
 
 logger = logging.getLogger(__name__)
 
@@ -24,28 +24,32 @@ class EntityExtractor:
 				"west_boundary": bb["westBoundLongitude"],
 				"east_boundary": bb["eastBoundLongitude"],
 			}
-			return boundary
+			# Drop any keys whose value is None — Neo4j forbids MERGE on null properties
+			return {k: v for k, v in boundary.items() if v is not None}
 		except Exception as e:
 			logger.error(f"Error extracting boundary: {e}")
 			return {}
 
 	def _extract_dataset(self, record) -> Dict[str, str]:
-		return {
-			"uri": extract_doi(record["resourceIdentifiers"]),
-			"title": record["title"],
-			"citations": record["incomingCitationCount"],
-			"publication_date": record["publicationDate"],
+		dataset = {
+			"uri": extract_doi(record.get("resourceIdentifiers", [])),
+			"title": record.get("title", ""),
 			**self._extract_boundary(record),
 		}
+		if (citations := record.get("incomingCitationCount")) is not None:
+			dataset["citations"] = citations
+		if pub_date := record.get("publicationDate"):
+			dataset["publication_date"] = pub_date
+		return dataset
 
 	def _extract_authors(self, record):
 		author_list = record.get("authors", [])
 		authors = [
-			{"name": author["fullName"], "uri": author["nameIdentifier"]}
+			{"name": author.get("fullName", ""), "uri": author["nameIdentifier"]}
 			for author in author_list
 			if "nameIdentifier" in author
 		]
-		doi = extract_doi(record["resourceIdentifiers"])
+		doi = extract_doi(record.get("resourceIdentifiers", []))
 		authorship = [(doi, author["uri"]) for author in authors]
 		return authors, authorship
 
@@ -78,16 +82,21 @@ class EntityExtractor:
 		authored_by = []
 		affiliated_with = []
 		for record in data:
-			author_list = record.get("authors", [])
-			record_authors, authorship = self._extract_authors(record)
-			authors.extend(record_authors)
-			authored_by.extend(authorship)
+			try:
+				author_list = record.get("authors", [])
+				record_authors, authorship = self._extract_authors(record)
+				authors.extend(record_authors)
+				authored_by.extend(authorship)
 
-			record_orgs, affiliations = self._extract_organisations(author_list)
-			orgs.extend(record_orgs)
-			affiliated_with.extend(affiliations)
+				record_orgs, affiliations = self._extract_organisations(author_list)
+				orgs.extend(record_orgs)
+				affiliated_with.extend(affiliations)
 
-			datasets.append(self._extract_dataset(record))
+				datasets.append(self._extract_dataset(record))
+			except Exception as e:
+				logger.warning(
+					f"Skipping record due to extraction error: {e} — record keys: {list(record.keys())}"
+				)
 
 		authors = list({author["uri"]: author for author in authors}.values())
 		orgs = list({org["uri"]: org for org in orgs}.values())
@@ -105,12 +114,33 @@ class EntityExtractor:
 
 
 @component
+class DocumentTruncator:
+	def __init__(self, max_chars: int = 45_000):
+		self.max_chars = max_chars
+
+	@component.output_types(documents=List[Document])
+	def run(self, documents: List[Document]) -> Dict[str, List[Document]]:
+		truncated = []
+		for doc in documents:
+			if doc.content and len(doc.content) > self.max_chars:
+				logger.warning(
+					"Truncating document '%s' from %d to %d characters",
+					doc.meta.get("uri", "unknown"),
+					len(doc.content),
+					self.max_chars,
+				)
+				doc = Document(content=doc.content[: self.max_chars], meta=doc.meta)
+			truncated.append(doc)
+		return {"documents": truncated}
+
+
+@component
 class TextExtractor:
 	def __init__(self, fields: str):
 		self.fields = fields
 
 	def extract_text_fields(self, record) -> List[Document]:
-		uri = extract_doi(record["resourceIdentifiers"])
+		uri = extract_doi(record.get("resourceIdentifiers", []))
 		title = record.get("title", "")
 		docs = [
 			Document(

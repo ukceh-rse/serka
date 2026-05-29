@@ -1,24 +1,28 @@
-from fastapi import Depends, APIRouter
-from serka.models import Result
-from typing import List, Dict, Any
-from serka.feedback import FeedbackLogger
-from serka.routers.dependencies import get_feedback_logger
+from typing import Optional
 
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, ConfigDict, Field
+
+from serka.feedback import FeedbackLogger
+from serka.models import Result
+from serka.routers.dependencies import get_feedback_logger
 
 router = APIRouter(prefix="/feedback", tags=["Feedback"])
 
 
-@router.get("/list", summary="Get feedback")
-def get_feedback(
-	feedback_loggger: FeedbackLogger = Depends(get_feedback_logger),
-) -> List[Dict[str, Any]]:
-	return feedback_loggger.get_feedback()
+class FeedbackPayload(BaseModel):
+	model_config = ConfigDict(extra="allow")
+
+	query: Optional[str] = Field(None, max_length=2000)
+	type: str = Field(..., max_length=100)
+	feedback: Optional[str] = Field(None, max_length=500)
+	summary: Optional[str] = Field(None, max_length=5000)
 
 
 @router.post("/submit", summary="Log feedback")
 def log_feedback(
-	feedback: Dict[str, Any],
-	feedback_loggger: FeedbackLogger = Depends(get_feedback_logger),
+	payload: FeedbackPayload,
+	feedback_logger: FeedbackLogger = Depends(get_feedback_logger),
 ) -> Result:
-	feedback_loggger.log_feedback(feedback)
+	feedback_logger.log_feedback(payload.model_dump(exclude_none=True))
 	return Result(success=True, msg="Feedback logged")

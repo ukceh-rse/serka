@@ -1,0 +1,67 @@
+services:
+  serka:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: serka-image
+    ports:
+      - "9000:8000"
+    depends_on:
+      - neo4j
+      - mcp
+    env_file: .env
+    environment:
+      - NEO4J_HOST=neo4j
+      - MCP_HOST=mcp
+      - FEEDBACK_LOG_PATH=/data/feedback.jsonl
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro
+      - ${FEEDBACK_DATA_DIR:-./feedback}:/data
+    networks:
+      - internal
+
+  mcp:
+    build:
+      context: ./mcp-server
+      dockerfile: Containerfile
+    image: serka-mcp-image
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - NEO4J_HOST=neo4j
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro
+    networks:
+      - internal
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Containerfile
+    image: serka-ui-image
+    ports:
+      - "8080:80"
+    depends_on:
+      - serka
+    env_file: .env
+    networks:
+      - internal
+
+  neo4j:
+    image: neo4j:5.26.5
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
+      - NEO4J_PLUGINS=["apoc"]
+    volumes:
+      - ${NEO4J_DATA_DIR:-./.neo4j}/data:/data
+      - ${NEO4J_DATA_DIR:-./.neo4j}/logs:/logs
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge

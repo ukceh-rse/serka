@@ -60,16 +60,22 @@ touch .env
 cat > .env << ENV_CONTENT
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=$RANDOM_PASSWORD
-NEO4J_URI=bolt://neo4j-container:7687
+NEO4J_HOST=localhost
+NEO4J_PORT=7687
 AWS_DEFAULT_REGION=eu-west-2
-AWS_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0
+MODELS_EMBEDDING=amazon.titan-embed-text-v2:0
+MODELS_LLM=anthropic.claude-sonnet-4-6
+NEO4J_DATA_DIR=/opt/serka/neo4j
+FEEDBACK_DATA_DIR=/opt/serka/feedback
 ENV_CONTENT
 
-git checkout geocoding >> $LOG_FILE 2>&1
+mkdir -p /opt/serka/neo4j/data /opt/serka/neo4j/logs /opt/serka/feedback
+
+git checkout rc-alpha >> $LOG_FILE 2>&1
 EOF_UBUNTU
 
 cd /home/ubuntu/serka
-podman-compose -f container-compose.yml up -d >> $LOG_FILE 2>&1
+podman-compose up -d >> $LOG_FILE 2>&1
 
 # Setup uv locally to run the data import script.
 # Note this is just for testing, data should be imported and processed sperately and then made accessible to the instance.
@@ -77,6 +83,6 @@ sudo snap install astral-uv --classic >> $LOG_FILE 2>&1
 uv sync >> $LOG_FILE 2>&1
 
 # Note this will only import a small number of datasets for testing
-uv run scripts/ingest-data.py >> $LOG_FILE 2>&1
+uv run scripts/ingest-data.py 100 >> $LOG_FILE 2>&1
 
 log "Serka setup completed"

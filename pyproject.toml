@@ -1,6 +1,6 @@
 [project]
 name = "serka"
-version = "0.1.0"
+version = "0.1.0-alpha.0"
 description = "Serka (serĉi ekologio) is a protoype search tool for the UKCEH NCUK project. It uses modern AI techniques (LLMs, RAG, Vector Stores) to enhance the EIDC catalogue's search functionality."
 readme = "README.md"
 authors = [
@@ -8,24 +8,21 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "chromadb>=0.6.1",
     "fastapi[standard]>=0.115.6",
     "haystack-ai>=2.9.0",
     "jq>=1.8.0",
-    "ollama-haystack>=2.3.0",
-    "ollama>=0.4.5",
-    "python-dotenv>=1.0.1",
-    "chroma-haystack>=2.0.0",
-    "pyyaml>=6.0.2",
+    "pydantic-settings>=2.0.0",
     "trafilatura>=2.0.0",
     "beautifulsoup4>=4.13.0",
     "scrapy>=2.12.0",
-    "pymongo>=4.11.1",
     "neomodel>=5.4.5",
     "neo4j-haystack>=2.2.1",
     "amazon-bedrock-haystack>=3.9.1",
     "mcp[cli]>=1.13.0",
     "mcp-haystack>=0.5.0",
+    "pydantic-ai[bedrock]>=1.0",
+    "fastmcp>=2.11.3",
+    "requests-cache>=1.3.1",
 ]
 
 [project.scripts]
@@ -37,6 +34,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "commitizen>=4.13.9",
     "ipykernel>=6.29.5",
     "ipython>=8.31.0",
     "mypy>=1.14.1",
@@ -44,6 +42,74 @@ dev = [
     "pytest>=8.3.4",
     "ruff>=0.8.6",
 ]
+
+[tool.commitizen]
+name = "cz_customize"
+version = "0.1.0a1"
+version_files = ["pyproject.toml:version"]
+tag_format = "v$version"
+update_changelog_on_bump = true
+bump_pattern = "^(feat|fix|refactor|perf|BREAKING CHANGE)"
+bump_map = {"BREAKING CHANGE" = "MAJOR", "feat" = "MINOR", "fix" = "PATCH", "refactor" = "PATCH", "perf" = "PATCH"}
+
+[tool.commitizen.customize]
+message_template = "{{change_type}}{% if scope %}({{scope}}){% endif %}: {{subject}}{% if body %}\n\n{{body}}{% endif %}{% if footer %}\n\n{{footer}}{% endif %}{% if ai_tool %}\n\nAI-Assisted: {{ai_tool}}{% endif %}{% if reviewed_by %}\nReviewed-by: {{reviewed_by}}{% endif %}"
+schema_pattern = "(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\\(\\S+\\))?!?:(\\s.*)"
+
+[[tool.commitizen.customize.questions]]
+type = "list"
+name = "change_type"
+message = "Select the type of change"
+choices = [
+    {value = "feat", name = "feat: A new feature"},
+    {value = "fix", name = "fix: A bug fix"},
+    {value = "docs", name = "docs: Documentation only"},
+    {value = "style", name = "style: Formatting, no logic change"},
+    {value = "refactor", name = "refactor: Code restructure, no feature/fix"},
+    {value = "perf", name = "perf: Performance improvement"},
+    {value = "test", name = "test: Add or fix tests"},
+    {value = "build", name = "build: Build system or dependencies"},
+    {value = "ci", name = "ci: CI/CD changes"},
+    {value = "chore", name = "chore: Other maintenance"},
+    {value = "revert", name = "revert: Revert a previous commit"},
+]
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "scope"
+message = "Scope (optional, blank to skip):"
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "subject"
+message = "Short description:"
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "body"
+message = "Body (optional, blank to skip):"
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "footer"
+message = "Footer / breaking change notes (optional, blank to skip):"
+
+[[tool.commitizen.customize.questions]]
+type = "list"
+name = "ai_tool"
+message = "AI tool used (if any):"
+choices = [
+    {value = "", name = "None"},
+    {value = "Claude Code", name = "Claude Code"},
+    {value = "GitHub Copilot", name = "GitHub Copilot"},
+    {value = "ChatGPT", name = "ChatGPT"},
+    {value = "Other", name = "Other"},
+]
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "reviewed_by"
+message = "Reviewed by (blank to skip):"
 
 [tool.ruff.format]
 quote-style = "double"
