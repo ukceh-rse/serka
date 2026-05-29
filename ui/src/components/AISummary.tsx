@@ -323,11 +323,15 @@ export default function AISummary({ query }: Props) {
             </>
           )}
 
-          {/* Feedback */}
-          <Divider sx={{ mt: links.length > 0 || !aiLoading ? 1 : 1.5, mb: 1 }} />
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <FeedbackWidget context={{ type: 'ai_summary', query }} />
-          </Box>
+          {/* Feedback — only after stream completes to avoid logging partial summary */}
+          {!aiLoading && (
+            <>
+              <Divider sx={{ mt: links.length > 0 ? 1 : 1.5, mb: 1 }} />
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <FeedbackWidget context={{ type: 'ai_summary', query, summary: aiSummary }} />
+              </Box>
+            </>
+          )}
         </>
       )}
     </Paper>

@@ -11,11 +11,12 @@ router = APIRouter(prefix="/feedback", tags=["Feedback"])
 
 
 class FeedbackPayload(BaseModel):
-	model_config = ConfigDict(extra="forbid")
+	model_config = ConfigDict(extra="allow")
 
-	query: str = Field(..., max_length=2000)
+	query: Optional[str] = Field(None, max_length=2000)
 	type: str = Field(..., max_length=100)
 	feedback: Optional[str] = Field(None, max_length=500)
+	summary: Optional[str] = Field(None, max_length=5000)
 
 
 @router.post("/submit", summary="Log feedback")

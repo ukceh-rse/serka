@@ -5,6 +5,7 @@ import {
 } from '@mui/material'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import { useSearchStore } from '../stores/searchStore'
 import type { SearchResult } from '../stores/searchStore'
 import FeedbackWidget from './FeedbackWidget'
 
@@ -23,6 +24,7 @@ const TRUNCATE_THRESHOLD = 120
 
 
 export default function DatasetResultCard({ group, index, collapsedLines }: Props) {
+  const { query } = useSearchStore()
   const [expanded, setExpanded] = useState(false)
   const { dataset, chunks } = group
   const top = chunks[0]
@@ -84,7 +86,7 @@ export default function DatasetResultCard({ group, index, collapsedLines }: Prop
         <Divider sx={{ mt: 1, mb: 0.75 }} />
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Box sx={{ ml: 'auto' }}>
-            <FeedbackWidget context={{ type: 'result', index, dataset_uri: dataset.uri }} />
+            <FeedbackWidget context={{ type: 'result', index, dataset_uri: dataset.uri, query }} />
           </Box>
         </Box>
 
