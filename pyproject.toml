@@ -45,7 +45,7 @@ dev = [
 
 [tool.commitizen]
 name = "cz_customize"
-version = "0.1.0a1"
+version = "0.1.0b0"
 version_files = ["pyproject.toml:version"]
 tag_format = "v$version"
 update_changelog_on_bump = true
