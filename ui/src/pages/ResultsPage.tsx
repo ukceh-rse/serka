@@ -7,7 +7,7 @@ import Masonry from '@mui/lab/Masonry'
 import SearchBar from '../components/SearchBar'
 import DatasetResultCard, { type GroupedResult } from '../components/DatasetResultCard'
 import AISummary from '../components/AISummary'
-import { useSearchStore } from '../stores/searchStore'
+import { useSearchStore, isTextChunkResult } from '../stores/searchStore'
 import { search } from '../api/search'
 import { streamSummary } from '../api/chat'
 import { EXAMPLE_SEARCHES } from '../constants'
@@ -59,7 +59,7 @@ export default function ResultsPage() {
   // Run search when q changes
   useEffect(() => {
     if (!q) return
-    if (q === query && results.length > 0) return
+    if (q === query && results.some(isTextChunkResult)) return
     if (!EXAMPLE_SEARCHES.includes(q)) addRecentSearch(q)
     setQuery(q)
     resetAiSummary()
@@ -83,12 +83,13 @@ export default function ResultsPage() {
   const groupedResults = useMemo<GroupedResult[]>(() => {
     const map = new Map<string, GroupedResult>()
     for (const r of results) {
+      if (!isTextChunkResult(r)) continue
       const key = r.dataset.uri
       if (!map.has(key)) map.set(key, { dataset: r.dataset, chunks: [] })
       map.get(key)!.chunks.push(r)
     }
     return Array.from(map.values())
-      .map((g) => ({ ...g, chunks: [...g.chunks].sort((a, b) => b.score - a.score) }))
+      .map((g) => ({ ...g, chunks: g.chunks.sort((a, b) => b.score - a.score) }))
       .sort((a, b) => b.chunks[0].score - a.chunks[0].score)
   }, [results])
 
@@ -124,7 +125,7 @@ export default function ResultsPage() {
           key={q}
           onSearch={handleSearch}
           initialValue={q}
-          onAiSummary={!loading && results.length > 0 ? handleAiSummary : undefined}
+          onAiSummary={!loading && groupedResults.length > 0 ? handleAiSummary : undefined}
           aiSummaryActive={aiFromUrl}
           showSuggestions
           onFocusChange={setSearchFocused}
@@ -197,7 +198,7 @@ export default function ResultsPage() {
         </>
       )}
 
-      {!loading && !error && results.length === 0 && q && (
+      {!loading && !error && groupedResults.length === 0 && q && (
         <Box sx={{ mt: 4 }}>
           <Typography color="text.secondary" sx={{ mb: 3 }}>
             No results found for "<strong>{q}</strong>". Try one of these instead:
