@@ -6,12 +6,12 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useSearchStore } from '../stores/searchStore'
-import type { SearchResult } from '../stores/searchStore'
+import type { TextChunkResult } from '../stores/searchStore'
 import FeedbackWidget from './FeedbackWidget'
 
 export interface GroupedResult {
   dataset: { uri: string; title: string }
-  chunks: SearchResult[]  // sorted desc by score
+  chunks: TextChunkResult[]  // sorted desc by score
 }
 
 interface Props {
@@ -69,7 +69,7 @@ export default function DatasetResultCard({ group, index, collapsedLines }: Prop
           </Typography>
 
           {chunks.slice(1).map((r, i) => (
-            <Box key={r.result.item.doc_id + i}>
+            <Box key={i}>
               <Divider sx={{ my: 1 }} />
               <Typography
                 variant="body2"

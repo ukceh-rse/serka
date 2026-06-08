@@ -1,10 +1,23 @@
 import { create } from 'zustand'
 
+type TextChunkItem = { doc_id?: string; content: string }
+
+type ResultItem =
+  | { type: 'TextChunk'; item: TextChunkItem }
+  | { type: 'Person'; item: { name: string; uri: string } }
+  | { type: 'Organisation'; item: { name: string; uri: string } }
+
 export interface SearchResult {
-  result: { item: { doc_id: string; content: string }; type: string }
+  result: ResultItem
   dataset: { uri: string; title: string }
   score: number
-  description: string
+  description: string | null
+}
+
+export type TextChunkResult = Omit<SearchResult, 'result'> & { result: Extract<ResultItem, { type: 'TextChunk' }> }
+
+export function isTextChunkResult(r: SearchResult): r is TextChunkResult {
+  return r.result.type === 'TextChunk'
 }
 
 interface SearchState {
