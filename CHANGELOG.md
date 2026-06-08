@@ -1,3 +1,15 @@
+## v0.1.0b1 (2026-06-08)
+
+
+- fix(ui, mcp): handle title results returned from database
+- AI-Assisted: Claude Code
+Reviewed-by: mpc
+- fix(ui): silently skip org/person results in ui grouping
+- AI-Assisted: Claude Code
+Reviewed-by: mpc
+- Merge branch 'main' of github.com:ukceh-rse/serka
+- bump: version 0.1.0a1 → 0.1.0b0
+
 ## v0.1.0b0 (2026-05-29)
 
 
