@@ -46,6 +46,7 @@ def _build_search_results(
 	nodes: list[dict], label_filter: str | None
 ) -> list[SearchResult]:
 	results: list[SearchResult] = []
+	seen_dataset_uris: set[str] = set()
 	for n in nodes:
 		labels = n["start_labels"]
 		if label_filter and label_filter not in labels:
@@ -77,6 +78,16 @@ def _build_search_results(
 					dataset=Dataset(**n["connected_node"]),
 					score=n["score"],
 					description=n["relationship_type"],
+				)
+			)
+		elif "Dataset" in labels and n["start_node"]["uri"] not in seen_dataset_uris:
+			seen_dataset_uris.add(n["start_node"]["uri"])
+			results.append(
+				SearchResult(
+					result=ResultItem(item=TextChunk(content=n["start_node"]["title"]), type="TextChunk"),
+					dataset=Dataset(**n["start_node"]),
+					score=n["score"],
+					description="TITLE",
 				)
 			)
 	return results

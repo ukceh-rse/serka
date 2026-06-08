@@ -3,3 +3,6 @@ export const EXAMPLE_SEARCHES = [
   'What are the LCM classes?',
   'What are the most popular datasets?',
 ]
+
+// Large fixed max-height standing in for `none`/`auto`, which CSS cannot transition.
+export const EXPANDED_MAX = '120rem'
