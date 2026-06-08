@@ -11,6 +11,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useSearchStore } from '../stores/searchStore'
 import FeedbackWidget from './FeedbackWidget'
 import { brand } from '../theme'
+import { EXPANDED_MAX } from '../constants'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -76,7 +77,6 @@ const provenanceChipSx = {
 
 
 const COLLAPSED_HEIGHT = '4.5rem'
-const EXPANDED_MAX = '120rem'
 
 // Chip-like styling for inline markdown links — applied via the `a` mdComponent.
 // Uses `&&` for specificity over MUI Link's default colour.
