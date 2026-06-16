@@ -1,131 +1,133 @@
+import math
 import time
 from typing import Annotated, List, Literal, Optional, Union
 
 from app import embedder, geolocator, logger, mcp, neo4j_driver, reranker, reranking_enabled
 from geopy.location import Location
 from models import (
+	Attribution,
 	BoundingBox,
 	Dataset,
+	DatasetPage,
+	Entity,
 	Error,
 	GeoCodedLocation,
-	Organisation,
-	Person,
-	ResultItem,
-	SearchResult,
-	SupportingDocument,
-	TextChunk,
+	Relation,
+	SearchHit,
 )
-from queries import dataset_cypher_query, escape_fts_query, fulltext_search_query, list_query, search_query
+from ontology import NODE_TYPES, JSONLD_CONTEXT, PROPERTY_TERMS, ROLE_TERMS
+from queries import (
+	count_datasets_query,
+	dataset_cypher_query,
+	escape_fts_query,
+	find_by_contributor_query,
+	fulltext_search_query,
+	get_content_query,
+	get_contributors_query,
+	get_entity_query,
+	get_relations_query,
+	list_query,
+	search_query,
+)
 
-_RESULT_TYPE_LABEL: dict[str, str] = {
-	"dataset": "TextChunk",
-	"person": "Person",
-	"organisation": "Organisation",
+_DOO_TO_NEO4J: dict[str, str] = {v: k for k, v in NODE_TYPES.items()}
+
+_REL_TYPE_TO_PREDICATE: dict[str, str] = {
+	"HAS_THEME": "dcat:theme",
+	"AFFILIATED_WITH": "org:memberOf",
 }
 
 
-def _result_key(sr: SearchResult) -> str:
-	if sr.result.type == "TextChunk":
-		return f"TextChunk::{hash(sr.result.item.content)}"
-	return f"{sr.result.type}::{sr.result.item.uri}"
+def _props_to_entity(labels: list[str], props: dict) -> Entity:
+	semantic = [l for l in labels if l != "embedded"]
+	type_uris = [NODE_TYPES.get(l, l) for l in semantic]
+	label = props.get("title") or props.get("name") or props.get("label")
+	clean_props = {k: v for k, v in props.items() if k not in ("uri", "embedding", "doc_id")}
+	return Entity(id=props.get("uri", ""), type=type_uris, label=label, properties=clean_props)
 
 
-def _rrf_merge(lists: list[list[SearchResult]], k: int = 60) -> list[SearchResult]:
+def _rel_to_predicate(rel_type: str, rel_props: dict) -> str:
+	if rel_type == "RELATION":
+		return rel_props.get("predicate", "dcterms:relation")
+	if rel_type == "ASSOCIATED_WITH":
+		return rel_props.get("role", "pro:RoleInTime")
+	return _REL_TYPE_TO_PREDICATE.get(rel_type, rel_type)
+
+
+def _build_search_hits(nodes: list[dict], label_filter: set[str] | None) -> list[SearchHit]:
+	hits = []
+	for n in nodes:
+		labels = n["start_labels"]
+		if "TextChunk" in labels:
+			if "Dataset" not in n.get("connected_labels", []):
+				continue
+			if label_filter and "Dataset" not in label_filter:
+				continue
+			entity = _props_to_entity(n["connected_labels"], n["connected_node"])
+			matched_on = n["start_node"].get("field") or "text_content"
+			excerpt = n["start_node"].get("content")
+		else:
+			semantic = [l for l in labels if l != "embedded"]
+			if label_filter and not set(semantic).intersection(label_filter):
+				continue
+			entity = _props_to_entity(labels, n["start_node"])
+			matched_on = "metadata"
+			excerpt = None
+		hits.append(SearchHit(entity=entity, score=n["score"], matched_on=matched_on, excerpt=excerpt))
+	return hits
+
+
+def _rrf_merge(lists: list[list[SearchHit]], k: int = 60) -> list[SearchHit]:
 	scores: dict[str, float] = {}
-	items: dict[str, SearchResult] = {}
+	items: dict[str, SearchHit] = {}
 	for ranked_list in lists:
-		for rank, sr in enumerate(ranked_list, start=1):
-			key = _result_key(sr)
+		for rank, hit in enumerate(ranked_list, start=1):
+			key = hit.entity.id
 			scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
 			if key not in items:
-				items[key] = sr
+				items[key] = hit
 	return [items[k] for k in sorted(scores, key=lambda k: scores[k], reverse=True)]
 
 
-def _build_search_results(
-	nodes: list[dict], label_filter: str | None
-) -> list[SearchResult]:
-	results: list[SearchResult] = []
-	seen_dataset_uris: set[str] = set()
-	for n in nodes:
-		labels = n["start_labels"]
-		if label_filter and label_filter not in labels:
-			continue
-		if "TextChunk" in labels:
-			results.append(
-				SearchResult(
-					result=ResultItem(item=TextChunk(**n["start_node"]), type="TextChunk"),
-					dataset=Dataset(**n["connected_node"]),
-					score=n["score"],
-					description=n["relationship_type"],
-				)
-			)
-		elif "Person" in labels and "Dataset" in n["connected_labels"]:
-			results.append(
-				SearchResult(
-					result=ResultItem(item=Person(**n["start_node"]), type="Person"),
-					dataset=Dataset(**n["connected_node"]),
-					score=n["score"],
-					description=n["relationship_type"],
-				)
-			)
-		elif "Organisation" in labels and "Dataset" in n["connected_labels"]:
-			results.append(
-				SearchResult(
-					result=ResultItem(
-						item=Organisation(**n["start_node"]), type="Organisation"
-					),
-					dataset=Dataset(**n["connected_node"]),
-					score=n["score"],
-					description=n["relationship_type"],
-				)
-			)
-		elif "Dataset" in labels and n["start_node"]["uri"] not in seen_dataset_uris:
-			seen_dataset_uris.add(n["start_node"]["uri"])
-			results.append(
-				SearchResult(
-					result=ResultItem(item=TextChunk(content=n["start_node"]["title"]), type="TextChunk"),
-					dataset=Dataset(**n["start_node"]),
-					score=n["score"],
-					description="TITLE",
-				)
-			)
-	return results
+@mcp.resource("doo://context")
+def get_doo_context() -> dict:
+	"""Returns the DOO JSON-LD context, node types, property terms, and role terms.
+
+	Use this resource to understand the @type values, predicate URIs, and role URIs
+	returned by other tools before interpreting their output.
+	"""
+	return {
+		"@context": JSONLD_CONTEXT,
+		"nodeTypes": NODE_TYPES,
+		"propertyTerms": PROPERTY_TERMS,
+		"roleTerms": ROLE_TERMS,
+	}
 
 
-@mcp.resource("dataset://{uri}")
-def get_dataset(uri: str) -> Union[Dataset, Error]:
-	logger.info(f"Retrieving dataset {uri}")
+@mcp.resource("doo://entity/{uri}")
+def get_entity_resource(uri: str) -> Union[Entity, Error]:
+	"""Retrieve any graph node by its URI as a DOO Entity."""
+	logger.info(f"Entity resource request: {uri}")
 	try:
 		with neo4j_driver.session(database="neo4j") as session:
-			result = session.execute_read(dataset_cypher_query, uri=uri)
+			result = session.execute_read(get_entity_query, uri=uri)
 		if result is None:
-			return Error(msg=f"Dataset '{uri}' not found")
-		return Dataset(**result["d"])
+			return Error(msg=f"Entity '{uri}' not found")
+		return _props_to_entity(result["labels"], result["props"])
 	except Exception as e:
-		logger.error(f"Error retrieving dataset {uri}: {str(e)}")
-		return Error(msg=f"Error retrieving dataset {uri}: {str(e)}")
+		logger.error(f"Error fetching entity {uri}: {e}")
+		return Error(msg=str(e))
 
 
 @mcp.tool()
 def geocode_location(location: str) -> Union[GeoCodedLocation, Error]:
-	"""Geocode a location name to get its geographic boundaries within the UK.
-
-	This function uses the Nominatim geocoding service to convert a place name
-	into geographic coordinates and bounding box information. The search is
-	biased towards UK locations using the country code "GB".
+	"""Geocode a UK place name to geographic boundaries.
 
 	Args:
-	    location (str): The location name to geocode. Can be a city, town,
-	        village, region, or other geographic feature. Examples: "London",
-	        "Lake District", "Cambridge", "M25 motorway".
+	    location: A UK place name, city, region, or geographic feature.
 
 	Returns:
-	    Union[GeoCodedLocation, Error]:
-	        - GeoCodedLocation: Contains the full display name and bounding box
-	          coordinates (south, north, west, east boundaries in decimal degrees)
-	        - Error: Returned if the location cannot be found, has no bounding box
-	          data, or if there's a network/service error
+	    GeoCodedLocation with display name and BoundingBox, or Error.
 	"""
 	try:
 		result: Location = geolocator.geocode(location, country_codes="GB")
@@ -134,308 +136,290 @@ def geocode_location(location: str) -> Union[GeoCodedLocation, Error]:
 		boundary: BoundingBox = BoundingBox.from_nominatim(result.raw["boundingbox"])
 		return GeoCodedLocation(name=result.raw["display_name"], boundary=boundary)
 	except Exception as e:
-		logger.error(f"Error geocoding location {location}: {str(e)}")
+		logger.error(f"Error geocoding location {location}: {e}")
 		return Error(msg=f"Error geocoding location {location}: {str(e)}")
 
 
 @mcp.tool()
 def list_datasets(
-	limit: int = 25,
+	page: int = 1,
+	page_size: int = 25,
 	sort_by: Literal["citations", "publication_date"] = "citations",
 	order: Literal["ascending", "descending"] = "descending",
-) -> Union[List[Dataset], Error]:
-	"""Lists the datasets in the EIDC and sorts them.
+) -> Union[DatasetPage, Error]:
+	"""List datasets in the EIDC catalogue with pagination.
 
 	Args:
-	    limit: List up to n datasets, n defaults to 25. Increase to return more.
-	    sort_by (Literal["citations", "publication_date"]): The field to sort the list on.
-	        Must be either "citations" or "publication_date".
-	    order (Literal["ascending", "descending"]): Whether the sorting order is "ascending" or "descending".
-	        Default is "descending"
+	    page: Page number (1-based, default 1).
+	    page_size: Number of datasets per page (default 25).
+	    sort_by: Sort field — "citations" or "publication_date".
+	    order: "ascending" or "descending" (default).
 
 	Returns:
-	    Union[List[Dataset], Error]: A list of datasets sorted appropriately or an error.
+	    DatasetPage with datasets, total count, and pagination metadata, or Error.
 	"""
-	logger.info("Listing datasets in Serka knowledge graph.")
+	logger.info(f"Listing datasets page={page} page_size={page_size}.")
 	try:
+		skip = (page - 1) * page_size
 		with neo4j_driver.session(database="neo4j") as session:
-			nodes = session.execute_read(
-				list_query, limit=limit, sort_by=sort_by, order=order
-			)
-			return [Dataset(**n["dataset"]) for n in nodes]
+			total = session.execute_read(count_datasets_query)
+			nodes = session.execute_read(list_query, skip=skip, limit=page_size, sort_by=sort_by, order=order)
+		return DatasetPage(
+			datasets=[Dataset(**n["dataset"]) for n in nodes],
+			total=total,
+			page=page,
+			page_size=page_size,
+			total_pages=math.ceil(total / page_size) if page_size else 0,
+		)
 	except Exception as e:
-		logger.error(f"Error listing datasets in Serka knowledge graph: {str(e)}")
-		return Error(msg=f"Error listing datasets in Serka knowledge graph: {str(e)}")
+		logger.error(f"Error listing datasets: {e}")
+		return Error(msg=str(e))
 
 
 @mcp.tool()
 def search(
-	search_term: Annotated[str, "A term to use to search the EIDC catalogue."],
-	result_type: Annotated[
-		Optional[Literal["dataset", "person", "organisation"]],
-		"Restrict results to a specific kind of match. 'dataset' returns text chunks from dataset documentation. "
-		"'person' returns matching authors/contributors — use this to find a person's URI before calling find_datasets_by_author. "
-		"'organisation' returns matching organisations. Omit to return all types.",
+	query: Annotated[str, "Search term for semantic and full-text search."],
+	types: Annotated[
+		Optional[List[str]],
+		"Filter results by DOO class URI(s), e.g. ['dcat:Dataset'], ['foaf:Person']. "
+		"See doo://context for available types. Omit to return all types.",
 	] = None,
 	bounding_box: Annotated[
 		Optional[BoundingBox],
-		"A bounding box representing the geographic boundaries to filter the search on. This bounding box will be expanded by ~20% to ensure capturing of data.",
+		"Filter to datasets within this geographic area (expanded ~20%).",
 	] = None,
-	published_after: Annotated[
-		Optional[str],
-		"ISO date string (YYYY-MM-DD). Only return datasets published on or after this date.",
-	] = None,
-	published_before: Annotated[
-		Optional[str],
-		"ISO date string (YYYY-MM-DD). Only return datasets published on or before this date.",
-	] = None,
-	min_citations: Annotated[
-		Optional[int], "Minimum number of citations a dataset must have to be included."
-	] = None,
-	result_limit: Annotated[int, "How many result to return."] = 25,
-) -> Union[List[SearchResult], Error]:
-	"""Performs a semantic search on the EIDC catalogue using the given search term.
+	published_after: Annotated[Optional[str], "ISO date (YYYY-MM-DD) — exclude older datasets."] = None,
+	published_before: Annotated[Optional[str], "ISO date (YYYY-MM-DD) — exclude newer datasets."] = None,
+	limit: Annotated[int, "Maximum number of results to return."] = 25,
+) -> Union[List[SearchHit], Error]:
+	"""Hybrid vector + full-text search over the DOO knowledge graph.
 
-	The search matches against embedded text in the knowledge graph and returns the most
-	semantically similar results along with their connected dataset. Use result_type to target
-	a specific kind of entity — in particular, set result_type='person' when you need to
-	identify an author by name so you can obtain their URI for use with find_datasets_by_author.
+	Returns Entity objects ranked by relevance. For text matches, the parent Dataset
+	entity is returned rather than the raw TextChunk. Use get_relations or get_contributors
+	on the returned @id values to traverse the graph further.
 
 	Args:
-	    search_term (str): The search term to use for the semantic search.
-	    result_type (Optional[Literal]): Restrict results to 'dataset', 'person', or 'organisation'.
-	        Defaults to None (all types returned).
-	    bounding_box (Optional[BoundingBox]): Geographic boundaries to filter search results.
-	    published_after (Optional[str]): Exclude datasets published before this ISO date.
-	    published_before (Optional[str]): Exclude datasets published after this ISO date.
-	    min_citations (Optional[int]): Exclude datasets with fewer than this many citations.
+	    query: Natural language search term.
+	    types: Optional list of DOO class URIs to restrict result types.
+	    bounding_box: Geographic filter (use geocode_location to obtain one).
+	    published_after: Exclude datasets published before this date.
+	    published_before: Exclude datasets published after this date.
+	    limit: Max results (default 25).
 
 	Returns:
-	    Union[List[SearchResult], Error]: A list of search results ranked by semantic similarity, or an Error.
+	    List of SearchHit (entity + score + matched_on), or Error.
 	"""
-	logger.info(
-		f'Search: "{search_term}" [type={result_type}, bounding_box={bounding_box}, '
-		f"after={published_after}, before={published_before}, min_citations={min_citations}]"
-	)
+	logger.info(f'Search: "{query}" [types={types}, bbox={bounding_box is not None}]')
 	try:
 		t0 = time.perf_counter()
 
-		label_filter = _RESULT_TYPE_LABEL.get(result_type) if result_type else None
-		embedding = embedder.run(search_term)["embedding"]
-		logger.info(f"  embed:    {(time.perf_counter() - t0) * 1000:.0f}ms")
+		label_filter = {_DOO_TO_NEO4J.get(t, t) for t in types} if types else None
+		embedding = embedder.run(query)["embedding"]
+		logger.info(f"  embed: {(time.perf_counter() - t0) * 1000:.0f}ms")
 
 		with neo4j_driver.session(database="neo4j") as session:
 			t1 = time.perf_counter()
 			vector_nodes = session.execute_read(
 				search_query,
 				embedding=embedding,
-				limit=result_limit * 4,
+				limit=limit * 4,
 				bounding_box=bounding_box,
 				published_after=published_after,
 				published_before=published_before,
-				min_citations=min_citations,
 			)
-			logger.info(f"  vector:   {(time.perf_counter() - t1) * 1000:.0f}ms ({len(vector_nodes)} rows)")
+			logger.info(f"  vector: {(time.perf_counter() - t1) * 1000:.0f}ms ({len(vector_nodes)} rows)")
 
 			t2 = time.perf_counter()
 			try:
 				ft_nodes = session.execute_read(
 					fulltext_search_query,
-					search_term=escape_fts_query(search_term),
-					limit=result_limit * 4,
+					search_term=escape_fts_query(query),
+					limit=limit * 4,
 					bounding_box=bounding_box,
 					published_after=published_after,
 					published_before=published_before,
-					min_citations=min_citations,
 				)
-				logger.info(f"  fts:      {(time.perf_counter() - t2) * 1000:.0f}ms ({len(ft_nodes)} rows)")
+				logger.info(f"  fts: {(time.perf_counter() - t2) * 1000:.0f}ms ({len(ft_nodes)} rows)")
 			except Exception as fts_err:
 				logger.warning(f"FTS query failed, falling back to vector-only: {fts_err}")
 				ft_nodes = []
 
-			vector_results = _build_search_results(vector_nodes, label_filter)
-			ft_results = _build_search_results(ft_nodes, label_filter)
-			search_results = _rrf_merge([vector_results, ft_results])
+		vector_hits = _build_search_hits(vector_nodes, label_filter)
+		ft_hits = _build_search_hits(ft_nodes, label_filter)
+		results = _rrf_merge([vector_hits, ft_hits])
 
-		if reranking_enabled and len(search_results) > 1:
+		if reranking_enabled and len(results) > 1:
 			t3 = time.perf_counter()
-			pairs = [
-				(
-					search_term,
-					sr.result.item.content
-					if sr.result.type == "TextChunk"
-					else f"{sr.result.item.name} {sr.dataset.title}",
-				)
-				for sr in search_results
-			]
+			pairs = [(query, h.entity.label or h.entity.id) for h in results]
 			ce_scores = reranker.predict(pairs, batch_size=128, show_progress_bar=False)
-			for sr, score in zip(search_results, ce_scores):
-				sr.score = float(score)
-			search_results.sort(key=lambda sr: sr.score, reverse=True)
-			search_results = search_results[:result_limit]
-			logger.info(f"  rerank:   {(time.perf_counter() - t3) * 1000:.0f}ms ({len(pairs)} pairs → {len(search_results)} results)")
+			for hit, score in zip(results, ce_scores):
+				hit.score = float(score)
+			results.sort(key=lambda h: h.score, reverse=True)
+			results = results[:limit]
+			logger.info(f"  rerank: {(time.perf_counter() - t3) * 1000:.0f}ms")
 
-		logger.info(f"  total:    {(time.perf_counter() - t0) * 1000:.0f}ms")
-		return search_results
+		logger.info(f"  total: {(time.perf_counter() - t0) * 1000:.0f}ms")
+		return results
 	except Exception as e:
-		logger.error(f'Error performing semantic search for "{search_term}": {str(e)}')
-		return Error(
-			msg=f'Error performing semantic search for "{search_term}": {str(e)}'
-		)
+		logger.error(f'Error searching for "{query}": {e}')
+		return Error(msg=str(e))
 
 
 @mcp.tool()
-def get_dataset_documents(uri: str) -> Union[List[SupportingDocument], Error]:
-	"""Retrieves the full text content of all supporting documents attached to a dataset.
+def get_relations(
+	uri: Annotated[str, "The @id (URI) of the entity to traverse from."],
+	predicate: Annotated[
+		Optional[str],
+		"DOO predicate to filter on (e.g. 'dcat:theme', 'dcterms:isPartOf', 'scoro:AuthorshipRole'). "
+		"See doo://context for available predicates. Omit to return all.",
+	] = None,
+	direction: Annotated[
+		Literal["outgoing", "incoming"],
+		"'outgoing' follows edges from this entity; 'incoming' finds entities that point to it.",
+	] = "outgoing",
+	target_type: Annotated[
+		Optional[str],
+		"Filter by target entity DOO class URI (e.g. 'dcat:Dataset', 'skos:Concept').",
+	] = None,
+) -> Union[List[Relation], Error]:
+	"""Traverse relationships in the knowledge graph from a given entity.
 
-	Use this after identifying a dataset of interest (e.g. from search or list_datasets) to
-	read the underlying documentation — field methods, data collection protocols, metadata
-	descriptions, or other supporting material stored as text chunks in the knowledge graph.
-	Each returned SupportingDocument has a filename identifying the source document and a
-	content field containing its text. Call this when you need to answer detailed questions
-	about how a dataset was collected, what it covers, or what its limitations are.
+	Covers all edge types: RELATION{predicate} (dcterms:isPartOf, dcterms:references,
+	dcterms:isReferencedBy, ...), HAS_THEME → dcat:theme, AFFILIATED_WITH → org:memberOf,
+	ASSOCIATED_WITH{role} → scoro roles. Use direction='incoming' to find e.g. all datasets
+	that share a theme, or all datasets a person contributed to.
 
 	Args:
-	    uri (str): The URI of the dataset (obtained from a Dataset object's uri field).
+	    uri: The entity URI (@id) to start from.
+	    predicate: Optional predicate URI to filter edges.
+	    direction: Traverse outgoing or incoming edges.
+	    target_type: Optional DOO class URI to filter target entities.
 
 	Returns:
-	    Union[List[SupportingDocument], Error]: List of supporting documents, or an Error if
-	        the dataset URI is not found or the query fails. An empty list means the dataset
-	        exists but has no attached text chunks.
+	    List of Relation objects, or Error.
 	"""
-	logger.info(f"Fetching documents for dataset {uri}")
+	logger.info(f"get_relations: {uri} [{direction}, predicate={predicate}, target_type={target_type}]")
 	try:
+		target_neo4j = _DOO_TO_NEO4J.get(target_type) if target_type else None
 		with neo4j_driver.session(database="neo4j") as session:
-			results = session.execute_read(
-				lambda tx: tx.run(
-					"MATCH (d:Dataset {uri: $uri})-[r]-(t:TextChunk) "
-					"RETURN coalesce(t.filename, type(r)) AS filename, t.content AS content",
-					uri=uri,
-				).data()
-			)
-			return [
-				SupportingDocument(filename=r["filename"], content=r["content"])
-				for r in results
-			]
+			rows = session.execute_read(get_relations_query, uri=uri, direction=direction)
+
+		relations = []
+		for row in rows:
+			node_labels = row["node_labels"]
+			if target_neo4j and target_neo4j not in node_labels:
+				continue
+			pred = _rel_to_predicate(row["rel_type"], row["rel_props"])
+			if predicate and pred != predicate:
+				continue
+			target = _props_to_entity(node_labels, row["node_props"])
+			relations.append(Relation(predicate=pred, source=uri, target=target))
+
+		return relations
 	except Exception as e:
-		logger.error(f"Error fetching documents for {uri}: {str(e)}")
-		return Error(msg=f"Error fetching documents for {uri}: {str(e)}")
+		logger.error(f"Error getting relations for {uri}: {e}")
+		return Error(msg=str(e))
 
 
 @mcp.tool()
-def find_datasets_by_author(orcid_uri: str) -> Union[List[Dataset], Error]:
-	"""Find all datasets in the EIDC catalogue contributed to by a specific person, identified by their ORCID URI.
-
-	Requires an exact ORCID URI to unambiguously identify a person — name-based lookup is
-	intentionally not supported since names may be shared across multiple individuals. To find
-	a person's URI first, use search with result_type='person' and their name as the search
-	term, then extract the uri field from the returned Person result before calling this tool.
-	Results are deduplicated — a dataset appears once even if the person has multiple roles on it.
+def get_contributors(
+	dataset_uri: Annotated[str, "The @id (URI) of the dataset."],
+	role: Annotated[
+		Optional[str],
+		"Filter by scoro/dcterms role URI (e.g. 'scoro:AuthorshipRole', 'dcterms:publisher'). "
+		"See doo://context roleTerms for available values.",
+	] = None,
+) -> Union[List[Attribution], Error]:
+	"""List all persons and organisations associated with a dataset, with their roles.
 
 	Args:
-	    orcid_uri (str): The person's full ORCID URI (e.g. "https://orcid.org/0000-0001-2345-6789").
-	        Obtain this from a Person result returned by search.
+	    dataset_uri: The dataset URI (@id).
+	    role: Optional role URI to filter (see ROLE_TERMS in doo://context).
 
 	Returns:
-	    Union[List[Dataset], Error]: All datasets linked to the person, or an Error if the
-	        query fails. An empty list means no datasets are linked to that URI.
+	    List of Attribution (agent Entity + role URI), or Error.
 	"""
-	logger.info(f"Finding datasets by author URI: {orcid_uri}")
+	logger.info(f"get_contributors: {dataset_uri} [role={role}]")
 	try:
 		with neo4j_driver.session(database="neo4j") as session:
-			results = session.execute_read(
-				lambda tx: tx.run(
-					"MATCH (p:Person {uri: $uri})-[]-(d:Dataset) "
-					"RETURN DISTINCT apoc.map.removeKey(properties(d), 'embedding') AS dataset",
-					uri=orcid_uri,
-				).data()
-			)
-			return [Dataset(**r["dataset"]) for r in results]
+			rows = session.execute_read(get_contributors_query, dataset_uri=dataset_uri)
+
+		attributions = []
+		for row in rows:
+			if role and row["role"] != role:
+				continue
+			agent = _props_to_entity(row["agent_labels"], row["agent_props"])
+			attributions.append(Attribution(agent=agent, role=row["role"] or ""))
+
+		return attributions
 	except Exception as e:
-		logger.error(f"Error finding datasets by author URI '{orcid_uri}': {str(e)}")
-		return Error(
-			msg=f"Error finding datasets by author URI '{orcid_uri}': {str(e)}"
-		)
+		logger.error(f"Error getting contributors for {dataset_uri}: {e}")
+		return Error(msg=str(e))
 
 
 @mcp.tool()
-def find_related_datasets(uri: str) -> Union[List[Dataset], Error]:
-	"""Find datasets that are related to a given dataset through shared graph connections.
-
-	Uses a two-hop traversal of the knowledge graph, so it surfaces datasets that share
-	authors, organisations, keywords, or any other intermediate node with the source dataset.
-	Use this for discovery — e.g. after finding a relevant dataset via search, call this to
-	broaden the results to thematically or institutionally connected work. Results are
-	deduplicated and exclude the source dataset itself.
+def find_by_contributor(
+	agent_uri: Annotated[str, "The @id (URI) of the person or organisation."],
+	role: Annotated[
+		Optional[str],
+		"Filter by scoro/dcterms role URI. Omit to return datasets for all roles.",
+	] = None,
+) -> Union[List[Entity], Error]:
+	"""Find all datasets a given person or organisation has contributed to.
 
 	Args:
-	    uri (str): The URI of the source dataset (obtained from a Dataset object's uri field).
+	    agent_uri: The person/organisation URI (@id).
+	    role: Optional role URI to restrict which contributions are included.
 
 	Returns:
-	    Union[List[Dataset], Error]: Datasets reachable within two hops of the source, or an
-	        Error if the query fails. An empty list means the dataset has no graph neighbours
-	        that are also connected to another dataset.
+	    List of Dataset Entity objects, or Error.
 	"""
-	logger.info(f"Finding datasets related to {uri}")
+	logger.info(f"find_by_contributor: {agent_uri} [role={role}]")
 	try:
 		with neo4j_driver.session(database="neo4j") as session:
-			results = session.execute_read(
-				lambda tx: tx.run(
-					"MATCH (d:Dataset {uri: $uri})-[]-(mid)-[]-(related:Dataset) "
-					"WHERE related.uri <> $uri "
-					"RETURN DISTINCT apoc.map.removeKey(properties(related), 'embedding') AS dataset",
-					uri=uri,
-				).data()
-			)
-			return [Dataset(**r["dataset"]) for r in results]
+			rows = session.execute_read(find_by_contributor_query, agent_uri=agent_uri)
+
+		entities = []
+		seen = set()
+		for row in rows:
+			if role and row.get("role") != role:
+				continue
+			uri = row["props"].get("uri", "")
+			if uri in seen:
+				continue
+			seen.add(uri)
+			entities.append(_props_to_entity(row["labels"], row["props"]))
+
+		return entities
 	except Exception as e:
-		logger.error(f"Error finding related datasets for {uri}: {str(e)}")
-		return Error(msg=f"Error finding related datasets for {uri}: {str(e)}")
+		logger.error(f"Error in find_by_contributor for {agent_uri}: {e}")
+		return Error(msg=str(e))
 
 
 @mcp.tool()
-def get_graph_schema() -> Union[dict, Error]:
-	"""Returns the live schema of the knowledge graph to support query planning and capability discovery.
+def get_content(
+	uri: Annotated[str, "The @id (URI) of a Document or Dataset to retrieve text from."],
+) -> Union[str, Error]:
+	"""Retrieve the full text content associated with a Document or Dataset URI.
 
-	Call this when you are unsure what node types, relationship types, or properties exist in
-	the graph — for example, before deciding which tool to use or whether a particular filter
-	is meaningful. The returned dict has three keys: 'node_labels' (list of node type names
-	such as Dataset, Person, TextChunk), 'relationship_types' (list of edge type names between
-	nodes), and 'property_keys' (list of all property names used across the graph). This
-	reflects the current state of the database, so it will include any new node types or
-	relationships added since the server was deployed.
+	Supporting documents (fabio:Expression) and description/lineage text chunks are
+	stored separately from the main entity to keep search results lightweight.
+	Call this after identifying a relevant entity via search or get_relations.
+
+	Args:
+	    uri: The entity URI (@id) — typically a Document (dcterms:references target)
+	         or a Dataset (to get its description/lineage text).
 
 	Returns:
-	    Union[dict, Error]: Schema dict with keys 'node_labels', 'relationship_types', and
-	        'property_keys', or an Error if the schema query fails.
+	    Concatenated text content, or Error if not found.
 	"""
-	logger.info("Fetching graph schema")
+	logger.info(f"get_content: {uri}")
 	try:
 		with neo4j_driver.session(database="neo4j") as session:
-			labels = session.execute_read(
-				lambda tx: [
-					r["label"] for r in tx.run("CALL db.labels() YIELD label").data()
-				]
-			)
-			rel_types = session.execute_read(
-				lambda tx: [
-					r["relationshipType"]
-					for r in tx.run(
-						"CALL db.relationshipTypes() YIELD relationshipType"
-					).data()
-				]
-			)
-			prop_keys = session.execute_read(
-				lambda tx: [
-					r["propertyKey"]
-					for r in tx.run("CALL db.propertyKeys() YIELD propertyKey").data()
-				]
-			)
-			return {
-				"node_labels": labels,
-				"relationship_types": rel_types,
-				"property_keys": prop_keys,
-			}
+			chunks = session.execute_read(get_content_query, uri=uri)
+		if not chunks:
+			return Error(msg=f"No text content found for '{uri}'")
+		return "\n\n---\n\n".join(chunks)
 	except Exception as e:
-		logger.error(f"Error fetching graph schema: {str(e)}")
-		return Error(msg=f"Error fetching graph schema: {str(e)}")
+		logger.error(f"Error getting content for {uri}: {e}")
+		return Error(msg=str(e))

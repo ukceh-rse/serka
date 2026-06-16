@@ -3,41 +3,65 @@ from app import mcp
 
 @mcp.prompt()
 def find_datasets_for_location(location: str) -> str:
-	"""Guided workflow for finding EIDC datasets covering a named UK location.
+	"""Find EIDC datasets covering a named UK location.
 
-	Chains geocode_location → search with bounding box to resolve a place name into
-	geographic coordinates and then retrieve spatially relevant datasets. Use when a user
-	asks about datasets for a specific area, region, or site by name rather than coordinates.
+	Chains geocode_location → search with bounding_box → get_relations for themes
+	and contributors. Use when a user asks about datasets for a specific area by name.
 
 	Args:
-	    location (str): A UK place name, region, or geographic feature (e.g. "Cairngorms",
-	        "River Severn", "Norfolk Broads").
+	    location: A UK place name (e.g. "Cairngorms", "River Severn", "Norfolk Broads").
 	"""
 	return (
 		f"Find environmental datasets relevant to '{location}'. "
-		"Step 1: use geocode_location to resolve the place name to a bounding box. "
-		"Step 2: use search with that bounding box to find relevant datasets. "
-		"Step 3: summarise the datasets found, noting their titles, publication dates, and citation counts."
+		"Step 1: use geocode_location to resolve the place name to a bounding_box. "
+		"Step 2: use search with that bounding_box to find relevant datasets. "
+		"Step 3: for the top datasets, use get_relations with predicate='dcat:theme' to discover their themes, "
+		"and get_contributors to identify key researchers. "
+		"Step 4: summarise the datasets, their themes, and any notable contributors."
 	)
 
 
 @mcp.prompt()
 def explore_author_work(author: str) -> str:
-	"""Guided workflow for exploring a researcher's contributions to the EIDC catalogue.
+	"""Explore a researcher's contributions to the EIDC catalogue.
 
-	Chains search (result_type='person') → find_datasets_by_author → get_dataset_documents.
-	Because names can be shared, the author is first identified unambiguously via semantic
-	search to obtain their ORCID URI before datasets are retrieved. Use when a user wants to
-	understand a specific researcher's body of work, research focus, or methodologies.
+	Chains search (types=['foaf:Person']) → find_by_contributor → get_content.
+	Use when a user wants to understand a researcher's body of work.
 
 	Args:
-	    author (str): The researcher's name as the user provided it.
+	    author: The researcher's name.
 	"""
 	return (
 		f"Explore the published work of '{author}' in the EIDC catalogue. "
-		"Step 1: use search with result_type='person' and the author's name as the search term to find matching Person results. "
-		"If multiple people are returned, select the most likely based on the user input (but clarify if there were other people with similar names in your answer) "
-		"Step 2: extract the uri field from the confirmed Person result and pass it to find_datasets_by_author to retrieve their datasets. "
-		"Step 3: for the most relevant datasets, use get_dataset_documents to read supporting documentation. "
-		"Step 4: summarise the author's research themes and key datasets."
+		"Step 1: use search with types=['foaf:Person'] and the author's name to find matching Person entities. "
+		"If multiple people are returned, select the most likely match (clarify ambiguity in your answer). "
+		"Step 2: use find_by_contributor with the Person @id to retrieve their datasets. "
+		"Step 3: for the most relevant datasets, use get_content to read supporting documentation, "
+		"and get_relations with predicate='dcat:theme' to understand research themes. "
+		"Step 4: summarise the author's research focus and key datasets."
+	)
+
+
+@mcp.prompt()
+def explore_dataset(uri: str) -> str:
+	"""Deep-dive into a single dataset using the DOO graph.
+
+	Chains doo://context → doo://entity/{uri} → get_relations → get_contributors → get_content.
+	Use when a user wants a comprehensive overview of a specific dataset.
+
+	Args:
+	    uri: The dataset URI (@id), e.g. "https://catalogue.ceh.ac.uk/id/{uuid}".
+	"""
+	return (
+		f"Provide a comprehensive overview of the dataset at '{uri}'. "
+		"Step 1: read doo://context to understand available predicates and types. "
+		f"Step 2: read doo://entity/{uri} to get the dataset's core properties. "
+		"Step 3: use get_relations to explore: "
+		"  - themes (predicate='dcat:theme'), "
+		"  - related datasets (predicate='dcterms:isPartOf' or 'dcterms:relation'), "
+		"  - supporting documents (predicate='dcterms:references'), "
+		"  - incoming citations (predicate='dcterms:isReferencedBy'). "
+		"Step 4: use get_contributors to list authors, custodians, and publishers. "
+		"Step 5: use get_content on the dataset URI to retrieve its description and lineage text. "
+		"Step 6: summarise what the dataset covers, who created it, what it relates to, and its key themes."
 	)

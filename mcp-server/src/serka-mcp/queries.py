@@ -5,7 +5,6 @@ from models import BoundingBox
 
 _LUCENE_SPECIAL = re.compile(r'([+\-&|!(){}\[\]^"~*?:\\/])')
 
-_ALLOWED_NODE_TYPES = {"Dataset", "Person", "Organisation", "TextChunk"}
 _ALLOWED_SORT_FIELDS = {"citations", "publication_date"}
 
 
@@ -13,24 +12,82 @@ def escape_fts_query(query: str) -> str:
 	return _LUCENE_SPECIAL.sub(r"\\\1", query)
 
 
+def count_datasets_query(tx) -> int:
+	return tx.run("MATCH (n:Dataset) RETURN count(n) AS total").single()["total"]
+
+
 def list_query(
 	tx,
-	type: str = "Dataset",
+	skip: int = 0,
 	limit: int = 25,
 	sort_by: Literal["citations", "publication_date"] = "citations",
 	order: Literal["ascending", "descending"] = "descending",
 ):
-	if type not in _ALLOWED_NODE_TYPES:
-		raise ValueError(f"Invalid node type: {type!r}")
 	if sort_by not in _ALLOWED_SORT_FIELDS:
 		raise ValueError(f"Invalid sort field: {sort_by!r}")
 	cypher_order = "ASC" if order == "ascending" else "DESC"
-	query = f"MATCH (n:{type}) RETURN apoc.map.removeKey(properties(n), 'embedding') AS dataset ORDER BY n.{sort_by} {cypher_order} LIMIT {limit}"
+	query = (
+		f"MATCH (n:Dataset) "
+		f"RETURN apoc.map.removeKey(properties(n), 'embedding') AS dataset "
+		f"ORDER BY n.{sort_by} {cypher_order} SKIP {skip} LIMIT {limit}"
+	)
 	return tx.run(query).data()
 
 
 def dataset_cypher_query(tx, uri: str):
 	return tx.run("MATCH (d:Dataset {uri: $uri}) RETURN d", uri=uri).single()
+
+
+def get_entity_query(tx, uri: str):
+	return tx.run(
+		"MATCH (n {uri: $uri}) "
+		"RETURN labels(n) AS labels, apoc.map.removeKeys(properties(n), ['embedding']) AS props",
+		uri=uri,
+	).single()
+
+
+def get_relations_query(tx, uri: str, direction: str = "outgoing"):
+	if direction == "incoming":
+		query = (
+			"MATCH (b {uri: $uri})<-[r]-(a) "
+			"RETURN type(r) AS rel_type, properties(r) AS rel_props, "
+			"labels(a) AS node_labels, apoc.map.removeKeys(properties(a), ['embedding']) AS node_props"
+		)
+	else:
+		query = (
+			"MATCH (a {uri: $uri})-[r]->(b) "
+			"RETURN type(r) AS rel_type, properties(r) AS rel_props, "
+			"labels(b) AS node_labels, apoc.map.removeKeys(properties(b), ['embedding']) AS node_props"
+		)
+	return tx.run(query, uri=uri).data()
+
+
+def get_contributors_query(tx, dataset_uri: str):
+	return tx.run(
+		"MATCH (d:Dataset {uri: $uri})-[r:ASSOCIATED_WITH]->(a) "
+		"RETURN r.role AS role, labels(a) AS agent_labels, "
+		"apoc.map.removeKeys(properties(a), ['embedding']) AS agent_props",
+		uri=dataset_uri,
+	).data()
+
+
+def find_by_contributor_query(tx, agent_uri: str):
+	return tx.run(
+		"MATCH (a {uri: $uri})<-[r:ASSOCIATED_WITH]-(d:Dataset) "
+		"RETURN DISTINCT r.role AS role, labels(d) AS labels, "
+		"apoc.map.removeKeys(properties(d), ['embedding']) AS props",
+		uri=agent_uri,
+	).data()
+
+
+def get_content_query(tx, uri: str) -> list[str]:
+	results = tx.run(
+		"MATCH (t:TextChunk)-[r]->(n {uri: $uri}) "
+		"WHERE type(r) IN ['PART_OF', 'DESCRIPTION_OF', 'LINEAGE_OF', 'SUPPORTING_DOC_OF'] "
+		"RETURN t.content AS content",
+		uri=uri,
+	).data()
+	return [r["content"] for r in results if r["content"]]
 
 
 def search_query(
@@ -40,7 +97,6 @@ def search_query(
 	bounding_box: Optional[BoundingBox] = None,
 	published_after: Optional[str] = None,
 	published_before: Optional[str] = None,
-	min_citations: Optional[int] = None,
 ):
 	params: dict = {"embedding": embedding, "limit": limit}
 	conditions: List[str] = []
@@ -63,9 +119,6 @@ def search_query(
 	if published_before:
 		conditions.append("connected_node.publication_date <= $published_before")
 		params["published_before"] = published_before
-	if min_citations is not None:
-		conditions.append("connected_node.citations >= $min_citations")
-		params["min_citations"] = min_citations
 
 	where = ("WHERE " + " AND ".join(conditions) + " ") if conditions else ""
 	query = (
@@ -95,7 +148,6 @@ def fulltext_search_query(
 	bounding_box: Optional[BoundingBox] = None,
 	published_after: Optional[str] = None,
 	published_before: Optional[str] = None,
-	min_citations: Optional[int] = None,
 ):
 	params: dict = {"search_term": search_term, "limit": limit}
 	conditions: List[str] = []
@@ -118,9 +170,6 @@ def fulltext_search_query(
 	if published_before:
 		conditions.append("connected_node.publication_date <= $published_before")
 		params["published_before"] = published_before
-	if min_citations is not None:
-		conditions.append("connected_node.citations >= $min_citations")
-		params["min_citations"] = min_citations
 
 	where = ("WHERE " + " AND ".join(conditions) + " ") if conditions else ""
 	query = (
