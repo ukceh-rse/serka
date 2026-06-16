@@ -23,6 +23,7 @@ class Neo4jGraphReader:
 			"id(start_node) as start_node_id, "
 			"labels(start_node) as start_labels, "
 			"type(r) as relationship_type, "
+			"properties(r) as relationship_properties, "
 			"direction as relationship_direction, "
 			"apoc.map.removeKeys(connected_node, ['embedding']) as connected_node, "
 			"id(connected_node) as connected_node_id, "
@@ -55,16 +56,16 @@ class Neo4jGraphReader:
 			"Dataset": set(),
 			"Organisation": set(),
 			"TextChunk": set(),
+			"Concept": set(),
+			"Document": set(),
 		}
 		relationships = set()
 
-		# Take all nodes returned from the query and create a label for them
-		# and add them to the corresponding set
 		for row in rows:
 			s_label, s_md, s_id = self.extract_node(
 				row["start_labels"], row["start_node_id"], row["start_node"]
 			)
-			nodes_sets[s_label].add(s_md)
+			nodes_sets.setdefault(s_label, set()).add(s_md)
 			c_label, c_md, c_id = self.extract_node(
 				row["connected_labels"], row["connected_node_id"], row["connected_node"]
 			)
@@ -72,11 +73,14 @@ class Neo4jGraphReader:
 			if c_label == "TextChunk":
 				continue
 
-			nodes_sets[c_label].add(c_md)
+			nodes_sets.setdefault(c_label, set()).add(c_md)
 
 			a = s_id if row["relationship_direction"] == "outgoing" else c_id
 			b = c_id if row["relationship_direction"] == "outgoing" else s_id
-			relationships.add(f"{a} -> {row['relationship_type']} -> {b}")
+			rel_type = row["relationship_type"]
+			rel_props = row.get("relationship_properties", {})
+			label = rel_props.get("predicate") or rel_props.get("role") or rel_type
+			relationships.add(f"{a} -> {label} -> {b}")
 
 		markdown = "## Nodes\n"
 		for node_set in nodes_sets.values():

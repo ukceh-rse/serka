@@ -61,7 +61,10 @@ class BedrockNodeEmbedder:
 	) -> Dict[str, Dict[str, List[Dict[str, str]]]]:
 		embedded_nodes = {}
 		for node_type, node_list in nodes.items():
-			embedded_nodes[node_type] = self._embed_nodes(node_type, node_list)
+			if node_type == "Document":
+				embedded_nodes[node_type] = node_list
+			else:
+				embedded_nodes[node_type] = self._embed_nodes(node_type, node_list)
 		return {"node_embeddings": embedded_nodes}
 
 

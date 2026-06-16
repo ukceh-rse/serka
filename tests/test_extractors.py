@@ -11,7 +11,7 @@ from serka.graph.extractors import DocumentTruncator, EntityExtractor, TextExtra
 def test_text_extractor_returns_documents_for_each_field():
 	records = [
 		{
-			"resourceIdentifiers": [{"codeSpace": "doi:", "code": "10.1234/abc123"}],
+			"uri": "https://catalogue.ceh.ac.uk/id/test-uuid-abc",
 			"title": "Test Title",
 			"description": "test_description",
 			"lineage": "test_lineage",
@@ -21,7 +21,7 @@ def test_text_extractor_returns_documents_for_each_field():
 	docs = result["documents"]
 	assert len(docs) == 2
 	assert docs[0].content == "test_description"
-	assert docs[0].meta["uri"] == "https://doi.org/10.1234/abc123"
+	assert docs[0].meta["uri"] == "https://catalogue.ceh.ac.uk/id/test-uuid-abc"
 	assert docs[0].meta["title"] == "Test Title"
 	assert docs[1].content == "test_lineage"
 
@@ -29,7 +29,7 @@ def test_text_extractor_returns_documents_for_each_field():
 def test_text_extractor_skips_missing_fields():
 	records = [
 		{
-			"resourceIdentifiers": [{"codeSpace": "doi:", "code": "10.1234/abc"}],
+			"uri": "https://catalogue.ceh.ac.uk/id/test-uuid-xyz",
 			"title": "T",
 			"description": "only this field present",
 		}
@@ -43,6 +43,7 @@ def test_text_extractor_skips_missing_fields():
 # ---------------------------------------------------------------------------
 
 _RECORD = {
+	"uri": "https://catalogue.ceh.ac.uk/id/test-uuid-1234",
 	"resourceIdentifiers": [{"codeSpace": "doi:", "code": "10.1234/abc123"}],
 	"title": "Test Dataset",
 	"authors": [
@@ -66,10 +67,11 @@ def test_entity_extractor_datasets():
 	result = EntityExtractor().run(data=[_RECORD])
 	datasets = result["nodes"]["Dataset"]
 	assert len(datasets) == 1
-	assert datasets[0]["uri"] == "https://doi.org/10.1234/abc123"
+	assert datasets[0]["uri"] == "https://catalogue.ceh.ac.uk/id/test-uuid-1234"
 	assert datasets[0]["title"] == "Test Dataset"
 	assert datasets[0]["citations"] == 5
 	assert datasets[0]["publication_date"] == "2023-01-01"
+	assert "https://doi.org/10.1234/abc123" in datasets[0]["identifiers"]
 
 
 def test_entity_extractor_authors():
@@ -91,20 +93,19 @@ def test_entity_extractor_organisations():
 def test_entity_extractor_relationships():
 	result = EntityExtractor().run(data=[_RECORD])
 	rels = result["relationships"]
-	authored_by_datasets = {r[0] for r in rels["AUTHORED_BY"]}
-	assert "https://doi.org/10.1234/abc123" in authored_by_datasets
+	assoc_datasets = {r[0] for r in rels["ASSOCIATED_WITH"]}
+	assert "https://catalogue.ceh.ac.uk/id/test-uuid-1234" in assoc_datasets
 	affiliated_orgs = {r[1] for r in rels["AFFILIATED_WITH"]}
 	assert "https://ror.org/abc123" in affiliated_orgs
 
 
 def test_entity_extractor_handles_missing_fields_gracefully():
-	# Records with missing keys fall back to empty strings rather than raising.
 	sparse = {"title": "Sparse Dataset"}
 	result = EntityExtractor().run(data=[sparse, _RECORD])
 	datasets = result["nodes"]["Dataset"]
 	assert len(datasets) == 2
 	sparse_ds = next(d for d in datasets if d["title"] == "Sparse Dataset")
-	assert sparse_ds["uri"] == ""  # extract_doi returns "" when no identifiers present
+	assert sparse_ds["uri"] == ""
 
 
 # ---------------------------------------------------------------------------

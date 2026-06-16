@@ -4663,7 +4663,7 @@ wheels = [
 
 [[package]]
 name = "serka"
-version = "0.1.0b0"
+version = "0.1.0b1"
 source = { editable = "." }
 dependencies = [
     { name = "amazon-bedrock-haystack" },

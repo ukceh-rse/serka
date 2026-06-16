@@ -13,6 +13,7 @@ from serka.settings import Settings
 
 StreamFn = Callable[[Any, Request], Response]
 
+
 _feedback_logger: FeedbackLogger | None = None
 _stream_fn: StreamFn | None = None
 _mcp_search_fn: Callable | None = None
@@ -32,7 +33,7 @@ async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable
 
 	async def _search(q: str) -> list:
 		async with Client(mcp_url) as client:
-			result = await client.call_tool("search", {"search_term": q})
+			result = await client.call_tool("search", {"query": q})
 		return json.loads(result.content[0].text)
 
 	_mcp_search_fn = _search

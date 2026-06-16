@@ -4,7 +4,6 @@ import requests_cache
 from tqdm import tqdm
 from haystack import component, Document
 from serka.cache import root as _cache_root
-from serka.graph.extractors import extract_doi
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +115,7 @@ class LegiloFetcher:
 		return self.extract_docs(
 			res.json(),
 			dataset.get("title", ""),
-			extract_doi(dataset["resourceIdentifiers"]),
+			dataset.get("uri", ""),
 		)
 
 	@component.output_types(documents=List[Document])

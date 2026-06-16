@@ -1,28 +1,24 @@
 import { create } from 'zustand'
 
-type TextChunkItem = { doc_id?: string; content: string }
+export interface Entity {
+  id: string
+  type: string[]
+  label: string | null
+  properties: Record<string, unknown>
+}
 
-type ResultItem =
-  | { type: 'TextChunk'; item: TextChunkItem }
-  | { type: 'Person'; item: { name: string; uri: string } }
-  | { type: 'Organisation'; item: { name: string; uri: string } }
-
-export interface SearchResult {
-  result: ResultItem
-  dataset: { uri: string; title: string }
+export interface SearchHit {
+  entity: Entity
   score: number
-  description: string | null
+  /** Field name for text matches ("description", "lineage", "SUPPORTING_DOC"), "metadata" for node-level matches. */
+  matched_on: string
+  excerpt: string | null
 }
 
-export type TextChunkResult = Omit<SearchResult, 'result'> & { result: Extract<ResultItem, { type: 'TextChunk' }> }
-
-export function isTextChunkResult(r: SearchResult): r is TextChunkResult {
-  return r.result.type === 'TextChunk'
-}
 
 interface SearchState {
   query: string
-  results: SearchResult[]
+  results: SearchHit[]
   loading: boolean
   error: string | null
   aiSummaryEnabled: boolean
@@ -33,7 +29,7 @@ interface SearchState {
   aiLoading: boolean
   recentSearches: string[]
   setQuery: (q: string) => void
-  setResults: (r: SearchResult[]) => void
+  setResults: (r: SearchHit[]) => void
   setLoading: (v: boolean) => void
   setError: (e: string | null) => void
   setAiSummaryEnabled: (v: boolean) => void
