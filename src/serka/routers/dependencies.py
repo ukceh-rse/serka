@@ -24,6 +24,15 @@ def get_settings() -> Settings:
 	return Settings()
 
 
+_DOO_TYPES = {
+	"Dataset": "dcat:Dataset",
+	"Person": "foaf:Person",
+	"Organisation": "foaf:Organization",
+	"Concept": "skos:Concept",
+	"Document": "fabio:Expression",
+}
+
+
 async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable:
 	global _mcp_search_fn
 	if _mcp_search_fn is not None:
@@ -31,10 +40,28 @@ async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable
 
 	mcp_url = f"http://{settings.mcp_host}:{settings.mcp_port}/mcp"
 
-	async def _search(q: str) -> list:
+	async def _search(
+		q: str,
+		return_type: str | None = None,
+		hops: int = 1,
+		location: str | None = None,
+		published_after: str | None = None,
+		published_before: str | None = None,
+	) -> list:
+		args: dict[str, Any] = {"query": q, "hops": hops}
+		if return_type:
+			args["return_type"] = _DOO_TYPES.get(str(return_type), str(return_type))
+		if published_after:
+			args["published_after"] = published_after
+		if published_before:
+			args["published_before"] = published_before
 		async with Client(mcp_url) as client:
-			result = await client.call_tool("search", {"query": q})
-		return json.loads(result.content[0].text)
+			if location:
+				geo = json.loads((await client.call_tool("geocode_location", {"location": location})).content[0].text)
+				if "boundary" in geo:
+					args["bounding_box"] = geo["boundary"]
+			result = await client.call_tool("search", args)
+		return json.loads(result.content[0].text) if result.content else []
 
 	_mcp_search_fn = _search
 	return _mcp_search_fn

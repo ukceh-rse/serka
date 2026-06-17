@@ -7,6 +7,16 @@ _LUCENE_SPECIAL = re.compile(r'([+\-&|!(){}\[\]^"~*?:\\/])')
 
 _ALLOWED_SORT_FIELDS = {"citations", "publication_date"}
 
+_SEARCH_RETURN = (
+	"RETURN "
+	"apoc.map.removeKeys(properties(matched), ['embedding']) AS matched_props, "
+	"labels(matched) AS matched_labels, "
+	"score, "
+	"apoc.map.removeKeys(properties(target), ['embedding']) AS target_props, "
+	"labels(target) AS target_labels, "
+	"via "
+)
+
 
 def escape_fts_query(query: str) -> str:
 	return _LUCENE_SPECIAL.sub(r"\\\1", query)
@@ -90,54 +100,84 @@ def get_content_query(tx, uri: str) -> list[str]:
 	return [r["content"] for r in results if r["content"]]
 
 
+def _filter_conditions(
+	bounding_box: Optional[BoundingBox],
+	published_after: Optional[str],
+	published_before: Optional[str],
+	params: dict,
+	node_alias: str = "target",
+) -> List[str]:
+	"""Return a list of Cypher condition strings (no WHERE keyword) for bbox/date filters."""
+	conditions: List[str] = []
+	if bounding_box:
+		bb = bounding_box.expand(20)
+		conditions += [
+			f"'Dataset' IN labels({node_alias})",
+			f"{node_alias}.north_boundary >= $south",
+			f"{node_alias}.south_boundary <= $north",
+			f"{node_alias}.east_boundary >= $west",
+			f"{node_alias}.west_boundary <= $east",
+		]
+		params.update({"south": bb.south, "north": bb.north, "west": bb.west, "east": bb.east})
+	if published_after:
+		conditions.append(f"{node_alias}.publication_date >= $published_after")
+		params["published_after"] = published_after
+	if published_before:
+		conditions.append(f"{node_alias}.publication_date <= $published_before")
+		params["published_before"] = published_before
+	return conditions
+
+
+def _via_clause() -> str:
+	return (
+		"[n IN nodes(path)[1..-1] | {"
+		"props: apoc.map.removeKeys(properties(n), ['embedding']), "
+		"labels: labels(n)"
+		"}] AS via "
+	)
+
+
 def search_query(
 	tx,
 	embedding: List[float],
 	limit: int = 10,
+	max_hops: int = 1,
+	target_label: Optional[str] = None,
 	bounding_box: Optional[BoundingBox] = None,
 	published_after: Optional[str] = None,
 	published_before: Optional[str] = None,
 ):
 	params: dict = {"embedding": embedding, "limit": limit}
-	conditions: List[str] = []
+	max_hops = max(0, min(max_hops, 5))
+	extra = _filter_conditions(bounding_box, published_after, published_before, params)
 
-	if bounding_box:
-		bb = bounding_box.expand(20)
-		conditions += [
-			"'Dataset' IN labels(connected_node)",
-			"connected_node.north_boundary >= $south",
-			"connected_node.south_boundary <= $north",
-			"connected_node.east_boundary >= $west",
-			"connected_node.west_boundary <= $east",
-		]
-		params.update(
-			{"south": bb.south, "north": bb.north, "west": bb.west, "east": bb.east}
+	if target_label:
+		params["target_label"] = target_label
+		all_conditions = ["$target_label IN labels(target)"] + extra
+		where = "WHERE " + " AND ".join(all_conditions) + " "
+		query = (
+			"CALL db.index.vector.queryNodes('vec_lookup', $limit, $embedding) "
+			"YIELD node AS matched, score "
+			f"MATCH path = shortestPath((matched)-[*0..{max_hops}]-(target)) "
+			+ where
+			+ "WITH matched, score, path, target, " + _via_clause()
+			+ _SEARCH_RETURN
 		)
-	if published_after:
-		conditions.append("connected_node.publication_date >= $published_after")
-		params["published_after"] = published_after
-	if published_before:
-		conditions.append("connected_node.publication_date <= $published_before")
-		params["published_before"] = published_before
+	else:
+		base = ["target IS NOT NULL"] + extra
+		where = "WHERE " + " AND ".join(base) + " "
+		query = (
+			"CALL db.index.vector.queryNodes('vec_lookup', $limit, $embedding) "
+			"YIELD node AS matched, score "
+			"OPTIONAL MATCH (matched)-[]-(neighbour) "
+			"WHERE NOT 'TextChunk' IN labels(neighbour) "
+			"WITH matched, score, "
+			"CASE WHEN 'TextChunk' IN labels(matched) THEN neighbour ELSE matched END AS target "
+			+ where
+			+ "WITH matched, score, target, [] AS via "
+			+ _SEARCH_RETURN
+		)
 
-	where = ("WHERE " + " AND ".join(conditions) + " ") if conditions else ""
-	query = (
-		"CALL db.index.vector.queryNodes('vec_lookup', $limit, $embedding) "
-		"YIELD node AS start_node, score "
-		"MATCH (start_node)-[r]-(connected_node) "
-		+ where
-		+ "WITH start_node, r, connected_node, score, "
-		"CASE WHEN startNode(r) = start_node THEN 'outgoing' ELSE 'incoming' END as direction "
-		"RETURN apoc.map.removeKeys(start_node, ['embedding']) as start_node, "
-		"id(start_node) as start_node_id, "
-		"labels(start_node) as start_labels, "
-		"type(r) as relationship_type, "
-		"direction as relationship_direction, "
-		"apoc.map.removeKeys(connected_node, ['embedding']) as connected_node, "
-		"id(connected_node) as connected_node_id, "
-		"labels(connected_node) as connected_labels, "
-		"score"
-	)
 	return tx.run(query, **params).data()
 
 
@@ -145,48 +185,41 @@ def fulltext_search_query(
 	tx,
 	search_term: str,
 	limit: int = 50,
+	max_hops: int = 1,
+	target_label: Optional[str] = None,
 	bounding_box: Optional[BoundingBox] = None,
 	published_after: Optional[str] = None,
 	published_before: Optional[str] = None,
 ):
 	params: dict = {"search_term": search_term, "limit": limit}
-	conditions: List[str] = []
+	max_hops = max(0, min(max_hops, 5))
+	extra = _filter_conditions(bounding_box, published_after, published_before, params)
 
-	if bounding_box:
-		bb = bounding_box.expand(20)
-		conditions += [
-			"'Dataset' IN labels(connected_node)",
-			"connected_node.north_boundary >= $south",
-			"connected_node.south_boundary <= $north",
-			"connected_node.east_boundary >= $west",
-			"connected_node.west_boundary <= $east",
-		]
-		params.update(
-			{"south": bb.south, "north": bb.north, "west": bb.west, "east": bb.east}
+	if target_label:
+		params["target_label"] = target_label
+		all_conditions = ["$target_label IN labels(target)"] + extra
+		where = "WHERE " + " AND ".join(all_conditions) + " "
+		query = (
+			"CALL db.index.fulltext.queryNodes('ft_search', $search_term, {limit: $limit}) "
+			"YIELD node AS matched, score "
+			f"MATCH path = shortestPath((matched)-[*0..{max_hops}]-(target)) "
+			+ where
+			+ "WITH matched, score, path, target, " + _via_clause()
+			+ _SEARCH_RETURN
 		)
-	if published_after:
-		conditions.append("connected_node.publication_date >= $published_after")
-		params["published_after"] = published_after
-	if published_before:
-		conditions.append("connected_node.publication_date <= $published_before")
-		params["published_before"] = published_before
+	else:
+		base = ["target IS NOT NULL"] + extra
+		where = "WHERE " + " AND ".join(base) + " "
+		query = (
+			"CALL db.index.fulltext.queryNodes('ft_search', $search_term, {limit: $limit}) "
+			"YIELD node AS matched, score "
+			"OPTIONAL MATCH (matched)-[]-(neighbour) "
+			"WHERE NOT 'TextChunk' IN labels(neighbour) "
+			"WITH matched, score, "
+			"CASE WHEN 'TextChunk' IN labels(matched) THEN neighbour ELSE matched END AS target "
+			+ where
+			+ "WITH matched, score, target, [] AS via "
+			+ _SEARCH_RETURN
+		)
 
-	where = ("WHERE " + " AND ".join(conditions) + " ") if conditions else ""
-	query = (
-		"CALL db.index.fulltext.queryNodes('ft_search', $search_term, {limit: $limit}) "
-		"YIELD node AS start_node, score "
-		"MATCH (start_node)-[r]-(connected_node) "
-		+ where
-		+ "WITH start_node, r, connected_node, score, "
-		"CASE WHEN startNode(r) = start_node THEN 'outgoing' ELSE 'incoming' END as direction "
-		"RETURN apoc.map.removeKeys(start_node, ['embedding']) as start_node, "
-		"id(start_node) as start_node_id, "
-		"labels(start_node) as start_labels, "
-		"type(r) as relationship_type, "
-		"direction as relationship_direction, "
-		"apoc.map.removeKeys(connected_node, ['embedding']) as connected_node, "
-		"id(connected_node) as connected_node_id, "
-		"labels(connected_node) as connected_labels, "
-		"score"
-	)
 	return tx.run(query, **params).data()
