@@ -1,5 +1,6 @@
-import { Box, Card, CardContent, Chip, Link, Typography } from "@mui/material";
+import { Box, Card, CardContent, Link, Typography } from "@mui/material";
 import type { SearchHit } from "../stores/searchStore";
+import TypeChip from "./TypeChip";
 
 interface Props {
   hit: SearchHit;
@@ -11,8 +12,6 @@ const TYPE_COLOR: Record<string, "default" | "primary" | "secondary" | "success"
   "skos:Concept": "success",
   "fabio:Expression": "warning",
 };
-
-const CHIP_SX = { fontSize: "0.65rem", height: 18 };
 
 const HIGHLIGHT_PROPS = ["orcid", "url", "notation", "scheme"];
 
@@ -55,13 +54,7 @@ export default function EntityResultCard({ hit }: Props) {
               </Typography>
             )}
           </Box>
-          <Chip
-            label={typeUri}
-            size="small"
-            color={chipColor}
-            variant="outlined"
-            sx={CHIP_SX}
-          />
+          <TypeChip type={typeUri} color={chipColor} />
         </Box>
       </CardContent>
     </Card>

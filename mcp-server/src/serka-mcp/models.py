@@ -30,10 +30,11 @@ class Attribution(BaseModel):
 class SearchHit(BaseModel):
 	"""A single search result with relevance score."""
 
-	entity: Entity = Field(description="The matched entity.")
+	entity: Entity = Field(description="The matched entity (of the requested return_type, or the matched node itself).")
 	score: float = Field(description="Relevance score.")
 	matched_on: str = Field(description="Field or relationship type that produced this match.")
-	excerpt: Optional[str] = Field(None, description="Matched text excerpt (populated for text_content matches).")
+	excerpt: Optional[str] = Field(None, description="Matched text excerpt (populated for TextChunk matches).")
+	via: List[Entity] = Field(default_factory=list, description="Intermediate nodes connecting the matched node to the returned entity. Empty for direct matches.")
 
 
 class Dataset(BaseModel):

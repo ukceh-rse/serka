@@ -32,6 +32,10 @@ from queries import (
 
 _DOO_TO_NEO4J: dict[str, str] = {v: k for k, v in NODE_TYPES.items()}
 
+# Strip prefixes from DOO URIs when looking up Neo4j label as fallback
+def _resolve_label(doo_uri: str) -> str:
+	return _DOO_TO_NEO4J.get(doo_uri, doo_uri.split(":")[-1].capitalize())
+
 _REL_TYPE_TO_PREDICATE: dict[str, str] = {
 	"HAS_THEME": "dcat:theme",
 	"AFFILIATED_WITH": "org:memberOf",
@@ -54,26 +58,15 @@ def _rel_to_predicate(rel_type: str, rel_props: dict) -> str:
 	return _REL_TYPE_TO_PREDICATE.get(rel_type, rel_type)
 
 
-def _build_search_hits(nodes: list[dict], label_filter: set[str] | None) -> list[SearchHit]:
+def _build_search_hits(nodes: list[dict]) -> list[SearchHit]:
 	hits = []
 	for n in nodes:
-		labels = n["start_labels"]
-		if "TextChunk" in labels:
-			if "Dataset" not in n.get("connected_labels", []):
-				continue
-			if label_filter and "Dataset" not in label_filter:
-				continue
-			entity = _props_to_entity(n["connected_labels"], n["connected_node"])
-			matched_on = n["start_node"].get("field") or "text_content"
-			excerpt = n["start_node"].get("content")
-		else:
-			semantic = [l for l in labels if l != "embedded"]
-			if label_filter and not set(semantic).intersection(label_filter):
-				continue
-			entity = _props_to_entity(labels, n["start_node"])
-			matched_on = "metadata"
-			excerpt = None
-		hits.append(SearchHit(entity=entity, score=n["score"], matched_on=matched_on, excerpt=excerpt))
+		is_chunk = "TextChunk" in n["matched_labels"]
+		matched_on = (n["matched_props"].get("field") or "text") if is_chunk else "metadata"
+		excerpt = n["matched_props"].get("content") if is_chunk else None
+		entity = _props_to_entity(n["target_labels"], n["target_props"])
+		via = [_props_to_entity(v["labels"], v["props"]) for v in (n["via"] or [])]
+		hits.append(SearchHit(entity=entity, score=n["score"], matched_on=matched_on, excerpt=excerpt, via=via))
 	return hits
 
 
@@ -179,11 +172,18 @@ def list_datasets(
 @mcp.tool()
 def search(
 	query: Annotated[str, "Search term for semantic and full-text search."],
-	types: Annotated[
-		Optional[List[str]],
-		"Filter results by DOO class URI(s), e.g. ['dcat:Dataset'], ['foaf:Person']. "
-		"See doo://context for available types. Omit to return all types.",
+	return_type: Annotated[
+		Optional[str],
+		"DOO class URI of the entity type to return, e.g. 'dcat:Dataset', 'foaf:Person', "
+		"'skos:Concept'. See doo://context for available types. "
+		"Omit to return matched nodes directly (TextChunks resolve 1 hop to their parent).",
 	] = None,
+	hops: Annotated[
+		int,
+		"Maximum relationship hops from the matched node to the return_type entity. "
+		"Use hops=2 with return_type='dcat:Dataset' to surface supporting document matches "
+		"(TextChunk → PART_OF → Document ← RELATION ← Dataset). Default 1.",
+	] = 1,
 	bounding_box: Annotated[
 		Optional[BoundingBox],
 		"Filter to datasets within this geographic area (expanded ~20%).",
@@ -194,26 +194,28 @@ def search(
 ) -> Union[List[SearchHit], Error]:
 	"""Hybrid vector + full-text search over the DOO knowledge graph.
 
-	Returns Entity objects ranked by relevance. For text matches, the parent Dataset
-	entity is returned rather than the raw TextChunk. Use get_relations or get_contributors
-	on the returned @id values to traverse the graph further.
+	Finds any indexed node that matches the query, then traverses up to `hops`
+	relationships to reach an entity of `return_type`. Results include intermediate
+	`via` nodes so callers can follow the full connection path.
 
 	Args:
 	    query: Natural language search term.
-	    types: Optional list of DOO class URIs to restrict result types.
+	    return_type: Optional DOO class URI of the desired result entity type.
+	    hops: Max hops from matched node to return_type entity (default 1).
 	    bounding_box: Geographic filter (use geocode_location to obtain one).
 	    published_after: Exclude datasets published before this date.
 	    published_before: Exclude datasets published after this date.
 	    limit: Max results (default 25).
 
 	Returns:
-	    List of SearchHit (entity + score + matched_on), or Error.
+	    List of SearchHit (entity + score + matched_on + via), or Error.
 	"""
-	logger.info(f'Search: "{query}" [types={types}, bbox={bounding_box is not None}]')
+	logger.info(f'Search: "{query}" [return_type={return_type}, hops={hops}, bbox={bounding_box is not None}]')
 	try:
 		t0 = time.perf_counter()
 
-		label_filter = {_DOO_TO_NEO4J.get(t, t) for t in types} if types else None
+		target_label = _resolve_label(return_type) if return_type else None
+		max_hops = max(0, min(hops, 5))
 		embedding = embedder.run(query)["embedding"]
 		logger.info(f"  embed: {(time.perf_counter() - t0) * 1000:.0f}ms")
 
@@ -223,6 +225,8 @@ def search(
 				search_query,
 				embedding=embedding,
 				limit=limit * 4,
+				max_hops=max_hops,
+				target_label=target_label,
 				bounding_box=bounding_box,
 				published_after=published_after,
 				published_before=published_before,
@@ -235,6 +239,8 @@ def search(
 					fulltext_search_query,
 					search_term=escape_fts_query(query),
 					limit=limit * 4,
+					max_hops=max_hops,
+					target_label=target_label,
 					bounding_box=bounding_box,
 					published_after=published_after,
 					published_before=published_before,
@@ -244,8 +250,8 @@ def search(
 				logger.warning(f"FTS query failed, falling back to vector-only: {fts_err}")
 				ft_nodes = []
 
-		vector_hits = _build_search_hits(vector_nodes, label_filter)
-		ft_hits = _build_search_hits(ft_nodes, label_filter)
+		vector_hits = _build_search_hits(vector_nodes)
+		ft_hits = _build_search_hits(ft_nodes)
 		results = _rrf_merge([vector_hits, ft_hits])
 
 		if reranking_enabled and len(results) > 1:

@@ -13,6 +13,8 @@ export interface SearchHit {
   /** Field name for text matches ("description", "lineage", "SUPPORTING_DOC"), "metadata" for node-level matches. */
   matched_on: string
   excerpt: string | null
+  /** Intermediate nodes connecting the matched node to entity (e.g. Document between TextChunk and Dataset). */
+  via: Entity[]
 }
 
 

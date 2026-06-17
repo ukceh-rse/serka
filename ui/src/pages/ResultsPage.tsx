@@ -151,7 +151,11 @@ export default function ResultsPage() {
       const key = r.entity.id;
       if (!map.has(key))
         map.set(key, {
-          dataset: { uri: r.entity.id, title: r.entity.label ?? r.entity.id },
+          dataset: {
+            uri: r.entity.id,
+            title: r.entity.label ?? r.entity.id,
+            properties: r.entity.properties,
+          },
           hits: [],
         });
       map.get(key)!.hits.push(r);

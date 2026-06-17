@@ -15,7 +15,7 @@ services:
       - MCP_HOST=mcp
       - FEEDBACK_LOG_PATH=/data/feedback.jsonl
     volumes:
-      - ${HOME}/.aws:/root/.aws:ro
+      - ${HOME}/.aws:/root/.aws
       - ${FEEDBACK_DATA_DIR:-./feedback}:/data
     networks:
       - internal
@@ -31,7 +31,7 @@ services:
     environment:
       - NEO4J_HOST=neo4j
     volumes:
-      - ${HOME}/.aws:/root/.aws:ro
+      - ${HOME}/.aws:/root/.aws
     networks:
       - internal
 
