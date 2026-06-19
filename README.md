@@ -1,3 +1,5 @@
+![Coverage](https://ukceh-rse.github.io/serka/coverage-badge.svg)
+
 # Serka
 Serka (serĉi ekologio) is a prototype search tool for the UKCEH NCUK project. It uses modern AI techniques (LLMs, RAG, knowledge graphs) to enhance the EIDC catalogue's search functionality.
 
