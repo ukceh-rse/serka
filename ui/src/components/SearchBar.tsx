@@ -1,12 +1,19 @@
 import { useState, useRef, useEffect, type FormEvent } from 'react'
 import {
-  Box, ButtonBase, Divider, IconButton, InputBase, Paper, Tooltip, Typography,
+  Box, ButtonBase, Divider, IconButton, InputBase, ListSubheader, MenuItem, Paper, Select, Tooltip, Typography,
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import HistoryIcon from '@mui/icons-material/History'
 import { EXAMPLE_SEARCHES } from '../constants'
-import { useSearchStore } from '../stores/searchStore'
+import { useSearchStore, type ReturnType } from '../stores/searchStore'
+
+const RETURN_TYPES: { value: string; label: string }[] = [
+  { value: 'Any', label: 'All' },
+  { value: 'Dataset', label: 'Datasets' },
+  { value: 'Person', label: 'People' },
+  { value: 'Organisation', label: 'Organisations' },
+]
 
 interface Props {
   onSearch: (query: string) => void
@@ -18,6 +25,8 @@ interface Props {
   showSuggestions?: boolean
   onFocusChange?: (focused: boolean) => void
   onExampleSearch?: (q: string) => void
+  returnType?: ReturnType | null
+  onReturnTypeChange?: (rt: ReturnType | null) => void
 }
 
 const isMac = navigator.platform.toUpperCase().includes('MAC') || navigator.userAgent.includes('Mac')
@@ -31,6 +40,8 @@ export default function SearchBar({
   showSuggestions,
   onFocusChange,
   onExampleSearch,
+  returnType = null,
+  onReturnTypeChange,
 }: Props) {
   const [value, setValue] = useState(initialValue)
   const [focused, setFocused] = useState(false)
@@ -142,6 +153,26 @@ export default function SearchBar({
                 </ButtonBase>
               </span>
             </Tooltip>
+          </>
+        )}
+        {onReturnTypeChange && (
+          <>
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 0.75 }} />
+            <Select
+              value={returnType ?? 'Any'}
+              onChange={(e) => onReturnTypeChange(e.target.value === 'Any' ? null : (e.target.value as ReturnType))}
+              variant="standard"
+              disableUnderline
+              aria-label="result type"
+              sx={{ fontSize: '0.875rem', color: 'text.secondary', '& .MuiSelect-select': { py: 0, pl: 0.5 } }}
+            >
+              <ListSubheader sx={{ fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', lineHeight: 2 }}>
+                Show:
+              </ListSubheader>
+              {RETURN_TYPES.map((t) => (
+                <MenuItem key={t.value} value={t.value} sx={{ fontSize: '0.875rem' }}>{t.label}</MenuItem>
+              ))}
+            </Select>
           </>
         )}
       </Paper>

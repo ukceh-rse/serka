@@ -12,13 +12,13 @@ from models import (
 	Entity,
 	Error,
 	GeoCodedLocation,
+	PathStep,
 	Relation,
 	SearchHit,
 )
 from ontology import NODE_TYPES, JSONLD_CONTEXT, PROPERTY_TERMS, ROLE_TERMS
 from queries import (
 	count_datasets_query,
-	dataset_cypher_query,
 	escape_fts_query,
 	find_by_contributor_query,
 	fulltext_search_query,
@@ -54,7 +54,8 @@ def _rel_to_predicate(rel_type: str, rel_props: dict) -> str:
 	if rel_type == "RELATION":
 		return rel_props.get("predicate", "dcterms:relation")
 	if rel_type == "ASSOCIATED_WITH":
-		return rel_props.get("role", "pro:RoleInTime")
+		role = rel_props.get("role", "")
+		return ROLE_TERMS.get(role, role or "pro:RoleInTime")
 	return _REL_TYPE_TO_PREDICATE.get(rel_type, rel_type)
 
 
@@ -64,9 +65,28 @@ def _build_search_hits(nodes: list[dict]) -> list[SearchHit]:
 		is_chunk = "TextChunk" in n["matched_labels"]
 		matched_on = (n["matched_props"].get("field") or "text") if is_chunk else "metadata"
 		excerpt = n["matched_props"].get("content") if is_chunk else None
-		entity = _props_to_entity(n["target_labels"], n["target_props"])
-		via = [_props_to_entity(v["labels"], v["props"]) for v in (n["via"] or [])]
-		hits.append(SearchHit(entity=entity, score=n["score"], matched_on=matched_on, excerpt=excerpt, via=via))
+
+		# Path nodes in graph order [matched, via..., target]; edges[i] joins chain[i]↔chain[i+1].
+		chain = [(n["matched_labels"], n["matched_props"])]
+		chain += [(v["labels"], v["props"]) for v in (n["via"] or [])]
+		chain.append((n["target_labels"], n["target_props"]))
+		edges = [(r["type"], r["props"]) for r in (n.get("rels") or [])]
+
+		# A matched TextChunk is evidence, not an entity: its field/content is the match, so drop it
+		# and its incident edge — the next node becomes the anchor of the relationship chain.
+		if is_chunk and len(chain) > 1:
+			chain = chain[1:]
+			edges = edges[1:]
+
+		entity = _props_to_entity(*chain[-1])
+		# Walk from the returned entity back to the anchor: edges[k] joins chain[k]↔chain[k+1].
+		path = [
+			PathStep(predicate=_rel_to_predicate(*edges[k]), entity=_props_to_entity(*chain[k]))
+			for k in range(len(edges) - 1, -1, -1)
+		]
+		hits.append(SearchHit(
+			entity=entity, score=n["score"], matched_on=matched_on, excerpt=excerpt, path=path,
+		))
 	return hits
 
 

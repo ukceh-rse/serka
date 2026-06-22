@@ -14,7 +14,7 @@ _SEARCH_RETURN = (
 	"score, "
 	"apoc.map.removeKeys(properties(target), ['embedding']) AS target_props, "
 	"labels(target) AS target_labels, "
-	"via "
+	"via, rels "
 )
 
 
@@ -42,10 +42,6 @@ def list_query(
 		f"ORDER BY n.{sort_by} {cypher_order} SKIP {skip} LIMIT {limit}"
 	)
 	return tx.run(query).data()
-
-
-def dataset_cypher_query(tx, uri: str):
-	return tx.run("MATCH (d:Dataset {uri: $uri}) RETURN d", uri=uri).single()
 
 
 def get_entity_query(tx, uri: str):
@@ -133,7 +129,37 @@ def _via_clause() -> str:
 		"[n IN nodes(path)[1..-1] | {"
 		"props: apoc.map.removeKeys(properties(n), ['embedding']), "
 		"labels: labels(n)"
-		"}] AS via "
+		"}] AS via, "
+		"[r IN relationships(path) | {type: type(r), props: properties(r)}] AS rels "
+	)
+
+
+def _build_search_cypher(index_call: str, max_hops: int, target_label: Optional[str], extra: List[str]) -> str:
+	"""Build the search Cypher shared by vector and full-text search.
+
+	`index_call` is the leading `CALL db.index... YIELD node AS matched, score` clause.
+	With a target label we walk the shortest path to a node carrying that label; otherwise
+	we resolve a matched TextChunk to its non-TextChunk neighbour and return that directly.
+	"""
+	if target_label:
+		where = "WHERE " + " AND ".join(["$target_label IN labels(target)"] + extra) + " "
+		return (
+			index_call
+			+ f"MATCH path = shortestPath((matched)-[*0..{max_hops}]-(target)) "
+			+ where
+			+ "WITH matched, score, path, target, " + _via_clause()
+			+ _SEARCH_RETURN
+		)
+	where = "WHERE " + " AND ".join(["target IS NOT NULL"] + extra) + " "
+	return (
+		index_call
+		+ "OPTIONAL MATCH (matched)-[]-(neighbour) "
+		"WHERE NOT 'TextChunk' IN labels(neighbour) "
+		"WITH matched, score, "
+		"CASE WHEN 'TextChunk' IN labels(matched) THEN neighbour ELSE matched END AS target "
+		+ where
+		+ "WITH matched, score, target, [] AS via, [] AS rels "
+		+ _SEARCH_RETURN
 	)
 
 
@@ -148,36 +174,14 @@ def search_query(
 	published_before: Optional[str] = None,
 ):
 	params: dict = {"embedding": embedding, "limit": limit}
-	max_hops = max(0, min(max_hops, 5))
-	extra = _filter_conditions(bounding_box, published_after, published_before, params)
-
 	if target_label:
 		params["target_label"] = target_label
-		all_conditions = ["$target_label IN labels(target)"] + extra
-		where = "WHERE " + " AND ".join(all_conditions) + " "
-		query = (
-			"CALL db.index.vector.queryNodes('vec_lookup', $limit, $embedding) "
-			"YIELD node AS matched, score "
-			f"MATCH path = shortestPath((matched)-[*0..{max_hops}]-(target)) "
-			+ where
-			+ "WITH matched, score, path, target, " + _via_clause()
-			+ _SEARCH_RETURN
-		)
-	else:
-		base = ["target IS NOT NULL"] + extra
-		where = "WHERE " + " AND ".join(base) + " "
-		query = (
-			"CALL db.index.vector.queryNodes('vec_lookup', $limit, $embedding) "
-			"YIELD node AS matched, score "
-			"OPTIONAL MATCH (matched)-[]-(neighbour) "
-			"WHERE NOT 'TextChunk' IN labels(neighbour) "
-			"WITH matched, score, "
-			"CASE WHEN 'TextChunk' IN labels(matched) THEN neighbour ELSE matched END AS target "
-			+ where
-			+ "WITH matched, score, target, [] AS via "
-			+ _SEARCH_RETURN
-		)
-
+	extra = _filter_conditions(bounding_box, published_after, published_before, params)
+	index_call = (
+		"CALL db.index.vector.queryNodes('vec_lookup', $limit, $embedding) "
+		"YIELD node AS matched, score "
+	)
+	query = _build_search_cypher(index_call, max(0, min(max_hops, 5)), target_label, extra)
 	return tx.run(query, **params).data()
 
 
@@ -192,34 +196,12 @@ def fulltext_search_query(
 	published_before: Optional[str] = None,
 ):
 	params: dict = {"search_term": search_term, "limit": limit}
-	max_hops = max(0, min(max_hops, 5))
-	extra = _filter_conditions(bounding_box, published_after, published_before, params)
-
 	if target_label:
 		params["target_label"] = target_label
-		all_conditions = ["$target_label IN labels(target)"] + extra
-		where = "WHERE " + " AND ".join(all_conditions) + " "
-		query = (
-			"CALL db.index.fulltext.queryNodes('ft_search', $search_term, {limit: $limit}) "
-			"YIELD node AS matched, score "
-			f"MATCH path = shortestPath((matched)-[*0..{max_hops}]-(target)) "
-			+ where
-			+ "WITH matched, score, path, target, " + _via_clause()
-			+ _SEARCH_RETURN
-		)
-	else:
-		base = ["target IS NOT NULL"] + extra
-		where = "WHERE " + " AND ".join(base) + " "
-		query = (
-			"CALL db.index.fulltext.queryNodes('ft_search', $search_term, {limit: $limit}) "
-			"YIELD node AS matched, score "
-			"OPTIONAL MATCH (matched)-[]-(neighbour) "
-			"WHERE NOT 'TextChunk' IN labels(neighbour) "
-			"WITH matched, score, "
-			"CASE WHEN 'TextChunk' IN labels(matched) THEN neighbour ELSE matched END AS target "
-			+ where
-			+ "WITH matched, score, target, [] AS via "
-			+ _SEARCH_RETURN
-		)
-
+	extra = _filter_conditions(bounding_box, published_after, published_before, params)
+	index_call = (
+		"CALL db.index.fulltext.queryNodes('ft_search', $search_term, {limit: $limit}) "
+		"YIELD node AS matched, score "
+	)
+	query = _build_search_cypher(index_call, max(0, min(max_hops, 5)), target_label, extra)
 	return tx.run(query, **params).data()

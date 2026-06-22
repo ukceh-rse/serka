@@ -28,6 +28,30 @@ To run the app locally for development instance:
 uv run fastapi dev src/serka/main.py --port 8080
 ```
 
+### Hot-reloading dev stack
+
+`compose.dev.yml` runs the whole stack with the source directories bind-mounted, so saved
+edits take effect without rebuilding images:
+
+```bash
+podman-compose -f compose.dev.yml up --build
+```
+
+| Service       | Reload behaviour                                                     | URL                                            |
+| ------------- | ------------------------------------------------------------------- | ---------------------------------------------- |
+| `ui`          | Vite dev server with HMR (`./ui` mounted)                           | [localhost:5173](http://localhost:5173)        |
+| `serka` (API) | `fastapi dev` auto-reloads on edits under `./src`                   | [localhost:9000](http://localhost:9000)        |
+| `mcp`         | `watchfiles` restarts the server on edits under `./mcp-server/src` | [localhost:8000](http://localhost:8000)        |
+| `neo4j`       | Same `./.neo4j` data volume as `compose.yml` — no re-ingest needed | [localhost:7474](http://localhost:7474)        |
+
+Notes:
+
+- Open the app at [localhost:5173](http://localhost:5173); the Vite dev server proxies
+  `/v1` to the `serka` service via `VITE_PROXY_TARGET`.
+- The UI's `node_modules` lives in an isolated volume so host modules don't clash with the
+  container; `npm install` runs on first start.
+- The images are still built for their dependency layers, hence `--build` on first run.
+
 ## Commits
 
 Commits follow the [Conventional Commits](https://www.conventionalcommits.org/) specification. Use [Commitizen](https://commitizen-tools.github.io/commitizen/) to create commits interactively:

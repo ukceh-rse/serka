@@ -22,7 +22,7 @@ import DatasetResultCard, {
 import EntityResultCard from "../components/EntityResultCard";
 import AISummary from "../components/AISummary";
 import { useSearchStore } from "../stores/searchStore";
-import type { SearchHit } from "../stores/searchStore";
+import type { Entity, ReturnType, SearchHit } from "../stores/searchStore";
 import { search } from "../api/search";
 import { streamSummary } from "../api/chat";
 import { EXAMPLE_SEARCHES } from "../constants";
@@ -41,17 +41,33 @@ const ENTITY_TYPE_ORDER = [
   "fabio:Expression",
 ];
 
+type EntityGroup = { entity: Entity; hits: SearchHit[] };
+
+const isDataset = (g: EntityGroup) => g.entity.type.includes("dcat:Dataset");
+
+const toGroupedResult = (g: EntityGroup): GroupedResult => ({
+  dataset: {
+    uri: g.entity.id,
+    title: g.entity.label ?? g.entity.id,
+    properties: g.entity.properties,
+  },
+  hits: g.hits,
+});
+
 export default function ResultsPage() {
   const [params, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const q = params.get("q") ?? "";
   const aiFromUrl = params.get("ai") === "true";
+  const rt = (params.get("type") as ReturnType) || null;
   const {
     query,
+    returnType,
     results,
     loading,
     error,
     setQuery,
+    setReturnType,
     setResults,
     setLoading,
     setError,
@@ -114,13 +130,14 @@ export default function ResultsPage() {
 
   useEffect(() => {
     if (!q) return;
-    if (q === query && results.length > 0) return;
+    if (q === query && rt === returnType && results.length > 0) return;
     if (!EXAMPLE_SEARCHES.includes(q)) addRecentSearch(q);
     setQuery(q);
+    setReturnType(rt);
     resetAiSummary();
     setLoading(true);
     setError(null);
-    search(q)
+    search(q, rt)
       .then(setResults)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
@@ -128,7 +145,7 @@ export default function ResultsPage() {
     return () => {
       summaryAbortRef.current?.abort();
     };
-  }, [q]);
+  }, [q, rt]);
 
   useEffect(() => {
     if (
@@ -143,56 +160,65 @@ export default function ResultsPage() {
     }
   }, [aiFromUrl]);
 
-  // Group dcat:Dataset hits (text + metadata) by URI
-  const datasetGroups = useMemo<GroupedResult[]>(() => {
-    const map = new Map<string, GroupedResult>();
+  // All hits grouped per entity, hits sorted by score, groups sorted by relevance.
+  // The dataset and per-type views below are derived from this single pass; the
+  // unified list ("Any" search) uses it directly.
+  const unifiedGroups = useMemo<EntityGroup[]>(() => {
+    const byId = new Map<string, EntityGroup>();
     for (const r of results) {
-      if (!r.entity.type.includes("dcat:Dataset")) continue;
-      const key = r.entity.id;
-      if (!map.has(key))
-        map.set(key, {
-          dataset: {
-            uri: r.entity.id,
-            title: r.entity.label ?? r.entity.id,
-            properties: r.entity.properties,
-          },
-          hits: [],
-        });
-      map.get(key)!.hits.push(r);
+      const g = byId.get(r.entity.id) ?? { entity: r.entity, hits: [] };
+      g.hits.push(r);
+      byId.set(r.entity.id, g);
     }
-    return Array.from(map.values())
-      .map((g) => ({ ...g, hits: g.hits.sort((a, b) => b.score - a.score) }))
+    return Array.from(byId.values())
+      .map((g) => ({
+        ...g,
+        hits: [...g.hits].sort((a, b) => b.score - a.score),
+      }))
       .sort((a, b) => b.hits[0].score - a.hits[0].score);
   }, [results]);
 
-  // Deduplicated non-dataset hits, grouped by DOO type
-  const entityByType = useMemo<Map<string, SearchHit[]>>(() => {
-    const map = new Map<string, SearchHit[]>();
-    const seen = new Set<string>();
-    for (const r of results) {
-      if (r.entity.type.includes("dcat:Dataset")) continue;
-      if (seen.has(r.entity.id)) continue;
-      seen.add(r.entity.id);
-      const type = r.entity.type[0] ?? "unknown";
-      if (!map.has(type)) map.set(type, []);
-      map.get(type)!.push(r);
-    }
-    return map;
-  }, [results]);
+  const datasetGroups = useMemo<GroupedResult[]>(
+    () => unifiedGroups.filter(isDataset).map(toGroupedResult),
+    [unifiedGroups],
+  );
 
-  const hasResults = datasetGroups.length > 0 || entityByType.size > 0;
+  // Non-dataset groups bucketed by DOO type; relevance order is preserved from unifiedGroups.
+  const entityByType = useMemo<Map<string, EntityGroup[]>>(() => {
+    const byType = new Map<string, EntityGroup[]>();
+    for (const g of unifiedGroups) {
+      if (isDataset(g)) continue;
+      const type = g.entity.type[0] ?? "unknown";
+      if (!byType.has(type)) byType.set(type, []);
+      byType.get(type)!.push(g);
+    }
+    return byType;
+  }, [unifiedGroups]);
+
+  const hasResults = unifiedGroups.length > 0;
 
   const [viewMode, setViewMode] = useState<"masonry" | "list">("list");
 
   const handleSearch = (newQ: string) => {
     const sp = new URLSearchParams({ q: newQ });
     if (aiFromUrl) sp.set("ai", "true");
+    if (rt) sp.set("type", rt);
     navigate(`/search?${sp}`);
   };
 
   const handleExampleSearch = (newQ: string) => {
     const sp = new URLSearchParams({ q: newQ, ai: "true" });
+    if (rt) sp.set("type", rt);
     navigate(`/search?${sp}`);
+  };
+
+  const handleReturnType = (next: ReturnType | null) => {
+    setSearchParams((prev) => {
+      const sp = new URLSearchParams(prev);
+      if (next) sp.set("type", next);
+      else sp.delete("type");
+      return sp;
+    });
   };
 
   const handleAiSummary = () => {
@@ -233,6 +259,8 @@ export default function ResultsPage() {
           showSuggestions
           onFocusChange={setSearchFocused}
           onExampleSearch={handleExampleSearch}
+          returnType={rt}
+          onReturnTypeChange={handleReturnType}
         />
       </Box>
 
@@ -261,92 +289,127 @@ export default function ResultsPage() {
         <>
           <AISummary query={q} />
 
-          {datasetGroups.length > 0 && (
+          {!rt ? (
             <>
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  mb: 2,
-                }}
+              <Typography
+                variant="subtitle2"
+                color="text.secondary"
+                sx={{ mb: 2 }}
               >
-                <Typography variant="subtitle2" color="text.secondary">
-                  {datasetGroups.length} dataset
-                  {datasetGroups.length !== 1 ? "s" : ""} for "
-                  <strong>{q}</strong>"
-                </Typography>
-                <Box>
-                  <Tooltip title="Grid view">
-                    <IconButton
-                      size="small"
-                      onClick={() => setViewMode("masonry")}
-                      color={viewMode === "masonry" ? "primary" : "default"}
-                    >
-                      <ViewModuleIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="List view">
-                    <IconButton
-                      size="small"
-                      onClick={() => setViewMode("list")}
-                      color={viewMode === "list" ? "primary" : "default"}
-                    >
-                      <ViewListIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-              </Box>
-
-              {viewMode === "masonry" ? (
-                <Masonry columns={{ xs: 1, sm: 2, md: 3 }} spacing={2}>
-                  {datasetGroups.map((g, i) => (
+                {unifiedGroups.length} result
+                {unifiedGroups.length !== 1 ? "s" : ""} for "
+                <strong>{q}</strong>"
+              </Typography>
+              <Stack spacing={2}>
+                {unifiedGroups.map((g, i) =>
+                  isDataset(g) ? (
                     <DatasetResultCard
-                      key={g.dataset.uri}
-                      group={g}
-                      index={i}
-                      collapsedLines={Math.min(g.hits.length * 3 + 2, 20)}
-                    />
-                  ))}
-                </Masonry>
-              ) : (
-                <Stack spacing={2}>
-                  {datasetGroups.map((g, i) => (
-                    <DatasetResultCard
-                      key={g.dataset.uri}
-                      group={g}
+                      key={g.entity.id}
+                      group={toGroupedResult(g)}
                       index={i}
                       collapsedLines={5}
                     />
-                  ))}
-                </Stack>
+                  ) : (
+                    <EntityResultCard key={g.entity.id} hits={g.hits} />
+                  ),
+                )}
+              </Stack>
+            </>
+          ) : (
+            <>
+              {datasetGroups.length > 0 && (
+                <>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      mb: 2,
+                    }}
+                  >
+                    <Typography variant="subtitle2" color="text.secondary">
+                      {datasetGroups.length} dataset
+                      {datasetGroups.length !== 1 ? "s" : ""} for "
+                      <strong>{q}</strong>"
+                    </Typography>
+                    <Box>
+                      <Tooltip title="Grid view">
+                        <IconButton
+                          size="small"
+                          onClick={() => setViewMode("masonry")}
+                          color={viewMode === "masonry" ? "primary" : "default"}
+                        >
+                          <ViewModuleIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="List view">
+                        <IconButton
+                          size="small"
+                          onClick={() => setViewMode("list")}
+                          color={viewMode === "list" ? "primary" : "default"}
+                        >
+                          <ViewListIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </Box>
+
+                  {viewMode === "masonry" ? (
+                    <Masonry columns={{ xs: 1, sm: 2, md: 3 }} spacing={2}>
+                      {datasetGroups.map((g, i) => (
+                        <DatasetResultCard
+                          key={g.dataset.uri}
+                          group={g}
+                          index={i}
+                          collapsedLines={Math.min(g.hits.length * 3 + 2, 20)}
+                        />
+                      ))}
+                    </Masonry>
+                  ) : (
+                    <Stack spacing={2}>
+                      {datasetGroups.map((g, i) => (
+                        <DatasetResultCard
+                          key={g.dataset.uri}
+                          group={g}
+                          index={i}
+                          collapsedLines={5}
+                        />
+                      ))}
+                    </Stack>
+                  )}
+                </>
               )}
+
+              {entityByType.size > 0 &&
+                ENTITY_TYPE_ORDER.filter((t) => entityByType.has(t)).map(
+                  (type) => {
+                    const groups = entityByType.get(type)!;
+                    const label = TYPE_SECTION_LABEL[type] ?? type;
+                    return (
+                      <Box
+                        key={type}
+                        sx={{ mt: datasetGroups.length > 0 ? 4 : 0 }}
+                      >
+                        {datasetGroups.length > 0 && <Divider sx={{ mb: 3 }} />}
+                        <Typography
+                          variant="subtitle2"
+                          color="text.secondary"
+                          sx={{ mb: 2 }}
+                        >
+                          {groups.length} {label.toLowerCase()} for "
+                          <strong>{q}</strong>"
+                        </Typography>
+                        <Stack spacing={1.5}>
+                          {groups.map((g) => (
+                            <EntityResultCard key={g.entity.id} hits={g.hits} />
+                          ))}
+                        </Stack>
+                      </Box>
+                    );
+                  },
+                )}
             </>
           )}
-
-          {entityByType.size > 0 &&
-            ENTITY_TYPE_ORDER.filter((t) => entityByType.has(t)).map((type) => {
-              const hits = entityByType.get(type)!;
-              const label = TYPE_SECTION_LABEL[type] ?? type;
-              return (
-                <Box key={type} sx={{ mt: datasetGroups.length > 0 ? 4 : 0 }}>
-                  {datasetGroups.length > 0 && <Divider sx={{ mb: 3 }} />}
-                  <Typography
-                    variant="subtitle2"
-                    color="text.secondary"
-                    sx={{ mb: 2 }}
-                  >
-                    {hits.length} {label.toLowerCase()} for "
-                    <strong>{q}</strong>"
-                  </Typography>
-                  <Stack spacing={1.5}>
-                    {hits.map((hit) => (
-                      <EntityResultCard key={hit.entity.id} hit={hit} />
-                    ))}
-                  </Stack>
-                </Box>
-              );
-            })}
         </>
       )}
 

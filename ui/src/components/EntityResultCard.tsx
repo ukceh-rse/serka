@@ -1,24 +1,18 @@
 import { Box, Card, CardContent, Link, Typography } from "@mui/material";
 import type { SearchHit } from "../stores/searchStore";
 import TypeChip from "./TypeChip";
+import RelationshipPanel from "./RelationshipPanel";
+import { TypeIcon, typeMeta } from "../typeMeta";
 
 interface Props {
-  hit: SearchHit;
+  hits: SearchHit[]; // all matches for one entity, sorted desc by score
 }
-
-const TYPE_COLOR: Record<string, "default" | "primary" | "secondary" | "success" | "info" | "warning" | "error"> = {
-  "foaf:Person": "info",
-  "foaf:Organization": "secondary",
-  "skos:Concept": "success",
-  "fabio:Expression": "warning",
-};
 
 const HIGHLIGHT_PROPS = ["orcid", "url", "notation", "scheme"];
 
-export default function EntityResultCard({ hit }: Props) {
-  const { entity } = hit;
+export default function EntityResultCard({ hits }: Props) {
+  const { entity } = hits[0];
   const typeUri = entity.type[0] ?? "";
-  const chipColor = TYPE_COLOR[typeUri] ?? "default";
 
   const extras = HIGHLIGHT_PROPS.flatMap((k) => {
     const v = entity.properties[k];
@@ -32,8 +26,17 @@ export default function EntityResultCard({ hit }: Props) {
           <Box sx={{ flex: 1 }}>
             <Typography
               component="h2"
-              sx={{ fontSize: "0.875rem", fontWeight: 600, lineHeight: 1.4, mb: 0.5 }}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 0.75,
+                fontSize: "0.875rem",
+                fontWeight: 600,
+                lineHeight: 1.4,
+                mb: extras.length > 0 ? 0.5 : 0,
+              }}
             >
+              <TypeIcon type={typeUri} />
               <Link
                 href={entity.id}
                 target="_blank"
@@ -54,8 +57,11 @@ export default function EntityResultCard({ hit }: Props) {
               </Typography>
             )}
           </Box>
-          <TypeChip type={typeUri} color={chipColor} />
+          <TypeChip type={typeUri} color={typeMeta(typeUri).color} />
         </Box>
+        {hits.map((hit, i) => (
+          <RelationshipPanel key={i} hit={hit} />
+        ))}
       </CardContent>
     </Card>
   );
