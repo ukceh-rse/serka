@@ -27,14 +27,21 @@ class Attribution(BaseModel):
 	role: str = Field(description="The role scoro/dcterms URI (e.g. 'scoro:AuthorshipRole').")
 
 
+class PathStep(BaseModel):
+	"""One hop on the path connecting a returned entity to the node bearing the matched text."""
+
+	predicate: str = Field(description="DOO/role URI of this hop (e.g. 'scoro:AuthorshipRole', 'dcat:theme').")
+	entity: Entity = Field(description="The entity reached by this hop.")
+
+
 class SearchHit(BaseModel):
 	"""A single search result with relevance score."""
 
-	entity: Entity = Field(description="The matched entity (of the requested return_type, or the matched node itself).")
+	entity: Entity = Field(description="The returned entity (of the requested return_type, or the matched node itself).")
 	score: float = Field(description="Relevance score.")
-	matched_on: str = Field(description="Field or relationship type that produced this match.")
+	matched_on: str = Field(description="Field or section bearing the matched text (e.g. 'description', 'lineage', 'metadata').")
 	excerpt: Optional[str] = Field(None, description="Matched text excerpt (populated for TextChunk matches).")
-	via: List[Entity] = Field(default_factory=list, description="Intermediate nodes connecting the matched node to the returned entity. Empty for direct matches.")
+	path: List[PathStep] = Field(default_factory=list, description="Ordered hops FROM the returned entity TO the node bearing the matched text. Empty when the entity itself matched.")
 
 
 class Dataset(BaseModel):

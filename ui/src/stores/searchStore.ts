@@ -7,19 +7,30 @@ export interface Entity {
   properties: Record<string, unknown>
 }
 
+/** One hop connecting the returned entity to the node bearing the matched text. */
+export interface PathStep {
+  /** DOO/role predicate URI (e.g. "scoro:AuthorshipRole", "dcat:theme"). */
+  predicate: string
+  entity: Entity
+}
+
 export interface SearchHit {
   entity: Entity
   score: number
   /** Field name for text matches ("description", "lineage", "SUPPORTING_DOC"), "metadata" for node-level matches. */
   matched_on: string
   excerpt: string | null
-  /** Intermediate nodes connecting the matched node to entity (e.g. Document between TextChunk and Dataset). */
-  via: Entity[]
+  /** Ordered hops FROM `entity` TO the node bearing the matched text. Empty when the entity itself matched. */
+  path: PathStep[]
 }
+
+/** Return-type filter values; mirror the FastAPI ReturnType enum (omit for "Any"). */
+export type ReturnType = 'Dataset' | 'Person' | 'Organisation'
 
 
 interface SearchState {
   query: string
+  returnType: ReturnType | null
   results: SearchHit[]
   loading: boolean
   error: string | null
@@ -31,6 +42,7 @@ interface SearchState {
   aiLoading: boolean
   recentSearches: string[]
   setQuery: (q: string) => void
+  setReturnType: (rt: ReturnType | null) => void
   setResults: (r: SearchHit[]) => void
   setLoading: (v: boolean) => void
   setError: (e: string | null) => void
@@ -47,6 +59,7 @@ interface SearchState {
 
 export const useSearchStore = create<SearchState>()((set) => ({
   query: '',
+  returnType: null,
   results: [],
   loading: false,
   error: null,
@@ -58,6 +71,7 @@ export const useSearchStore = create<SearchState>()((set) => ({
   aiLoading: false,
   recentSearches: JSON.parse(localStorage.getItem('serka_recent') ?? '[]') as string[],
   setQuery: (q) => set({ query: q }),
+  setReturnType: (rt) => set({ returnType: rt }),
   setResults: (r) => set({ results: r }),
   setLoading: (v) => set({ loading: v }),
   setError: (e) => set({ error: e }),
