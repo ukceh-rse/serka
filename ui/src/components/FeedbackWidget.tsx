@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, TextField, Tooltip, Typography } from '@mui/material'
+import { Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Tooltip, Typography } from '@mui/material'
 import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined'
 import ThumbDownOutlinedIcon from '@mui/icons-material/ThumbDownOutlined'
 import ThumbUpIcon from '@mui/icons-material/ThumbUp'
@@ -11,6 +11,15 @@ import { useAppStore } from '../stores/appStore'
 interface Props {
   context: Record<string, unknown>
   size?: 'small' | 'medium'
+}
+
+// Matches the small outlined chip language used for type/score/meta chips elsewhere in results.
+const CHIP_SX = {
+  fontSize: '0.65rem',
+  height: 20,
+  cursor: 'pointer',
+  '& .MuiChip-icon': { fontSize: '0.8rem', mx: 0.4 },
+  '& .MuiChip-label': { px: 0 },
 }
 
 export default function FeedbackWidget({ context, size = 'small' }: Props) {
@@ -38,19 +47,37 @@ export default function FeedbackWidget({ context, size = 'small' }: Props) {
     <>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         <Tooltip title="Helpful">
-          <IconButton size={size} onClick={() => handleVote('up')} sx={{ color: vote === 'up' ? '#90A968' : 'text.secondary' }}>
-            {vote === 'up' ? <ThumbUpIcon fontSize={size} /> : <ThumbUpOutlinedIcon fontSize={size} />}
-          </IconButton>
+          <Chip
+            icon={vote === 'up' ? <ThumbUpIcon /> : <ThumbUpOutlinedIcon />}
+            label=""
+            size={size}
+            variant="outlined"
+            clickable
+            onClick={() => handleVote('up')}
+            sx={{ ...CHIP_SX, '& .MuiChip-icon': { ...CHIP_SX['& .MuiChip-icon'], color: vote === 'up' ? '#90A968' : 'text.secondary' } }}
+          />
         </Tooltip>
         <Tooltip title="Not helpful">
-          <IconButton size={size} onClick={() => handleVote('down')} sx={{ color: vote === 'down' ? '#b07070' : 'text.secondary' }}>
-            {vote === 'down' ? <ThumbDownIcon fontSize={size} /> : <ThumbDownOutlinedIcon fontSize={size} />}
-          </IconButton>
+          <Chip
+            icon={vote === 'down' ? <ThumbDownIcon /> : <ThumbDownOutlinedIcon />}
+            label=""
+            size={size}
+            variant="outlined"
+            clickable
+            onClick={() => handleVote('down')}
+            sx={{ ...CHIP_SX, '& .MuiChip-icon': { ...CHIP_SX['& .MuiChip-icon'], color: vote === 'down' ? '#b07070' : 'text.secondary' } }}
+          />
         </Tooltip>
         <Tooltip title="Add comment">
-          <IconButton size={size} onClick={() => setCommentOpen(true)} sx={{ color: 'text.secondary' }}>
-            <CommentOutlinedIcon fontSize={size} />
-          </IconButton>
+          <Chip
+            icon={<CommentOutlinedIcon />}
+            label=""
+            size={size}
+            variant="outlined"
+            clickable
+            onClick={() => setCommentOpen(true)}
+            sx={{ ...CHIP_SX, '& .MuiChip-icon': { ...CHIP_SX['& .MuiChip-icon'], color: 'text.secondary' } }}
+          />
         </Tooltip>
       </Box>
 

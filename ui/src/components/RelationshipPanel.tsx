@@ -5,14 +5,9 @@ import type { SearchHit } from "../stores/searchStore";
 import { connectionLabel, curiePrefix, curieToUrl } from "../ontology";
 
 const CHIP_SX = { fontSize: "0.65rem", height: 20 };
-const PANEL_SX = {
-  bgcolor: "action.hover",
-  border: 1,
-  borderColor: "divider",
-  borderRadius: 1,
-  p: 1,
-  mt: 1,
-};
+// Plain (no background/border box). Only items after the first get a hairline divider above them.
+const FIRST_SX = { mt: 0.5 };
+const DIVIDER_SX = { pt: 1, mt: 1, borderTop: 1, borderColor: "divider" };
 
 // The relationship role (e.g. "Author"), prefixed with its ontology and linking to the term.
 function RoleChip({ predicate }: { predicate: string }) {
@@ -46,9 +41,12 @@ function RoleChip({ predicate }: { predicate: string }) {
 export default function RelationshipPanel({
   hit,
   fallbackTitle,
+  divider = false,
 }: {
   hit: SearchHit;
   fallbackTitle?: string;
+  /** Show the hairline divider above this panel — only for items after the first in a list. */
+  divider?: boolean;
 }) {
   const body = hit.excerpt != null ? `… ${hit.excerpt} …` : fallbackTitle;
   // Nothing to convey (a direct name/title match with no chain and no excerpt): render nothing.
@@ -68,33 +66,29 @@ export default function RelationshipPanel({
   ]);
 
   return (
-    <Box sx={PANEL_SX}>
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 0.5,
-          mb: body ? 0.5 : 0,
-        }}
-      >
-        {links.map((el, i) => (
-          <Fragment key={i}>
-            {i > 0 && (
-              <ChevronRightIcon
-                sx={{ fontSize: "0.85rem", color: "text.disabled" }}
-              />
-            )}
-            {el}
-          </Fragment>
-        ))}
-        <Chip
-          label={`score ${hit.score.toFixed(2)}`}
-          size="small"
-          variant="outlined"
-          sx={{ ...CHIP_SX, ml: "auto" }}
-        />
-      </Box>
+    <Box sx={divider ? DIVIDER_SX : FIRST_SX}>
+      {links.length > 0 && (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 0.5,
+            mb: body ? 0.5 : 0,
+          }}
+        >
+          {links.map((el, i) => (
+            <Fragment key={i}>
+              {i > 0 && (
+                <ChevronRightIcon
+                  sx={{ fontSize: "0.85rem", color: "text.disabled" }}
+                />
+              )}
+              {el}
+            </Fragment>
+          ))}
+        </Box>
+      )}
       {body && (
         <Typography
           variant="body2"

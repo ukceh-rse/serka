@@ -1,4 +1,4 @@
-import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
+import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import ApartmentIcon from "@mui/icons-material/Apartment";
 import LabelOutlinedIcon from "@mui/icons-material/LabelOutlined";
@@ -19,11 +19,12 @@ export type TypeColor =
 // chip on its right share the same colour so they read as a pair.
 const TYPE_META: Record<string, { Icon: SvgIconComponent; color: TypeColor }> =
   {
-    "dcat:Dataset": { Icon: LayersOutlinedIcon, color: "primary" },
+    "dcat:Dataset": { Icon: StorageOutlinedIcon, color: "primary" },
     "foaf:Person": { Icon: PersonOutlineIcon, color: "info" },
     "foaf:Organization": { Icon: ApartmentIcon, color: "secondary" },
     "skos:Concept": { Icon: LabelOutlinedIcon, color: "success" },
     "fabio:Expression": { Icon: ArticleOutlinedIcon, color: "warning" },
+    "fabio:DigitalManifestation": { Icon: ArticleOutlinedIcon, color: "warning" },
   };
 
 export const typeMeta = (type: string) =>
