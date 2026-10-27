@@ -32,9 +32,8 @@ from queries import (
 
 _DOO_TO_NEO4J: dict[str, str] = {v: k for k, v in NODE_TYPES.items()}
 
-# Strip prefixes from DOO URIs when looking up Neo4j label as fallback
-def _resolve_label(doo_uri: str) -> str:
-	return _DOO_TO_NEO4J.get(doo_uri, doo_uri.split(":")[-1].capitalize())
+def _resolve_label(doo_uri: str) -> Optional[str]:
+	return _DOO_TO_NEO4J.get(doo_uri)
 
 _REL_TYPE_TO_PREDICATE: dict[str, str] = {
 	"HAS_THEME": "dcat:theme",
@@ -236,7 +235,11 @@ def search(
 	try:
 		t0 = time.perf_counter()
 
-		target_label = _resolve_label(return_type) if return_type else None
+		target_label = None
+		if return_type:
+			target_label = _resolve_label(return_type)
+			if target_label is None:
+				return Error(msg=f"Unknown return_type '{return_type}'. See doo://context for valid types.")
 		max_hops = max(0, min(hops, 5))
 		embedding = embedder.run(query)["embedding"]
 		logger.info(f"  embed: {(time.perf_counter() - t0) * 1000:.0f}ms")
