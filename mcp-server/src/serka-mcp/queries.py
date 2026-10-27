@@ -103,10 +103,11 @@ def _filter_conditions(
 	bounding_box: Optional[BoundingBox],
 	published_after: Optional[str],
 	published_before: Optional[str],
+	min_citations: Optional[int],
 	params: dict,
 	node_alias: str = "target",
 ) -> List[str]:
-	"""Return a list of Cypher condition strings (no WHERE keyword) for bbox/date filters."""
+	"""Return a list of Cypher condition strings (no WHERE keyword) for bbox/date/citation filters."""
 	conditions: List[str] = []
 	if bounding_box:
 		bb = bounding_box.expand(20)
@@ -118,12 +119,22 @@ def _filter_conditions(
 			f"{node_alias}.west_boundary <= $east",
 		]
 		params.update({"south": bb.south, "north": bb.north, "west": bb.west, "east": bb.east})
+	# Date/citation filters only apply to datasets; they must not drop other entity types.
 	if published_after:
-		conditions.append(f"{node_alias}.publication_date >= $published_after")
+		conditions.append(
+			f"(NOT 'Dataset' IN labels({node_alias}) OR {node_alias}.publication_date >= $published_after)"
+		)
 		params["published_after"] = published_after
 	if published_before:
-		conditions.append(f"{node_alias}.publication_date <= $published_before")
+		conditions.append(
+			f"(NOT 'Dataset' IN labels({node_alias}) OR {node_alias}.publication_date <= $published_before)"
+		)
 		params["published_before"] = published_before
+	if min_citations is not None:
+		conditions.append(
+			f"(NOT 'Dataset' IN labels({node_alias}) OR {node_alias}.citations >= $min_citations)"
+		)
+		params["min_citations"] = min_citations
 	return conditions
 
 
@@ -175,11 +186,12 @@ def search_query(
 	bounding_box: Optional[BoundingBox] = None,
 	published_after: Optional[str] = None,
 	published_before: Optional[str] = None,
+	min_citations: Optional[int] = None,
 ):
 	params: dict = {"embedding": embedding, "limit": limit}
 	if target_label:
 		params["target_label"] = target_label
-	extra = _filter_conditions(bounding_box, published_after, published_before, params)
+	extra = _filter_conditions(bounding_box, published_after, published_before, min_citations, params)
 	index_call = (
 		"CALL db.index.vector.queryNodes('vec_lookup', $limit, $embedding) "
 		"YIELD node AS matched, score "
@@ -197,11 +209,12 @@ def fulltext_search_query(
 	bounding_box: Optional[BoundingBox] = None,
 	published_after: Optional[str] = None,
 	published_before: Optional[str] = None,
+	min_citations: Optional[int] = None,
 ):
 	params: dict = {"search_term": search_term, "limit": limit}
 	if target_label:
 		params["target_label"] = target_label
-	extra = _filter_conditions(bounding_box, published_after, published_before, params)
+	extra = _filter_conditions(bounding_box, published_after, published_before, min_citations, params)
 	index_call = (
 		"CALL db.index.fulltext.queryNodes('ft_search', $search_term, {limit: $limit}) "
 		"YIELD node AS matched, score "

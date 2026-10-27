@@ -210,6 +210,7 @@ def search(
 	] = None,
 	published_after: Annotated[Optional[str], "ISO date (YYYY-MM-DD) — exclude older datasets."] = None,
 	published_before: Annotated[Optional[str], "ISO date (YYYY-MM-DD) — exclude newer datasets."] = None,
+	min_citations: Annotated[Optional[int], "Exclude datasets with fewer than this many citations."] = None,
 	limit: Annotated[int, "Maximum number of results to return."] = 25,
 ) -> Union[List[SearchHit], Error]:
 	"""Hybrid vector + full-text search over the DOO knowledge graph.
@@ -225,6 +226,7 @@ def search(
 	    bounding_box: Geographic filter (use geocode_location to obtain one).
 	    published_after: Exclude datasets published before this date.
 	    published_before: Exclude datasets published after this date.
+	    min_citations: Exclude datasets with fewer than this many citations.
 	    limit: Max results (default 25).
 
 	Returns:
@@ -250,6 +252,7 @@ def search(
 				bounding_box=bounding_box,
 				published_after=published_after,
 				published_before=published_before,
+				min_citations=min_citations,
 			)
 			logger.info(f"  vector: {(time.perf_counter() - t1) * 1000:.0f}ms ({len(vector_nodes)} rows)")
 
@@ -264,6 +267,7 @@ def search(
 					bounding_box=bounding_box,
 					published_after=published_after,
 					published_before=published_before,
+					min_citations=min_citations,
 				)
 				logger.info(f"  fts: {(time.perf_counter() - t2) * 1000:.0f}ms ({len(ft_nodes)} rows)")
 			except Exception as fts_err:
