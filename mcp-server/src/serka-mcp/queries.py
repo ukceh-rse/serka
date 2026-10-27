@@ -170,7 +170,7 @@ def _build_search_cypher(index_call: str, max_hops: int, target_label: Optional[
 		+ "OPTIONAL MATCH (matched)-[]-(neighbour) "
 		"WHERE NOT 'TextChunk' IN labels(neighbour) "
 		"WITH matched, score, "
-		"CASE WHEN 'TextChunk' IN labels(matched) THEN neighbour ELSE matched END AS target "
+		"CASE WHEN 'TextChunk' IN labels(matched) AND neighbour IS NOT NULL THEN neighbour ELSE matched END AS target "
 		+ where
 		+ "WITH matched, score, target, [] AS via, [] AS rels "
 		+ _SEARCH_RETURN
