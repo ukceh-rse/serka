@@ -1,15 +1,18 @@
 import { create } from 'zustand'
 
+/** A JSON-LD entity from the MCP server: @id/@type plus DOO-mapped properties (title, name, temporal, ...). */
 export interface Entity {
-  id: string
-  type: string[]
-  label: string | null
-  properties: Record<string, unknown>
+  /** Absent for unanchored text matches. */
+  '@id'?: string
+  /** DOO class CURIEs, e.g. ["dcat:Dataset"]. */
+  '@type': string[]
+  label?: string | null
+  [property: string]: unknown
 }
 
 /** One hop connecting the returned entity to the node bearing the matched text. */
 export interface PathStep {
-  /** DOO/role predicate URI (e.g. "scoro:AuthorshipRole", "dcat:theme"). */
+  /** DOO predicate or role CURIE (e.g. "pro:author", "dcat:theme"). */
   predicate: string
   entity: Entity
 }
@@ -19,13 +22,21 @@ export interface SearchHit {
   score: number
   /** Field name for text matches ("description", "lineage", "SUPPORTING_DOC"), "metadata" for node-level matches. */
   matched_on: string
-  excerpt: string | null
+  excerpt?: string | null
   /** Ordered hops FROM `entity` TO the node bearing the matched text. Empty when the entity itself matched. */
   path: PathStep[]
 }
 
 /** Return-type filter values; mirror the FastAPI ReturnType enum (omit for "Any"). */
-export type ReturnType = 'Dataset' | 'Person' | 'Organisation' | 'Concept' | 'Document' | 'DigitalManifestation'
+export type ReturnType =
+  | 'Dataset'
+  | 'Person'
+  | 'Organisation'
+  | 'FundingAgency'
+  | 'Grant'
+  | 'Concept'
+  | 'Document'
+  | 'DigitalManifestation'
 
 
 interface SearchState {

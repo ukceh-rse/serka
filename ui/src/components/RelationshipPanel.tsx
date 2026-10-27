@@ -54,14 +54,14 @@ export default function RelationshipPanel({
   const links = hit.path.flatMap((step) => [
     <RoleChip key={`${step.predicate}-role`} predicate={step.predicate} />,
     <Link
-      key={`${step.entity.id}-entity`}
-      href={step.entity.id}
+      key={`${step.entity["@id"]}-entity`}
+      href={step.entity["@id"]}
       target="_blank"
       rel="noopener noreferrer"
       underline="hover"
       sx={{ fontSize: "0.72rem", color: "text.secondary" }}
     >
-      {step.entity.label ?? step.entity.id}
+      {step.entity.label ?? step.entity["@id"]}
     </Link>,
   ]);
 

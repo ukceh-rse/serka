@@ -99,13 +99,27 @@ _DATASETS: List[Dict[str, Any]] = [
 ]
 
 
-def _dataset_props(d: Dict[str, Any]) -> Dict[str, Any]:
-	return {k: v for k, v in d.items() if k not in ("uri", "excerpt", "matched_on", "score")}
+def _dataset_entity(d: Dict[str, Any]) -> Dict[str, Any]:
+	"""The JSON-LD dataset entity the MCP server returns (mcp-server/src/serka-mcp/entities.py)."""
+	w, s, e, n = d["west_boundary"], d["south_boundary"], d["east_boundary"], d["north_boundary"]
+	return {
+		"@id": d["uri"],
+		"@type": ["dcat:Dataset"],
+		"label": d["title"],
+		"title": d["title"],
+		"publication_date": d["publication_date"],
+		"identifiers": d["identifiers"],
+		"access_rights": d["access_rights"],
+		"licence": d["licence"],
+		"temporal": {"@type": "dcterms:PeriodOfTime", "start_date": d["temporal_start"], "end_date": d["temporal_end"]},
+		"bbox": f"POLYGON(({w} {s}, {e} {s}, {e} {n}, {w} {n}, {w} {s}))",
+		"citations": d["citations"],
+	}
 
 
 def _dataset_hit(d: Dict[str, Any]) -> Dict[str, Any]:
 	return {
-		"entity": {"id": d["uri"], "type": ["dcat:Dataset"], "label": d["title"], "properties": _dataset_props(d)},
+		"entity": _dataset_entity(d),
 		"score": d["score"],
 		"matched_on": d["matched_on"],
 		"excerpt": d["excerpt"],
@@ -116,7 +130,7 @@ def _dataset_hit(d: Dict[str, Any]) -> Dict[str, Any]:
 def _via(d: Dict[str, Any], predicate: str) -> Dict[str, Any]:
 	return {
 		"predicate": predicate,
-		"entity": {"id": d["uri"], "type": ["dcat:Dataset"], "label": d["title"], "properties": _dataset_props(d)},
+		"entity": _dataset_entity(d),
 	}
 
 
@@ -125,7 +139,7 @@ def _related_hit(
 	predicate: str, via_dataset: Dict[str, Any], score: float,
 ) -> Dict[str, Any]:
 	return {
-		"entity": {"id": entity_id, "type": [type_uri], "label": label, "properties": properties},
+		"entity": {"@id": entity_id, "@type": [type_uri], "label": label, **properties},
 		"score": score,
 		"matched_on": "metadata",
 		"excerpt": None,
@@ -136,47 +150,47 @@ def _related_hit(
 _MOCK_HITS: List[Dict[str, Any]] = [_dataset_hit(d) for d in _DATASETS] + [
 	_related_hit(
 		"https://orcid.org/0000-0002-1111-2222", "foaf:Person", "Dr. Alice Whitfield",
-		{"orcid": "0000-0002-1111-2222"}, "scoro:AuthorshipRole", _DATASETS[0], 0.71,
+		{"name": "Dr. Alice Whitfield"}, "pro:author", _DATASETS[0], 0.71,
 	),
 	_related_hit(
 		"https://orcid.org/0000-0003-3333-4444", "foaf:Person", "Dr. Raj Osei",
-		{"orcid": "0000-0003-3333-4444"}, "scoro:InvestigationRole", _DATASETS[1], 0.68,
+		{"name": "Dr. Raj Osei"}, "scoro:principal-investigator", _DATASETS[1], 0.68,
 	),
 	_related_hit(
 		"https://orcid.org/0000-0001-5555-6666", "foaf:Person", "Dr. Emily Carrow",
-		{"orcid": "0000-0001-5555-6666"}, "scoro:AuthorshipRole", _DATASETS[6], 0.64,
+		{"name": "Dr. Emily Carrow"}, "pro:author", _DATASETS[6], 0.64,
 	),
 	_related_hit(
 		"https://ror.org/006jxzx88", "foaf:Organization", "UK Centre for Ecology & Hydrology",
-		{"name": "UK Centre for Ecology & Hydrology"}, "dcterms:publisher", _DATASETS[0], 0.66,
+		{"name": "UK Centre for Ecology & Hydrology"}, "pro:publisher", _DATASETS[0], 0.66,
 	),
 	_related_hit(
 		"https://ror.org/02b5d8509", "foaf:Organization", "Environment Agency",
-		{"name": "Environment Agency"}, "scoro:DataRole", _DATASETS[3], 0.61,
+		{"name": "Environment Agency"}, "scoro:data-curator", _DATASETS[3], 0.61,
 	),
 	_related_hit(
 		"https://vocabs.ceh.ac.uk/concept/biodiversity", "skos:Concept", "Biodiversity",
-		{"label": "Biodiversity", "scheme": "https://vocabs.ceh.ac.uk/scheme/eidc"}, "dcat:theme", _DATASETS[2], 0.59,
+		{"scheme": "https://vocabs.ceh.ac.uk/scheme/eidc"}, "dcat:theme", _DATASETS[2], 0.59,
 	),
 	_related_hit(
 		"https://vocabs.ceh.ac.uk/concept/freshwater-ecology", "skos:Concept", "Freshwater ecology",
-		{"label": "Freshwater ecology", "scheme": "https://vocabs.ceh.ac.uk/scheme/eidc"}, "dcat:theme", _DATASETS[1], 0.57,
+		{"scheme": "https://vocabs.ceh.ac.uk/scheme/eidc"}, "dcat:theme", _DATASETS[1], 0.57,
 	),
 	_related_hit(
 		"https://vocabs.ceh.ac.uk/concept/climate-change", "skos:Concept", "Climate change",
-		{"label": "Climate change", "scheme": "https://vocabs.ceh.ac.uk/scheme/eidc"}, "dcat:theme", _DATASETS[4], 0.55,
+		{"scheme": "https://vocabs.ceh.ac.uk/scheme/eidc"}, "dcat:theme", _DATASETS[4], 0.55,
 	),
 	_related_hit(
 		"https://catalogue.ceh.ac.uk/documents/soil-carbon-upland-1978-2019/supporting-doc",
 		"fabio:DigitalManifestation", "Soil sampling and analysis protocol (supporting document)",
 		{"title": "Soil sampling and analysis protocol", "format": "application/pdf"},
-		"dcterms:relation", _DATASETS[0], 0.53,
+		"dcterms:references", _DATASETS[0], 0.53,
 	),
 	_related_hit(
 		"https://catalogue.ceh.ac.uk/documents/ukbms-transects-2000-2023/supporting-doc",
 		"fabio:DigitalManifestation", "UKBMS transect walk methodology (supporting document)",
 		{"title": "UKBMS transect walk methodology", "format": "application/pdf"},
-		"dcterms:relation", _DATASETS[2], 0.51,
+		"dcterms:references", _DATASETS[2], 0.51,
 	),
 ]
 
@@ -204,7 +218,7 @@ def _matches_return_type(hit: Dict[str, Any], return_type: Optional[str]) -> boo
 	if not return_type:
 		return True
 	target = NODE_TYPES.get(str(return_type), str(return_type))
-	return target in hit["entity"]["type"]
+	return target in hit["entity"]["@type"]
 
 
 async def get_mock_mcp_search():

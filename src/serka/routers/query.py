@@ -12,6 +12,8 @@ class ReturnType(StrEnum):
 	Dataset = "Dataset"
 	Person = "Person"
 	Organisation = "Organisation"
+	FundingAgency = "FundingAgency"
+	Grant = "Grant"
 	Concept = "Concept"
 	Document = "Document"
 	DigitalManifestation = "DigitalManifestation"

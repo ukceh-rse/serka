@@ -4,6 +4,7 @@ import ApartmentIcon from "@mui/icons-material/Apartment";
 import LabelOutlinedIcon from "@mui/icons-material/LabelOutlined";
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
 import type { SvgIconComponent } from "@mui/icons-material";
 
 export type TypeColor =
@@ -22,6 +23,8 @@ const TYPE_META: Record<string, { Icon: SvgIconComponent; color: TypeColor }> =
     "dcat:Dataset": { Icon: StorageOutlinedIcon, color: "primary" },
     "foaf:Person": { Icon: PersonOutlineIcon, color: "info" },
     "foaf:Organization": { Icon: ApartmentIcon, color: "secondary" },
+    "frapo:FundingAgency": { Icon: ApartmentIcon, color: "secondary" },
+    "frapo:Grant": { Icon: PaidOutlinedIcon, color: "error" },
     "skos:Concept": { Icon: LabelOutlinedIcon, color: "success" },
     "fabio:Expression": { Icon: ArticleOutlinedIcon, color: "warning" },
     "fabio:DigitalManifestation": { Icon: ArticleOutlinedIcon, color: "warning" },

@@ -1,18 +1,7 @@
-// Mirrors the DOO JSON-LD context (mcp-server/src/serka-mcp/ontology.py).
-const PREFIX_NS: Record<string, string> = {
-  dcat: "https://www.w3.org/ns/dcat#",
-  dcterms: "http://purl.org/dc/terms/",
-  doo: "https://digital.ceh.ac.uk/ontology/doo/",
-  fabio: "http://purl.org/spar/fabio/",
-  foaf: "http://xmlns.com/foaf/0.1/",
-  frapo: "http://purl.org/cerif/frapo/",
-  geo: "http://www.opengis.net/ont/geosparql#",
-  org: "http://www.w3.org/ns/org#",
-  pro: "http://purl.org/spar/pro/",
-  prov: "http://www.w3.org/ns/prov#",
-  scoro: "http://purl.org/spar/scoro/",
-  skos: "http://www.w3.org/2004/02/skos/core#",
-};
+import mapping from "./doo_mapping.json";
+
+// Copy of mcp-server/src/serka-mcp/doo_mapping.json (scripts/sync-doo-mapping.py).
+const PREFIX_NS: Record<string, string> = mapping.prefixes;
 
 /** Resolve a CURIE (e.g. "dcat:Dataset") to its full ontology term URL, or null. */
 export function curieToUrl(curie: string): string | null {
@@ -30,15 +19,14 @@ export function curiePrefix(curie: string): string | null {
 
 // Friendly overrides for the role/predicate URIs on a SearchHit path step.
 const CONNECTION_LABELS: Record<string, string> = {
-  "scoro:AuthorshipRole": "Author",
-  "dcterms:creator": "Author",
-  "dcterms:publisher": "Publisher",
-  "scoro:DataRole": "Custodian",
-  "scoro:InvestigationRole": "Investigator",
-  "pro:RoleInTime": "Contact",
-  "dcterms:rightsHolder": "Rights holder",
+  "pro:author": "Author",
+  "scoro:data-curator": "Custodian",
+  "scoro:contact-person": "Contact",
   "org:memberOf": "Affiliation",
   "dcat:theme": "Theme",
+  "skos:broader": "Broader concept",
+  "doo:originatingGrant": "Funded by grant",
+  "frapo:awards": "Awarded",
 };
 
 /** Human-readable label for any connection predicate/role URI. Falls back to humanising the CURIE. */

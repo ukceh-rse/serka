@@ -77,19 +77,25 @@ type MetaItem = {
   href?: string;
 };
 
+// "POLYGON((W S, E S, E N, W N, W S))" (dcat:bbox WKT) -> "N .., S .., E .., W .."
+function wktBbox(wkt: unknown): string | null {
+  const nums = typeof wkt === "string" ? wkt.match(/-?\d+(\.\d+)?/g)?.map(Number) : undefined;
+  if (!nums || nums.length < 6) return null;
+  const [w, s, e, , , n] = nums;
+  return `N ${n}, S ${s}, E ${e}, W ${w}`;
+}
+
 function metaItems(p: Record<string, unknown>): MetaItem[] {
   const published = formatDate(p.publication_date);
-  const start = str(p.temporal_start);
-  const end = str(p.temporal_end);
+  const temporal = (p.temporal ?? {}) as { start_date?: unknown; end_date?: unknown };
+  const start = str(temporal.start_date);
+  const end = str(temporal.end_date);
   const coverage = start && end ? `${start} to ${end}` : (start ?? end);
   const citations = Number(p.citations);
   const access = str(p.access_rights);
   const licence = str(p.licence);
   const doi = pickDoi(p.identifiers);
-  const bbox =
-    p.north_boundary != null
-      ? `N ${p.north_boundary}, S ${p.south_boundary}, E ${p.east_boundary}, W ${p.west_boundary}`
-      : null;
+  const bbox = wktBbox(p.bbox);
 
   return [
     published && {

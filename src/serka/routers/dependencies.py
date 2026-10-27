@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from fastapi import Depends, HTTPException
 from fastmcp import Client
+from fastmcp.exceptions import ToolError
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -49,12 +50,17 @@ async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable
 			args["published_before"] = published_before
 		async with Client(mcp_url) as client:
 			if location:
-				geo = json.loads((await client.call_tool("geocode_location", {"location": location})).content[0].text)
-				if "boundary" not in geo:
-					raise HTTPException(status_code=422, detail=geo.get("msg", f"Could not geocode location '{location}'"))
-				args["bounding_box"] = geo["boundary"]
-			result = await client.call_tool("search", args)
-		return json.loads(result.content[0].text) if result.content else []
+				try:
+					geo = await client.call_tool("geocode_location", {"location": location})
+				except ToolError as e:
+					raise HTTPException(status_code=422, detail=str(e)) from e
+				args["bounding_box"] = geo.structured_content["boundary"]
+			try:
+				result = await client.call_tool("search", args)
+			except ToolError as e:
+				raise HTTPException(status_code=422, detail=str(e)) from e
+		# The search result is a JSON-LD document; the UI consumes the hits in its @graph.
+		return result.structured_content["@graph"]
 
 	_mcp_search_fn = _search
 	return _mcp_search_fn
