@@ -90,6 +90,9 @@ def get_content_query(tx, uri: str) -> list[str]:
 	results = tx.run(
 		"MATCH (t:TextChunk)-[r]->(n {uri: $uri}) "
 		"WHERE type(r) IN ['PART_OF', 'DESCRIPTION_OF', 'LINEAGE_OF', 'SUPPORTING_DOC_OF'] "
+		"RETURN t.content AS content "
+		"UNION "
+		"MATCH (d:Dataset {uri: $uri})-[:RELATION]->(doc:DigitalManifestation)<-[:PART_OF]-(t:TextChunk) "
 		"RETURN t.content AS content",
 		uri=uri,
 	).data()
