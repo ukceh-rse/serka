@@ -37,6 +37,7 @@ dev = [
     "commitizen>=4.13.9",
     "ipykernel>=6.29.5",
     "ipython>=8.31.0",
+    "locust>=2.47.0",
     "mypy>=1.14.1",
     "pre-commit>=4.0.1",
     "pyld>=3.3.0",

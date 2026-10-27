@@ -49,6 +49,19 @@ To ingest specific datasets instead, pass a file of EIDC IDs (one per line): `uv
 
 Add `--keep-running` to leave Neo4j, the MCP server and the API up after the checks so you can sanity-check things by hand. The script prints the endpoints and the command to start the UI against them. Press Ctrl+C to tear everything down.
 
+## Stress Test
+
+`tests/stress/locustfile.py` is a [Locust](https://locust.io) load test that mixes semantic searches with streamed chat questions. Alongside Locust's usual throughput and response time stats, it reports chat time to first token as its own stats row. It also prints tokens per second (per request and aggregate) at the end; tokens are estimated as characters / 4.
+
+```
+# Locally, without Bedrock/Neo4j costs: start the API in mock mode
+TEST_MODE=true uv run fastapi run src/serka/main.py --port 9000
+uv run locust -f tests/stress/locustfile.py --host http://localhost:9000 \
+	--headless -u 50 -r 5 -t 2m --csv stress --metrics-json stress_chat.json
+```
+
+To test the AWS deployment, set `--host` to the ALB address (the UI proxies `/v1` to the API). Leave out `--headless` to use the web UI at http://localhost:8089. Use `--tags chat` or `--tags search` to load one endpoint only. Every chat against a real deployment is a Bedrock call, so ramp up gradually.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, commit guidelines, and release process.
