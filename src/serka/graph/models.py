@@ -28,10 +28,19 @@ class Concept(StructuredNode):
 
 
 class Document(StructuredNode):
+	"""A citable published work (e.g. an external paper citing a Dataset) — fabio:Expression."""
+
+	uri = StringProperty(unique_index=True, required=True)
+	bibliographic_citation = StringProperty()
+
+
+class DigitalManifestation(StructuredNode):
+	"""An arbitrary uploaded file with no bibliographic identity (e.g. a supporting-doc
+	PDF) — fabio:DigitalManifestation, the FRBR embodiment level, not fabio:Expression."""
+
 	uri = StringProperty(unique_index=True, required=True)
 	title = StringProperty()
 	format = StringProperty()
-	bibliographic_citation = StringProperty()
 
 
 class Person(StructuredNode):

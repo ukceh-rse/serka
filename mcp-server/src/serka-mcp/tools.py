@@ -428,13 +428,14 @@ def get_content(
 ) -> Union[str, Error]:
 	"""Retrieve the full text content associated with a Document or Dataset URI.
 
-	Supporting documents (fabio:Expression) and description/lineage text chunks are
-	stored separately from the main entity to keep search results lightweight.
+	Supporting documents (fabio:DigitalManifestation) and description/lineage text
+	chunks are stored separately from the main entity to keep search results lightweight.
 	Call this after identifying a relevant entity via search or get_relations.
 
 	Args:
-	    uri: The entity URI (@id) — typically a Document (dcterms:references target)
-	         or a Dataset (to get its description/lineage text).
+	    uri: The entity URI (@id) — typically a DigitalManifestation
+	         (dcterms:references target) or a Dataset (to get its description/lineage
+	         text).
 
 	Returns:
 	    Concatenated text content, or Error if not found.

@@ -21,6 +21,7 @@ NODE_TYPES: dict[str, str] = {
 	"Organisation": "foaf:Organization",
 	"Concept": "skos:Concept",
 	"Document": "fabio:Expression",
+	"DigitalManifestation": "fabio:DigitalManifestation",
 }
 
 PROPERTY_TERMS: dict[str, str] = {

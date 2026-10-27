@@ -162,12 +162,13 @@ class Neo4jGraphWriter:
 		supporting_docs = [d for d in docs_as_dicts if d["field"] == "SUPPORTING_DOC"]
 		field_docs = [d for d in docs_as_dicts if d["field"] != "SUPPORTING_DOC"]
 
-		# Document nodes from supporting file metadata (synthetic URIs)
-		supp_doc_nodes = [n for d in supporting_docs if (n := self._supporting_doc_node(d))]
-		# Citation Document nodes come through nodes["Document"] from extractors
-		all_doc_nodes = list(
-			{n["uri"]: n for n in supp_doc_nodes + nodes.get("Document", [])}.values()
+		# Supporting files have no bibliographic identity — DigitalManifestation (FRBR
+		# embodiment level), not Document/fabio:Expression which is for citable works.
+		manifestation_nodes = list(
+			{n["uri"]: n for d in supporting_docs if (n := self._supporting_doc_node(d))}.values()
 		)
+		# Citation Document nodes come through nodes["Document"] from extractors
+		doc_nodes = list({n["uri"]: n for n in nodes.get("Document", [])}.values())
 
 		with self._driver.session(database="neo4j") as session:
 			# Phase 1: create lookup indexes before MERGE (idempotent)
@@ -177,7 +178,7 @@ class Neo4jGraphWriter:
 			node_result: Dict[str, int] = {}
 			for node_type, node_list in nodes.items():
 				if node_type == "Document":
-					continue  # handled below with supp_doc_nodes merged in
+					continue  # handled below as doc_nodes
 				unique = list({n["uri"]: n for n in node_list}.values())
 				node_result[node_type] = sum(
 					session.execute_write(Neo4jGraphWriter._write_nodes, node_type, batch)
@@ -186,8 +187,13 @@ class Neo4jGraphWriter:
 
 			node_result["Document"] = sum(
 				session.execute_write(Neo4jGraphWriter._write_nodes, "Document", batch)
-				for batch in _batched(all_doc_nodes, _BATCH_SIZE)
-			) if all_doc_nodes else 0
+				for batch in _batched(doc_nodes, _BATCH_SIZE)
+			) if doc_nodes else 0
+
+			node_result["DigitalManifestation"] = sum(
+				session.execute_write(Neo4jGraphWriter._write_nodes, "DigitalManifestation", batch)
+				for batch in _batched(manifestation_nodes, _BATCH_SIZE)
+			) if manifestation_nodes else 0
 
 			# TextChunk nodes (field docs + supporting docs)
 			all_chunks = list({d["id"]: d for d in field_docs + supporting_docs}.values())
