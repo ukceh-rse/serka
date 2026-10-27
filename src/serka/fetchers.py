@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 import requests_cache
 from tqdm import tqdm
@@ -58,14 +58,16 @@ class EIDCFetcher:
 		rows: int = 10000,
 		page: int = 1,
 		term: str = "state:published AND recordType:Dataset",
+		ids: Optional[List[str]] = None,
 		**kwargs,
 	) -> List[Dict[Any, Any]]:
-		res = _session.get(
-			self.url,
-			params={"rows": rows, "page": page, "term": term, **kwargs},
-		)
-		eidc_data = res.json()
-		ids = [record["identifier"] for record in eidc_data["results"]]
+		if ids is None:
+			res = _session.get(
+				self.url,
+				params={"rows": rows, "page": page, "term": term, **kwargs},
+			)
+			eidc_data = res.json()
+			ids = [record["identifier"] for record in eidc_data["results"]]
 		data = self.get_eidc_json(ids)
 		return {"data": data}
 
