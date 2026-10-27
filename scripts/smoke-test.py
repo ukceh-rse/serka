@@ -10,6 +10,7 @@ Legilo credentials. Your normal Neo4j data is not touched.
 	uv run scripts/smoke-test.py
 """
 
+import asyncio
 import json
 import os
 import shutil
@@ -21,6 +22,7 @@ import time
 from pathlib import Path
 
 import httpx
+from fastmcp import Client
 from neo4j import GraphDatabase
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -32,6 +34,18 @@ NEO4J_PORT = 17687
 MCP_PORT = 8000  # hard-coded in mcp-server/src/serka-mcp/main.py
 API_PORT = 19000
 API = f"http://localhost:{API_PORT}"
+MCP = f"http://localhost:{MCP_PORT}/mcp"
+
+# API return_type value -> DOO @type it should yield
+RETURN_TYPES = {
+	"Dataset": "dcat:Dataset",
+	"Person": "foaf:Person",
+	"Organisation": "foaf:Organization",
+	"Concept": "skos:Concept",
+	"Document": "fabio:Expression",
+	"DigitalManifestation": "fabio:DigitalManifestation",
+}
+ORPHAN_TOKEN = "smokeorphanquokka"
 
 # (query, substring expected in the title of one of the top 3 datasets)
 SEARCH_CASES = [
@@ -90,10 +104,29 @@ def start_neo4j(runtime: str) -> None:
 	wait_for(ready, "Neo4j", timeout=180)
 
 
-def search(q: str) -> list:
-	r = httpx.get(f"{API}/v1/query/semantic", params={"q": q, "return_type": "Dataset"}, timeout=120)
+def search(q: str, **params) -> list:
+	r = search_raw(q, **{"return_type": "Dataset", **params})
 	r.raise_for_status()
 	return r.json()
+
+
+def search_raw(q: str, **params) -> httpx.Response:
+	return httpx.get(f"{API}/v1/query/semantic", params={"q": q, **params}, timeout=120)
+
+
+def mcp_call(tool: str, args: dict):
+	async def _call():
+		async with Client(MCP) as client:
+			result = await client.call_tool(tool, args, raise_on_error=False)
+		if not result.content:  # an empty list result comes back with no content
+			return []
+		text = result.content[0].text
+		try:
+			return json.loads(text)
+		except json.JSONDecodeError:
+			return text
+
+	return asyncio.run(_call())
 
 
 def chat(message: str) -> str:
@@ -139,11 +172,89 @@ def run_tests() -> list[str]:
 			f"top 3: {titles}",
 		)
 
+	run_doo_tests(check)
+
 	answer = chat(CHAT_QUESTION)
 	log(f"chat answer: {answer.strip()}")
 	check("chat answers pike question", all(w in answer.lower() for w in CHAT_EXPECTED), answer)
 
 	return failures
+
+
+def run_doo_tests(check) -> None:
+	"""Checks for the DOO search/ingestion behaviour (see CODE_REVIEW_TODO.md)."""
+	with GraphDatabase.driver(f"bolt://localhost:{NEO4J_PORT}", auth=("neo4j", NEO4J_PASSWORD)) as d:
+		# Supporting files are keyed on their source file id, not their (possibly shared) filename.
+		records, _, _ = d.execute_query(
+			"MATCH (ds:Dataset)-[:RELATION]->(m:DigitalManifestation) "
+			"WHERE m.uri = ds.uri + '#' + m.title RETURN count(m) AS n"
+		)
+		check("supporting doc URIs not keyed on filename", records[0]["n"] == 0, f"{records[0]['n']} keyed on filename")
+		records, _, _ = d.execute_query(
+			"MATCH (ds:Dataset)-[:RELATION]->(:DigitalManifestation)<-[:PART_OF]-(t:TextChunk) "
+			"RETURN ds.uri AS uri, t.content AS content LIMIT 1"
+		)
+		supp = records[0] if records else None
+		# An orphan chunk (no non-TextChunk neighbour) should still be returned as a hit.
+		d.execute_query(
+			"MERGE (t:TextChunk:embedded {doc_id: 'smoke-orphan'}) SET t.content = $c, t.field = 'text'",
+			c=f"{ORPHAN_TOKEN} orphan chunk with no parent entity",
+		)
+
+	# return_type: every API value works and yields entities of the matching DOO type
+	for rt, doo_type in RETURN_TYPES.items():
+		r = search_raw("pike in Windermere", return_type=rt)
+		hits = r.json() if r.status_code == 200 else []
+		check(
+			f"return_type={rt} yields only {doo_type}",
+			r.status_code == 200 and all(doo_type in h["entity"]["type"] for h in hits),
+			f"status {r.status_code}: {r.text[:200]}",
+		)
+
+	# Date filters constrain datasets without dropping other entity types
+	hits = search("pike in Windermere", return_type="Person", published_after="1900-01-01")
+	check("date filter keeps Person results", len(hits) > 0, "no people returned")
+	hits = search("pike in Windermere", published_after="2100-01-01")
+	check("date filter excludes datasets", hits == [], f"{len(hits)} datasets returned")
+
+	# Location filter: unknown places are reported, not silently ignored
+	r = search_raw("pike", return_type="Dataset", location="Xyzzyqwv Nowhereshire")
+	check("unknown location returns 422", r.status_code == 422, f"status {r.status_code}")
+	r = search_raw("pike", return_type="Dataset", location="Windermere")
+	check("known location filters search", r.status_code == 200 and len(r.json()) > 0, f"status {r.status_code}: {r.text[:200]}")
+
+	# Contributor roles always map to a prefixed DOO role term
+	hits = search("pike in Windermere", return_type="Person")
+	preds = [step["predicate"] for h in hits for step in h.get("path", [])]
+	check("contributor roles are DOO terms", all(":" in p for p in preds), f"predicates: {preds}")
+
+	res = mcp_call("search", {"query": "pike", "return_type": "foaf:Persn"})
+	check("unknown return_type is an error", isinstance(res, dict) and "Unknown return_type" in res.get("msg", ""), str(res))
+
+	res = mcp_call("search", {"query": "data", "limit": 3})
+	check("search respects limit", isinstance(res, list) and 0 < len(res) <= 3, f"{len(res)} hits")
+
+	res = mcp_call("search", {"query": ORPHAN_TOKEN})
+	check(
+		"orphan TextChunk returned as hit",
+		isinstance(res, list) and any(ORPHAN_TOKEN in (h.get("excerpt") or "") for h in res),
+		str(res)[:200],
+	)
+
+	res = mcp_call("search", {"query": "data", "return_type": "dcat:Dataset", "min_citations": 10**6})
+	check("min_citations excludes datasets", res == [], str(res)[:200])
+	res = mcp_call("search", {"query": "data", "return_type": "dcat:Dataset", "min_citations": 1})
+	check(
+		"min_citations keeps cited datasets",
+		isinstance(res, list) and all((h["entity"]["properties"].get("citations") or 0) >= 1 for h in res),
+		str(res)[:200],
+	)
+
+	if supp is None:
+		check("get_content includes supporting docs", False, "no supporting doc chunks in graph")
+	else:
+		content = mcp_call("get_content", {"uri": supp["uri"]})
+		check("get_content includes supporting docs", supp["content"] in str(content), str(content)[:200])
 
 
 def main() -> int:
