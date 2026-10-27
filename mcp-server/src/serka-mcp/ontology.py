@@ -1,61 +1,56 @@
+"""DOO mapping, loaded from doo_mapping.json (the single source of truth; copies under
+src/serka/ and ui/src/ are kept identical by scripts/sync-doo-mapping.py)."""
+
+import json
+from pathlib import Path
 from typing import Any
 
-JSONLD_CONTEXT: dict[str, str] = {
-	"dcat": "https://www.w3.org/ns/dcat#",
-	"dcterms": "http://purl.org/dc/terms/",
-	"doo": "https://digital.ceh.ac.uk/ontology/doo/",
-	"fabio": "http://purl.org/spar/fabio/",
-	"foaf": "http://xmlns.com/foaf/0.1/",
-	"frapo": "http://purl.org/cerif/frapo/",
-	"geo": "http://www.opengis.net/ont/geosparql#",
-	"org": "http://www.w3.org/ns/org#",
-	"pro": "http://purl.org/spar/pro/",
-	"prov": "http://www.w3.org/ns/prov#",
-	"scoro": "http://purl.org/spar/scoro/",
-	"skos": "http://www.w3.org/2004/02/skos/core#",
-}
+MAPPING: dict[str, Any] = json.loads((Path(__file__).parent / "doo_mapping.json").read_text())
 
-NODE_TYPES: dict[str, str] = {
-	"Dataset": "dcat:Dataset",
-	"Person": "foaf:Person",
-	"Organisation": "foaf:Organization",
-	"Concept": "skos:Concept",
-	"Document": "fabio:Expression",
-	"DigitalManifestation": "fabio:DigitalManifestation",
-}
+PREFIXES: dict[str, str] = MAPPING["prefixes"]
+NODE_TYPES: dict[str, str] = MAPPING["node_types"]
+RELATION_TYPES: dict[str, str] = MAPPING["relation_types"]
+ROLES: dict[str, str] = MAPPING["roles"]
+ROLE_CLASSES: dict[str, str] = MAPPING["role_classes"]
+DEFINITIONS: dict[str, str] = MAPPING["definitions"]
+DEFAULT_ROLE: str = MAPPING["default_role"]
+DEFAULT_PREDICATE: str = MAPPING["default_predicate"]
+PREDICATES: list[str] = MAPPING["predicates"]
 
-PROPERTY_TERMS: dict[str, str] = {
-	"title": "dcterms:title",
-	"description": "dcterms:description",
-	"lineage": "dcterms:provenance",
-	"publication_date": "dcterms:issued",
-	"identifiers": "dcterms:identifier",
-	"licence": "dcterms:license",
-	"resource_type": "dcterms:type",
-	"temporal_start": "dcterms:temporal",
-	"temporal_end": "dcterms:temporal",
-	"access_rights": "dcterms:accessRights",
-	"citations": "dcterms:relation",
-	"south_boundary": "geo:hasBoundingBox",
-	"north_boundary": "geo:hasBoundingBox",
-	"west_boundary": "geo:hasBoundingBox",
-	"east_boundary": "geo:hasBoundingBox",
-	"name": "foaf:name",
-	"label": "skos:prefLabel",
-	"scheme": "skos:inScheme",
-	"format": "dcterms:format",
-	"bibliographic_citation": "dcterms:bibliographicCitation",
-}
+JSONLD_CONTEXT: dict[str, Any] = {**PREFIXES, **MAPPING["terms"]}
 
-ROLE_TERMS: dict[str, str] = {
-	"author": "scoro:AuthorshipRole",
-	"coAuthor": "scoro:AuthorshipRole",
-	"custodian": "scoro:DataRole",
-	"distributor": "scoro:DataRole",
-	"distributorContact": "scoro:DataRole",
-	"originator": "scoro:AuthorshipRole",
-	"pointOfContact": "pro:RoleInTime",
-	"principalInvestigator": "scoro:InvestigationRole",
-	"publisher": "dcterms:publisher",
-	"rightsHolder": "dcterms:rightsHolder",
-}
+
+def compact_iri(iri: str) -> str:
+	"""Compact a full IRI to a CURIE using the known prefixes (e.g. dcterms:isPartOf)."""
+	for prefix, ns in PREFIXES.items():
+		if iri.startswith(ns) and len(iri) > len(ns):
+			return f"{prefix}:{iri[len(ns):]}"
+	return iri
+
+
+def role_individual(eidc_role: str | None) -> str:
+	return ROLES.get(eidc_role or "", DEFAULT_ROLE)
+
+
+def role_class(individual: str) -> str:
+	return ROLE_CLASSES.get(individual, "pro:Role")
+
+
+def _glossary(curies: list[str]) -> str:
+	return "\n".join(f"  {c}: {DEFINITIONS[c]}" for c in curies if c in DEFINITIONS)
+
+
+INSTRUCTIONS: str = f"""Serka searches the EIDC environmental data catalogue as a knowledge graph typed with the
+Digital Objects Ontology (DOO {MAPPING["doo_version"]}). Results are JSON-LD: every entity has an @id (URI) and
+@type (DOO class CURIE); keys are mapped to ontology terms by the @context. Call describe_ontology for
+definitions and usage counts of every type, predicate and role.
+
+Entity types (search return_type, get_relations target_type):
+{_glossary(sorted(set(NODE_TYPES.values())))}
+
+Predicates (get_relations predicate):
+{_glossary(PREDICATES)}
+
+Contributor roles follow DOO's pro:RoleInTime pattern: get_contributors returns the role individual (e.g. pro:author,
+scoro:data-curator) and its class (e.g. pro:PublishingRole, scoro:DataRole); filter by either.
+"""

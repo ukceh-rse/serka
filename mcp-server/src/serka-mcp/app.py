@@ -23,7 +23,9 @@ logging.basicConfig(
 )
 logger: Logger = logging.getLogger("serka_mcp")
 
-mcp: FastMCP = FastMCP("Serka")
+from ontology import INSTRUCTIONS
+
+mcp: FastMCP = FastMCP("Serka", instructions=INSTRUCTIONS)
 geolocator: Nominatim = Nominatim(user_agent="serka_geocoder")
 
 
