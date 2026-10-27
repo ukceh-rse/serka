@@ -14,6 +14,7 @@ class ReturnType(StrEnum):
 	Organisation = "Organisation"
 	Concept = "Concept"
 	Document = "Document"
+	DigitalManifestation = "DigitalManifestation"
 
 
 @router.get("/semantic", summary="Perform a semantic search in the graph database")
