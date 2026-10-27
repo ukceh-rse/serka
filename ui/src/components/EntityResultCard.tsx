@@ -19,7 +19,8 @@ export default function EntityResultCard({ hits, index = 0 }: Props) {
   const { query } = useSearchStore();
   const [expanded, setExpanded] = useState(false);
   const { entity } = hits[0];
-  const typeUri = entity.type[0] ?? "";
+  const typeUri = entity["@type"][0] ?? "";
+  const id = entity["@id"] ?? "";
   const topScore = hits[0].score;
 
   return (
@@ -36,13 +37,13 @@ export default function EntityResultCard({ hits, index = 0 }: Props) {
                 sx={{ fontSize: "0.875rem", fontWeight: 600, lineHeight: 1.4 }}
               >
                 <Link
-                  href={entity.id}
+                  href={id}
                   target="_blank"
                   rel="noopener noreferrer"
                   underline="hover"
                   color="primary"
                 >
-                  {entity.label ?? entity.id}
+                  {entity.label ?? id}
                 </Link>
               </Typography>
               <Typography
@@ -51,13 +52,13 @@ export default function EntityResultCard({ hits, index = 0 }: Props) {
                 sx={{ fontSize: "0.72rem", mb: 0.5 }}
               >
                 <Link
-                  href={entity.id}
+                  href={id}
                   target="_blank"
                   rel="noopener noreferrer"
                   underline="hover"
                   sx={{ color: "text.secondary" }}
                 >
-                  {entity.id}
+                  {id}
                 </Link>
               </Typography>
             </Box>
@@ -88,7 +89,7 @@ export default function EntityResultCard({ hits, index = 0 }: Props) {
             {expanded && (
               <Box sx={{ ml: "auto" }}>
                 <FeedbackWidget
-                  context={{ type: "result", index, entity_uri: entity.id, query }}
+                  context={{ type: "result", index, entity_uri: id, query }}
                 />
               </Box>
             )}

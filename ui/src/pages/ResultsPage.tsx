@@ -36,6 +36,7 @@ const TYPE_SECTION_LABEL: Record<string, string> = {
   "dcat:Dataset": "Datasets",
   "foaf:Person": "People",
   "foaf:Organization": "Organisations",
+  "frapo:Grant": "Grants",
   "skos:Concept": "Concepts",
   "fabio:Expression": "Documents",
   "fabio:DigitalManifestation": "Documents",
@@ -58,6 +59,7 @@ function initialCountFor(topScore: number, bestOverallScore: number): number {
 const ENTITY_TYPE_ORDER = [
   "foaf:Person",
   "foaf:Organization",
+  "frapo:Grant",
   "skos:Concept",
   "fabio:Expression",
   "fabio:DigitalManifestation",
@@ -65,13 +67,14 @@ const ENTITY_TYPE_ORDER = [
 
 type EntityGroup = { entity: Entity; hits: SearchHit[] };
 
-const isDataset = (g: EntityGroup) => g.entity.type.includes("dcat:Dataset");
+const isDataset = (g: EntityGroup) => g.entity["@type"].includes("dcat:Dataset");
+const entityKey = (e: Entity) => e["@id"] ?? "";
 
 const toGroupedResult = (g: EntityGroup): GroupedResult => ({
   dataset: {
-    uri: g.entity.id,
-    title: g.entity.label ?? g.entity.id,
-    properties: g.entity.properties,
+    uri: entityKey(g.entity),
+    title: g.entity.label ?? entityKey(g.entity),
+    properties: g.entity,
   },
   hits: g.hits,
 });
@@ -188,9 +191,10 @@ export default function ResultsPage() {
   const unifiedGroups = useMemo<EntityGroup[]>(() => {
     const byId = new Map<string, EntityGroup>();
     for (const r of results) {
-      const g = byId.get(r.entity.id) ?? { entity: r.entity, hits: [] };
+      const key = r.entity["@id"] ?? r.excerpt ?? "";
+      const g = byId.get(key) ?? { entity: r.entity, hits: [] };
       g.hits.push(r);
-      byId.set(r.entity.id, g);
+      byId.set(key, g);
     }
     return Array.from(byId.values())
       .map((g) => ({
@@ -210,7 +214,7 @@ export default function ResultsPage() {
     const byType = new Map<string, EntityGroup[]>();
     for (const g of unifiedGroups) {
       if (isDataset(g)) continue;
-      const type = g.entity.type[0] ?? "unknown";
+      const type = g.entity["@type"][0] ?? "unknown";
       if (!byType.has(type)) byType.set(type, []);
       byType.get(type)!.push(g);
     }
@@ -222,7 +226,7 @@ export default function ResultsPage() {
   const typeSections = useMemo(() => {
     const byType = new Map<string, EntityGroup[]>();
     for (const g of unifiedGroups) {
-      const type = isDataset(g) ? "dcat:Dataset" : (g.entity.type[0] ?? "unknown");
+      const type = isDataset(g) ? "dcat:Dataset" : (g.entity["@type"][0] ?? "unknown");
       if (!byType.has(type)) byType.set(type, []);
       byType.get(type)!.push(g);
     }
@@ -395,13 +399,13 @@ export default function ResultsPage() {
                         {initial.map((g, i) =>
                           isDatasetType ? (
                             <DatasetResultCard
-                              key={g.entity.id}
+                              key={entityKey(g.entity)}
                               group={toGroupedResult(g)}
                               index={i}
                             />
                           ) : (
                             <EntityResultCard
-                              key={g.entity.id}
+                              key={entityKey(g.entity)}
                               hits={g.hits}
                               index={i}
                             />
@@ -413,13 +417,13 @@ export default function ResultsPage() {
                           {extra.map((g, i) =>
                             isDatasetType ? (
                               <DatasetResultCard
-                                key={g.entity.id}
+                                key={entityKey(g.entity)}
                                 group={toGroupedResult(g)}
                                 index={initialCount + i}
                               />
                             ) : (
                               <EntityResultCard
-                                key={g.entity.id}
+                                key={entityKey(g.entity)}
                                 hits={g.hits}
                                 index={initialCount + i}
                               />
@@ -542,7 +546,7 @@ export default function ResultsPage() {
                         <Stack spacing={1.5}>
                           {groups.map((g, i) => (
                             <EntityResultCard
-                              key={g.entity.id}
+                              key={entityKey(g.entity)}
                               hits={g.hits}
                               index={i}
                             />
