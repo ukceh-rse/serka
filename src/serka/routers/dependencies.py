@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 from functools import lru_cache
 from typing import Any, Callable
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from fastmcp import Client
 from starlette.requests import Request
 from starlette.responses import Response
@@ -58,8 +58,9 @@ async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable
 		async with Client(mcp_url) as client:
 			if location:
 				geo = json.loads((await client.call_tool("geocode_location", {"location": location})).content[0].text)
-				if "boundary" in geo:
-					args["bounding_box"] = geo["boundary"]
+				if "boundary" not in geo:
+					raise HTTPException(status_code=422, detail=geo.get("msg", f"Could not geocode location '{location}'"))
+				args["bounding_box"] = geo["boundary"]
 			result = await client.call_tool("search", args)
 		return json.loads(result.content[0].text) if result.content else []
 
