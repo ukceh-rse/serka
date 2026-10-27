@@ -1,17 +1,26 @@
 import logging
 from typing import Any, Dict, List, Tuple
+from urllib.parse import quote
 
 from haystack import Document, component
 
+from serka.ontology import DEFAULT_PREDICATE, compact_iri
+
 logger = logging.getLogger(__name__)
 
+# EIDC party field -> role used when an entry carries no explicit `role`
 _PARTY_FIELDS: dict[str, str] = {
 	"authors": "author",
 	"custodians": "custodian",
 	"publishers": "publisher",
-	"distributorContacts": "distributorContact",
+	"distributorContacts": "distributor",
+	# EIDC renamed pointsOfContact to contactPoints; cached records may have either
 	"pointsOfContact": "pointOfContact",
+	"contactPoints": "pointOfContact",
+	"rightsHolders": "rightsHolder",
 }
+
+_CONCEPT_FIELDS = ("topicCategories", "keywordsTheme", "keywordsOther", "keywordsPlace")
 
 
 def extract_doi(resource_identifiers, default="") -> str:
@@ -46,6 +55,8 @@ def _infer_concept_scheme(uri: str, field: str) -> str:
 @component
 class EntityExtractor:
 	def _extract_boundary(self, record: dict) -> dict:
+		if not record.get("boundingBoxes"):
+			return {}
 		try:
 			bb = record["boundingBoxes"][0]
 			boundary = {
@@ -107,15 +118,17 @@ class EntityExtractor:
 					}
 					associations.append((dataset_uri, person_uri, role))
 
-				if org_uri:
+				# A named individual holds the role, their organisation is only an affiliation;
+				# the organisation holds the role itself only when the entry names no person.
+				if org_uri and (person_uri or not entry.get("fullName")):
 					orgs[org_uri] = {
 						"uri": org_uri,
 						"name": entry.get("organisationName", ""),
 					}
-					associations.append((dataset_uri, org_uri, role))
-
 					if person_uri:
 						affiliations.append((person_uri, org_uri))
+					else:
+						associations.append((dataset_uri, org_uri, role))
 
 		return list(persons.values()), list(orgs.values()), associations, affiliations
 
@@ -125,7 +138,7 @@ class EntityExtractor:
 		concepts: Dict[str, dict] = {}
 		themes: List[Tuple] = []
 
-		for field in ("topicCategories", "keywordsOther", "keywordsPlace"):
+		for field in _CONCEPT_FIELDS:
 			for kw in record.get(field, []):
 				uri = kw.get("uri")
 				if not uri:
@@ -142,8 +155,8 @@ class EntityExtractor:
 	def _extract_relations(self, record: dict, dataset_uri: str) -> List[Tuple]:
 		relations = []
 		for rel in record.get("relationships", []):
-			target_id = rel.get("identifier")
-			predicate = rel.get("associationType", "dcterms:relation")
+			target_id = rel.get("target")
+			predicate = compact_iri(rel.get("relation") or DEFAULT_PREDICATE)
 			if target_id:
 				target_uri = f"https://catalogue.ceh.ac.uk/id/{target_id}"
 				relations.append((dataset_uri, predicate, target_uri))
@@ -165,6 +178,31 @@ class EntityExtractor:
 			relations.append((dataset_uri, "dcterms:isReferencedBy", url))
 		return docs, relations
 
+	def _extract_funding(
+		self, record: dict, dataset_uri: str
+	) -> tuple[list, list, list]:
+		funders: List[dict] = []
+		grants: List[dict] = []
+		relations: List[Tuple] = []
+		for fund in record.get("funding", []):
+			award = fund.get("awardNumber")
+			funder_uri = fund.get("funderIdentifier")
+			if not award:
+				continue
+			# Key on funder + award number: EIDC's awardURI is optional and inconsistently encoded.
+			grant_uri = f"{funder_uri}#{quote(award, safe='')}" if funder_uri else f"urn:serka:grant:{quote(award, safe='')}"
+			grant = {"uri": grant_uri, "grant_number": award}
+			if title := fund.get("awardTitle"):
+				grant["title"] = title
+			if see_also := fund.get("awardURI"):
+				grant["see_also"] = see_also
+			grants.append(grant)
+			relations.append((dataset_uri, "doo:originatingGrant", grant_uri))
+			if funder_uri:
+				funders.append({"uri": funder_uri, "name": fund.get("funderName", "")})
+				relations.append((funder_uri, "frapo:awards", grant_uri))
+		return funders, grants, relations
+
 	@component.output_types(
 		nodes=Dict[str, List[Dict[str, Any]]],
 		relationships=Dict[str, List[Tuple]],
@@ -175,6 +213,8 @@ class EntityExtractor:
 		orgs: Dict[str, dict] = {}
 		concepts: Dict[str, dict] = {}
 		documents: Dict[str, dict] = {}
+		funders: Dict[str, dict] = {}
+		grants: Dict[str, dict] = {}
 		associations: List[Tuple] = []
 		affiliations: List[Tuple] = []
 		themes: List[Tuple] = []
@@ -207,6 +247,13 @@ class EntityExtractor:
 					documents[d["uri"]] = d
 				relations.extend(rec_cite_rels)
 
+				rec_funders, rec_grants, rec_fund_rels = self._extract_funding(record, dataset_uri)
+				for f in rec_funders:
+					funders[f["uri"]] = f
+				for g in rec_grants:
+					grants[g["uri"]] = g
+				relations.extend(rec_fund_rels)
+
 			except Exception as e:
 				logger.warning(
 					f"Skipping record due to extraction error: {e} — record keys: {list(record.keys())}"
@@ -224,6 +271,8 @@ class EntityExtractor:
 				"Organisation": list(orgs.values()),
 				"Concept": list(concepts.values()),
 				"Document": list(documents.values()),
+				"FundingAgency": list(funders.values()),
+				"Grant": list(grants.values()),
 			},
 			"relationships": {
 				"ASSOCIATED_WITH": associations,

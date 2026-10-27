@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from haystack import Document
 
 from serka.graph.extractors import DocumentTruncator, EntityExtractor, TextExtractor
@@ -106,6 +109,70 @@ def test_entity_extractor_handles_missing_fields_gracefully():
 	assert len(datasets) == 2
 	sparse_ds = next(d for d in datasets if d["title"] == "Sparse Dataset")
 	assert sparse_ds["uri"] == ""
+
+
+# Real EIDC records (tests/data): 1c2fe14e has relationships, funding, a rights holder and
+# a contact point; ae02f4e8 has an isPartOf relationship and keywordsTheme concepts.
+_DATA = Path(__file__).parent / "data"
+_REAL = [json.loads((_DATA / f).read_text()) for f in ("eidc-1c2fe14e.json", "eidc-ae02f4e8.json")]
+_URI_1C2 = "https://catalogue.ceh.ac.uk/id/1c2fe14e-0aa4-4f4a-b827-57b96deeda0d"
+_URI_AE0 = "https://catalogue.ceh.ac.uk/id/ae02f4e8-9486-4b47-93ef-e49dd9ddecd4"
+
+
+def test_real_records_relationships_use_eidc_keys_and_curies():
+	rels = EntityExtractor().run(data=_REAL)["relationships"]["RELATION"]
+	dataset_rels = {r for r in rels if r[2].startswith("https://catalogue.ceh.ac.uk/id/")}
+	assert (_URI_AE0, "dcterms:isPartOf", "https://catalogue.ceh.ac.uk/id/3124e313-7ce8-4832-98b4-2357fab9284c") in dataset_rels
+	assert (_URI_1C2, "dcterms:relation", "https://catalogue.ceh.ac.uk/id/cfcc0e31-e2ce-450b-a292-3427de06a687") in dataset_rels
+	assert all(":" in p and not p.startswith("http") for _, p, _ in rels)
+
+
+def test_real_records_contact_points_and_rights_holders():
+	assoc = EntityExtractor().run(data=_REAL)["relationships"]["ASSOCIATED_WITH"]
+	roles = {(d, a, r) for d, a, r in assoc}
+	assert (_URI_1C2, "https://ror.org/00n3w3b69", "rightsHolder") in roles
+	# A named contact with an ORCID holds the role personally...
+	assert (_URI_AE0, "https://orcid.org/0000-0002-8722-0238", "pointOfContact") in roles
+	# ...and one without an ORCID is dropped rather than credited to their organisation
+	assert (_URI_1C2, "https://ror.org/00n3w3b69", "pointOfContact") not in roles
+
+
+def test_legacy_points_of_contact_key_still_read():
+	# Records cached before EIDC renamed the field use pointsOfContact
+	legacy = {**_RECORD, "pointsOfContact": [{"organisationIdentifier": "https://ror.org/poc", "role": "pointOfContact"}]}
+	assoc = EntityExtractor().run(data=[legacy])["relationships"]["ASSOCIATED_WITH"]
+	assert (_RECORD["uri"], "https://ror.org/poc", "pointOfContact") in assoc
+
+
+def test_real_records_organisation_does_not_inherit_person_role():
+	assoc = EntityExtractor().run(data=_REAL)["relationships"]["ASSOCIATED_WITH"]
+	# Both authors of 1c2fe14e are people at ror.org/00n3w3b69: the org is no author
+	assert (_URI_1C2, "https://ror.org/00n3w3b69", "author") not in set(assoc)
+	assert (_URI_1C2, "https://orcid.org/0000-0003-4460-5178", "author") in set(assoc)
+
+
+def test_real_records_theme_keywords():
+	result = EntityExtractor().run(data=_REAL)
+	themes = set(result["relationships"]["HAS_THEME"])
+	assert (_URI_AE0, "http://onto.nerc.ac.uk/CEHMD/topic/8") in themes
+	labels = {c["uri"]: c["label"] for c in result["nodes"]["Concept"]}
+	assert labels["http://onto.nerc.ac.uk/CEHMD/topic/8"] == "Radioecology"
+
+
+def test_real_records_funding():
+	result = EntityExtractor().run(data=_REAL)
+	nerc = "https://ror.org/02b5d8509"
+	grant_uri = f"{nerc}#NE%2FV010603%2F1"
+	assert result["nodes"]["FundingAgency"] == [{"uri": nerc, "name": "Natural Environment Research Council"}]
+	assert result["nodes"]["Grant"] == [{"uri": grant_uri, "grant_number": "NE/V010603/1"}]
+	rels = set(result["relationships"]["RELATION"])
+	assert (_URI_1C2, "doo:originatingGrant", grant_uri) in rels
+	assert (nerc, "frapo:awards", grant_uri) in rels
+
+
+def test_missing_bounding_box_is_not_an_error(caplog):
+	EntityExtractor().run(data=[_RECORD])
+	assert "boundingBoxes" not in caplog.text
 
 
 # ---------------------------------------------------------------------------

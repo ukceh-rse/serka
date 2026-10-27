@@ -1,73 +1,20 @@
+"""DOO mapping, loaded from doo_mapping.json — a copy of
+mcp-server/src/serka-mcp/doo_mapping.json kept identical by scripts/sync-doo-mapping.py."""
+
+import json
+from pathlib import Path
 from typing import Any
 
-JSONLD_CONTEXT: dict[str, str] = {
-	"dcat": "https://www.w3.org/ns/dcat#",
-	"dcterms": "http://purl.org/dc/terms/",
-	"doo": "https://digital.ceh.ac.uk/ontology/doo/",
-	"fabio": "http://purl.org/spar/fabio/",
-	"foaf": "http://xmlns.com/foaf/0.1/",
-	"frapo": "http://purl.org/cerif/frapo/",
-	"geo": "http://www.opengis.net/ont/geosparql#",
-	"org": "http://www.w3.org/ns/org#",
-	"pro": "http://purl.org/spar/pro/",
-	"prov": "http://www.w3.org/ns/prov#",
-	"scoro": "http://purl.org/spar/scoro/",
-	"skos": "http://www.w3.org/2004/02/skos/core#",
-}
+MAPPING: dict[str, Any] = json.loads((Path(__file__).parent / "doo_mapping.json").read_text())
 
-NODE_TYPES: dict[str, str] = {
-	"Dataset": "dcat:Dataset",
-	"Person": "foaf:Person",
-	"Organisation": "foaf:Organization",
-	"Concept": "skos:Concept",
-	"Document": "fabio:Expression",
-	"DigitalManifestation": "fabio:DigitalManifestation",
-}
-
-PROPERTY_TERMS: dict[str, str] = {
-	"title": "dcterms:title",
-	"description": "dcterms:description",
-	"lineage": "dcterms:provenance",
-	"publication_date": "dcterms:issued",
-	"identifiers": "dcterms:identifier",
-	"licence": "dcterms:license",
-	"resource_type": "dcterms:type",
-	"temporal_start": "dcterms:temporal",
-	"temporal_end": "dcterms:temporal",
-	"access_rights": "dcterms:accessRights",
-	"citations": "dcterms:relation",
-	"south_boundary": "geo:hasBoundingBox",
-	"north_boundary": "geo:hasBoundingBox",
-	"west_boundary": "geo:hasBoundingBox",
-	"east_boundary": "geo:hasBoundingBox",
-	"name": "foaf:name",
-	"label": "skos:prefLabel",
-	"scheme": "skos:inScheme",
-	"format": "dcterms:format",
-	"bibliographic_citation": "dcterms:bibliographicCitation",
-}
-
-ROLE_TERMS: dict[str, str] = {
-	"author": "scoro:AuthorshipRole",
-	"coAuthor": "scoro:AuthorshipRole",
-	"custodian": "scoro:DataRole",
-	"distributor": "scoro:DataRole",
-	"distributorContact": "scoro:DataRole",
-	"originator": "scoro:AuthorshipRole",
-	"pointOfContact": "pro:RoleInTime",
-	"principalInvestigator": "scoro:InvestigationRole",
-	"publisher": "dcterms:publisher",
-	"rightsHolder": "dcterms:rightsHolder",
-}
+PREFIXES: dict[str, str] = MAPPING["prefixes"]
+NODE_TYPES: dict[str, str] = MAPPING["node_types"]
+DEFAULT_PREDICATE: str = MAPPING["default_predicate"]
 
 
-def to_jsonld(label: str, props: dict[str, Any]) -> dict[str, Any]:
-	result: dict[str, Any] = {
-		"@context": JSONLD_CONTEXT,
-		"@type": NODE_TYPES.get(label, label),
-		"@id": props.get("uri", ""),
-	}
-	for k, v in props.items():
-		if k not in ("uri", "embedding"):
-			result[PROPERTY_TERMS.get(k, k)] = v
-	return result
+def compact_iri(iri: str) -> str:
+	"""Compact a full IRI to a CURIE using the known prefixes (e.g. dcterms:isPartOf)."""
+	for prefix, ns in PREFIXES.items():
+		if iri.startswith(ns) and len(iri) > len(ns):
+			return f"{prefix}:{iri[len(ns):]}"
+	return iri
