@@ -13,6 +13,9 @@ const RETURN_TYPES: { value: string; label: string }[] = [
   { value: 'Dataset', label: 'Datasets' },
   { value: 'Person', label: 'People' },
   { value: 'Organisation', label: 'Organisations' },
+  { value: 'Concept', label: 'Concepts' },
+  { value: 'Document', label: 'Documents' },
+  { value: 'DigitalManifestation', label: 'Supporting documents' },
 ]
 
 interface Props {

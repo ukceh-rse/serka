@@ -25,7 +25,7 @@ export interface SearchHit {
 }
 
 /** Return-type filter values; mirror the FastAPI ReturnType enum (omit for "Any"). */
-export type ReturnType = 'Dataset' | 'Person' | 'Organisation'
+export type ReturnType = 'Dataset' | 'Person' | 'Organisation' | 'Concept' | 'Document' | 'DigitalManifestation'
 
 
 interface SearchState {
