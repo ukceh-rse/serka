@@ -99,6 +99,32 @@ def get_content_query(tx, uri: str) -> list[str]:
 	return [r["content"] for r in results if r["content"]]
 
 
+def expand_theme_query(tx, theme: str) -> list[str]:
+	"""URIs of the theme Concept (matched by URI or label) and every narrower Concept below it."""
+	records = tx.run(
+		"MATCH (root:Concept) WHERE root.uri = $theme OR toLower(root.label) = toLower($theme) "
+		"MATCH (c:Concept)-[:BROADER*0..10]->(root) "
+		"RETURN DISTINCT c.uri AS uri",
+		theme=theme,
+	).data()
+	return [r["uri"] for r in records]
+
+
+def ontology_counts_query(tx) -> dict:
+	"""Usage counts for node labels, relationship types, RELATION predicates and contributor roles."""
+	labels = tx.run("MATCH (n) UNWIND labels(n) AS l RETURN l AS key, count(*) AS n").data()
+	rel_types = tx.run("MATCH ()-[r]->() RETURN type(r) AS key, count(*) AS n").data()
+	predicates = tx.run("MATCH ()-[r:RELATION]->() RETURN r.predicate AS key, count(*) AS n").data()
+	roles = tx.run("MATCH ()-[r:ASSOCIATED_WITH]->() RETURN r.role AS key, count(*) AS n").data()
+	as_dict = lambda rows: {r["key"]: r["n"] for r in rows}
+	return {
+		"labels": as_dict(labels),
+		"rel_types": as_dict(rel_types),
+		"predicates": as_dict(predicates),
+		"roles": as_dict(roles),
+	}
+
+
 def _filter_conditions(
 	bounding_box: Optional[BoundingBox],
 	published_after: Optional[str],
@@ -106,9 +132,16 @@ def _filter_conditions(
 	min_citations: Optional[int],
 	params: dict,
 	node_alias: str = "target",
+	theme_uris: Optional[List[str]] = None,
 ) -> List[str]:
-	"""Return a list of Cypher condition strings (no WHERE keyword) for bbox/date/citation filters."""
+	"""Return a list of Cypher condition strings (no WHERE keyword) for bbox/date/citation/theme filters."""
 	conditions: List[str] = []
+	if theme_uris is not None:
+		conditions += [
+			f"'Dataset' IN labels({node_alias})",
+			f"EXISTS {{ MATCH ({node_alias})-[:HAS_THEME]->(c:Concept) WHERE c.uri IN $theme_uris }}",
+		]
+		params["theme_uris"] = theme_uris
 	if bounding_box:
 		bb = bounding_box.expand(20)
 		conditions += [
@@ -187,11 +220,14 @@ def search_query(
 	published_after: Optional[str] = None,
 	published_before: Optional[str] = None,
 	min_citations: Optional[int] = None,
+	theme_uris: Optional[List[str]] = None,
 ):
 	params: dict = {"embedding": embedding, "limit": limit}
 	if target_label:
 		params["target_label"] = target_label
-	extra = _filter_conditions(bounding_box, published_after, published_before, min_citations, params)
+	extra = _filter_conditions(
+		bounding_box, published_after, published_before, min_citations, params, theme_uris=theme_uris
+	)
 	index_call = (
 		"CALL db.index.vector.queryNodes('vec_lookup', $limit, $embedding) "
 		"YIELD node AS matched, score "
@@ -210,11 +246,14 @@ def fulltext_search_query(
 	published_after: Optional[str] = None,
 	published_before: Optional[str] = None,
 	min_citations: Optional[int] = None,
+	theme_uris: Optional[List[str]] = None,
 ):
 	params: dict = {"search_term": search_term, "limit": limit}
 	if target_label:
 		params["target_label"] = target_label
-	extra = _filter_conditions(bounding_box, published_after, published_before, min_citations, params)
+	extra = _filter_conditions(
+		bounding_box, published_after, published_before, min_citations, params, theme_uris=theme_uris
+	)
 	index_call = (
 		"CALL db.index.fulltext.queryNodes('ft_search', $search_term, {limit: $limit}) "
 		"YIELD node AS matched, score "

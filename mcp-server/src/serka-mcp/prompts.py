@@ -25,7 +25,7 @@ def find_datasets_for_location(location: str) -> str:
 def explore_author_work(author: str) -> str:
 	"""Explore a researcher's contributions to the EIDC catalogue.
 
-	Chains search (types=['foaf:Person']) → find_by_contributor → get_content.
+	Chains search (return_type='foaf:Person') → find_by_contributor → get_content.
 	Use when a user wants to understand a researcher's body of work.
 
 	Args:
@@ -33,7 +33,7 @@ def explore_author_work(author: str) -> str:
 	"""
 	return (
 		f"Explore the published work of '{author}' in the EIDC catalogue. "
-		"Step 1: use search with types=['foaf:Person'] and the author's name to find matching Person entities. "
+		"Step 1: use search with return_type='foaf:Person' and the author's name to find matching Person entities. "
 		"If multiple people are returned, select the most likely match (clarify ambiguity in your answer). "
 		"Step 2: use find_by_contributor with the Person @id to retrieve their datasets. "
 		"Step 3: for the most relevant datasets, use get_content to read supporting documentation, "
@@ -46,7 +46,7 @@ def explore_author_work(author: str) -> str:
 def explore_dataset(uri: str) -> str:
 	"""Deep-dive into a single dataset using the DOO graph.
 
-	Chains doo://context → doo://entity/{uri} → get_relations → get_contributors → get_content.
+	Chains describe_ontology → get_entity → get_relations → get_contributors → get_content.
 	Use when a user wants a comprehensive overview of a specific dataset.
 
 	Args:
@@ -54,14 +54,15 @@ def explore_dataset(uri: str) -> str:
 	"""
 	return (
 		f"Provide a comprehensive overview of the dataset at '{uri}'. "
-		"Step 1: read doo://context to understand available predicates and types. "
-		f"Step 2: read doo://entity/{uri} to get the dataset's core properties. "
+		"Step 1: call describe_ontology to learn the available types, predicates and roles. "
+		"Step 2: use get_entity to get the dataset's core properties. "
 		"Step 3: use get_relations to explore: "
 		"  - themes (predicate='dcat:theme'), "
 		"  - related datasets (predicate='dcterms:isPartOf' or 'dcterms:relation'), "
 		"  - supporting documents (predicate='dcterms:references'), "
-		"  - incoming citations (predicate='dcterms:isReferencedBy'). "
-		"Step 4: use get_contributors to list authors, custodians, and publishers. "
+		"  - incoming citations (predicate='dcterms:isReferencedBy'), "
+		"  - funding grants (predicate='doo:originatingGrant'). "
+		"Step 4: use get_contributors to list who holds which role (pro:author, scoro:data-curator, pro:publisher, ...). "
 		"Step 5: use get_content on the dataset URI to retrieve its description and lineage text. "
 		"Step 6: summarise what the dataset covers, who created it, what it relates to, and its key themes."
 	)
