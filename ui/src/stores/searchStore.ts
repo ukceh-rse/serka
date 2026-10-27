@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type mapping from '../doo_mapping.json'
 
 /** A JSON-LD entity from the MCP server: @id/@type plus DOO-mapped properties (title, name, temporal, ...). */
 export interface Entity {
@@ -27,16 +28,8 @@ export interface SearchHit {
   path: PathStep[]
 }
 
-/** Return-type filter values; mirror the FastAPI ReturnType enum (omit for "Any"). */
-export type ReturnType =
-  | 'Dataset'
-  | 'Person'
-  | 'Organisation'
-  | 'FundingAgency'
-  | 'Grant'
-  | 'Concept'
-  | 'Document'
-  | 'DigitalManifestation'
+/** Return-type filter values: DOO node labels, as the FastAPI ReturnType enum (omit for "Any"). */
+export type ReturnType = keyof typeof mapping.node_types
 
 
 interface SearchState {

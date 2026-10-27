@@ -3,8 +3,8 @@ import { Box, Chip, Link, Typography } from "@mui/material";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import type { SearchHit } from "../stores/searchStore";
 import { connectionLabel, curiePrefix, curieToUrl } from "../ontology";
+import { CHIP_SX } from "./TypeChip";
 
-const CHIP_SX = { fontSize: "0.65rem", height: 20 };
 // Plain (no background/border box). Only items after the first get a hairline divider above them.
 const FIRST_SX = { mt: 0.5 };
 const DIVIDER_SX = { pt: 1, mt: 1, borderTop: 1, borderColor: "divider" };

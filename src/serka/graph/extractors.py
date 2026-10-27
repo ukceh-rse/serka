@@ -23,19 +23,13 @@ _PARTY_FIELDS: dict[str, str] = {
 _CONCEPT_FIELDS = ("topicCategories", "keywordsTheme", "keywordsOther", "keywordsPlace")
 
 
-def extract_doi(resource_identifiers, default="") -> str:
-	for id in resource_identifiers:
-		if "codeSpace" in id and id["codeSpace"] == "doi:":
-			return f"https://doi.org/{id['code']}"
-	return default
-
-
 def _collect_identifiers(resource_identifiers: list) -> list[str]:
 	ids = []
 	for rid in resource_identifiers:
 		if "code" not in rid:
 			continue
-		if rid.get("codeSpace") == "doi:":
+		# EIDC records use codeSpace "doi"; older fixtures use "doi:"
+		if rid.get("codeSpace") in ("doi", "doi:"):
 			ids.append(f"https://doi.org/{rid['code']}")
 		else:
 			ids.append(rid["code"])

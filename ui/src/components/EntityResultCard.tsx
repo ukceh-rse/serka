@@ -16,7 +16,7 @@ interface Props {
 }
 
 export default function EntityResultCard({ hits, index = 0 }: Props) {
-  const { query } = useSearchStore();
+  const query = useSearchStore((s) => s.query);
   const [expanded, setExpanded] = useState(false);
   const { entity } = hits[0];
   const typeUri = entity["@type"][0] ?? "";

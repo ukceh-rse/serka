@@ -11,12 +11,9 @@ from haystack_integrations.components.embedders.amazon_bedrock import (
 )
 from haystack_integrations.components.generators.amazon_bedrock import (
 	AmazonBedrockGenerator,
-	AmazonBedrockChatGenerator,
 )
 from haystack.dataclasses import StreamingChunk
 from haystack.components.joiners import DocumentJoiner
-from haystack_integrations.tools.mcp import MCPToolset, StreamableHttpServerInfo
-from haystack.components.agents import Agent
 
 
 @dataclass
@@ -51,14 +48,6 @@ class PipelineBuilder:
 			streaming_callback=streaming_callback,
 			max_length=500,
 		)
-
-	def agent(self) -> Agent:
-		server_info = StreamableHttpServerInfo(
-			url=f"http://{self.mcp_host}:{self.mcp_port}/mcp"
-		)
-		toolset = MCPToolset(server_info=server_info)
-		generator = AmazonBedrockChatGenerator(model=self.models_llm)
-		return Agent(chat_generator=generator, tools=toolset, exit_conditions=["text"])
 
 	def build_graph_pipeline(self) -> Pipeline:
 		p = Pipeline()

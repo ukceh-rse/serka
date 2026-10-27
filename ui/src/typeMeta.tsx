@@ -16,22 +16,35 @@ export type TypeColor =
   | "warning"
   | "error";
 
-// Icon + chip colour per DOO type. The icon next to a result's title and the type
-// chip on its right share the same colour so they read as a pair.
-const TYPE_META: Record<string, { Icon: SvgIconComponent; color: TypeColor }> =
-  {
-    "dcat:Dataset": { Icon: StorageOutlinedIcon, color: "primary" },
-    "foaf:Person": { Icon: PersonOutlineIcon, color: "info" },
-    "foaf:Organization": { Icon: ApartmentIcon, color: "secondary" },
-    "frapo:FundingAgency": { Icon: ApartmentIcon, color: "secondary" },
-    "frapo:Grant": { Icon: PaidOutlinedIcon, color: "error" },
-    "skos:Concept": { Icon: LabelOutlinedIcon, color: "success" },
-    "fabio:Expression": { Icon: ArticleOutlinedIcon, color: "warning" },
-    "fabio:DigitalManifestation": { Icon: ArticleOutlinedIcon, color: "warning" },
-  };
+// Display metadata per DOO type, in results-section order. The icon next to a result's title
+// and the type chip on its right share the same colour so they read as a pair.
+const TYPE_META: Record<
+  string,
+  { Icon: SvgIconComponent; color: TypeColor; label: string }
+> = {
+  "dcat:Dataset": { Icon: StorageOutlinedIcon, color: "primary", label: "Datasets" },
+  "foaf:Person": { Icon: PersonOutlineIcon, color: "info", label: "People" },
+  "foaf:Organization": { Icon: ApartmentIcon, color: "secondary", label: "Organisations" },
+  "frapo:FundingAgency": { Icon: ApartmentIcon, color: "secondary", label: "Funders" },
+  "frapo:Grant": { Icon: PaidOutlinedIcon, color: "error", label: "Grants" },
+  "skos:Concept": { Icon: LabelOutlinedIcon, color: "success", label: "Concepts" },
+  "fabio:Expression": { Icon: ArticleOutlinedIcon, color: "warning", label: "Documents" },
+  "fabio:DigitalManifestation": {
+    Icon: ArticleOutlinedIcon,
+    color: "warning",
+    label: "Supporting documents",
+  },
+};
+
+/** DOO type CURIEs in display order. */
+export const TYPE_ORDER = Object.keys(TYPE_META);
 
 export const typeMeta = (type: string) =>
-  TYPE_META[type] ?? { Icon: HelpOutlineIcon, color: "default" as TypeColor };
+  TYPE_META[type] ?? {
+    Icon: HelpOutlineIcon,
+    color: "default" as TypeColor,
+    label: type,
+  };
 
 /** The type's icon, coloured to match its TypeChip. */
 export function TypeIcon({

@@ -4,7 +4,8 @@ import { curieToUrl } from "../ontology";
 
 type ChipColor = ComponentProps<typeof Chip>["color"];
 
-const CHIP_SX = { fontSize: "0.65rem", height: 20 };
+/** Compact chip sizing shared by result-card chips. */
+export const CHIP_SX = { fontSize: "0.65rem", height: 20 };
 
 /** A DOO type as a chip; links to the defining ontology term when resolvable. */
 export default function TypeChip({ type, color = "default" }: { type: string; color?: ChipColor }) {

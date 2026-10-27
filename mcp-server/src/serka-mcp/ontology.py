@@ -28,6 +28,12 @@ def compact_iri(iri: str) -> str:
 	return iri
 
 
+def expand_curie(curie: str) -> str:
+	"""Expand a CURIE to a full IRI using the known prefixes; unknown prefixes pass through."""
+	prefix, _, local = curie.partition(":")
+	return PREFIXES[prefix] + local if prefix in PREFIXES else curie
+
+
 def role_individual(eidc_role: str | None) -> str:
 	return ROLES.get(eidc_role or "", DEFAULT_ROLE)
 

@@ -1,6 +1,5 @@
 import { Chip, Tooltip } from "@mui/material";
-
-const CHIP_SX = { fontSize: "0.65rem", height: 20 };
+import { CHIP_SX } from "./TypeChip";
 
 /** A relevance score as a chip, styled to match TypeChip. */
 export default function ScoreChip({ score }: { score: number }) {
