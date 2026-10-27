@@ -42,8 +42,18 @@ if __name__ == "__main__":
 		type=greater_than_zero,
 		nargs="?",
 	)
+	parser.add_argument(
+		"--ids-file",
+		help="File of EIDC dataset IDs to ingest (one per line, '#' comments allowed); overrides n",
+	)
 	parser.add_argument("--debug", action="store_true", help="Enable DEBUG logging")
 	args = parser.parse_args()
+
+	fetcher_args = {"rows": args.n}
+	if args.ids_file:
+		with open(args.ids_file) as f:
+			lines = (line.split("#", 1)[0].strip() for line in f)
+			fetcher_args = {"ids": [line for line in lines if line]}
 
 	logging.basicConfig(
 		level=logging.DEBUG if args.debug else logging.INFO,
@@ -57,5 +67,5 @@ if __name__ == "__main__":
 	pb = create_pipeline_builder()
 	p = pb.build_graph_pipeline()
 	with logging_redirect_tqdm():
-		result = p.run(data={"eidc_fetcher": {"rows": args.n}})
+		result = p.run(data={"eidc_fetcher": fetcher_args})
 	logger.info(f"{result['graph_writer']}")

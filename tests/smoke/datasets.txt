@@ -1,0 +1,12 @@
+# Ten deliberately unrelated EIDC datasets used by scripts/smoke-test.py.
+# All have Legilo supporting documents. One ID per line; text after '#' is ignored.
+4b255fc4-33d3-4beb-a238-37e1a8cf32a2  # Windermere pike fecundity and egg data 1963-2003
+8a8240a2-e8ed-495d-ae93-c35200956764  # Telomere length data from Seychelles Warblers on Cousin Island
+c176bbd1-7ad6-43e7-b82b-7c707e95522f  # Coral bleaching and nutrient responses to elevated temperature
+bc10f720-2bb6-4ff4-ad63-257663fd41a3  # Morphology of galls induced on oak trees by cynipid gallwasps, Hungary
+c9bc537a-d1c5-43a0-b146-42c25d4e8160  # Antibiotic use and antibiotic resistant E. coli on dairy farms
+ae02f4e8-9486-4b47-93ef-e49dd9ddecd4  # Chernobyl Exclusion Zone reference site radionuclide data
+3187bfa1-6346-4569-9062-b5414ec1dd62  # Radiocarbon dating of Sus scrofa (pig) remains, Philippines
+1c2fe14e-0aa4-4f4a-b827-57b96deeda0d  # Spherulite growth kinetics in poly(hydroxybutyrate)-based systems
+30ae0230-e352-4a82-901d-ac1d42449044  # Urban hydro-meteorological observations, Ouagadougou, Burkina Faso
+de5b4f33-f679-4798-8daf-51a314e78204  # Raspberry fruit yield under different pollination treatments, Reading
