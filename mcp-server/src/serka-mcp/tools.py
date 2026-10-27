@@ -288,11 +288,10 @@ def search(
 			for hit, score in zip(results, ce_scores):
 				hit.score = float(score)
 			results.sort(key=lambda h: h.score, reverse=True)
-			results = results[:limit]
 			logger.info(f"  rerank: {(time.perf_counter() - t3) * 1000:.0f}ms")
 
 		logger.info(f"  total: {(time.perf_counter() - t0) * 1000:.0f}ms")
-		return results
+		return results[:limit]
 	except Exception as e:
 		logger.error(f'Error searching for "{query}": {e}')
 		return Error(msg=str(e))
