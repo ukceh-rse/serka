@@ -9,6 +9,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from serka.feedback import FeedbackLogger
+from serka.ontology import NODE_TYPES
 from serka.settings import Settings
 
 StreamFn = Callable[[Any, Request], Response]
@@ -22,15 +23,6 @@ _mcp_search_fn: Callable | None = None
 @lru_cache
 def get_settings() -> Settings:
 	return Settings()
-
-
-_DOO_TYPES = {
-	"Dataset": "dcat:Dataset",
-	"Person": "foaf:Person",
-	"Organisation": "foaf:Organization",
-	"Concept": "skos:Concept",
-	"Document": "fabio:Expression",
-}
 
 
 async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable:
@@ -50,7 +42,7 @@ async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable
 	) -> list:
 		args: dict[str, Any] = {"query": q, "hops": hops}
 		if return_type:
-			args["return_type"] = _DOO_TYPES.get(str(return_type), str(return_type))
+			args["return_type"] = NODE_TYPES.get(str(return_type), str(return_type))
 		if published_after:
 			args["published_after"] = published_after
 		if published_before:
