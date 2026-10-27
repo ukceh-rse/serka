@@ -34,7 +34,7 @@ def test_semantic_search_returns_results(client):
 	]
 
 	async def mock_search_fn():
-		async def _search(q: str) -> list:
+		async def _search(q: str, **kwargs) -> list:
 			return mock_results
 
 		return _search
