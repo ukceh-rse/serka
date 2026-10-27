@@ -1,29 +1,51 @@
-from serka.fetchers import EIDCFetcher
+from types import SimpleNamespace
 from unittest.mock import Mock
-import requests
+
+import serka.fetchers
+from serka.fetchers import EIDCFetcher
 
 
-def test_eidc_fetcher(monkeypatch):
-	dataset_list = [{"id": 1, "title": "Dataset 1"}, {"id": 2, "title": "Dataset 2"}]
-	test_url = "http://test.com/documents"
+class FakeSession:
+	"""Stands in for the cached requests session: canned JSON by URL, nothing cached."""
 
-	mock_response = Mock()
-	mock_response.json.return_value = {"results": dataset_list}
+	def __init__(self, responses: dict):
+		self.responses = responses
+		self.calls = []
+		self.cache = SimpleNamespace(contains=lambda url: False)
 
-	def mock_get(*args, **kwargs):
-		assert args[0] == test_url
-		assert kwargs["params"]["page"] == 1
-		assert kwargs["params"]["rows"] == 10000
-		assert kwargs["params"]["term"] == "state:published AND recordType:Dataset"
-		return mock_response
+	def get(self, url, params=None):
+		self.calls.append((url, params))
+		return Mock(status_code=200, json=Mock(return_value=self.responses[url]))
 
-	monkeypatch.setattr(requests, "get", mock_get)
 
-	fetcher = EIDCFetcher(test_url)
-	result = fetcher.run()
+def _record_url(id: str) -> str:
+	return f"https://catalogue.ceh.ac.uk/documents/{id}?format=json"
 
-	assert result == {"records": dataset_list}
-	assert mock_response.json.called
+
+def test_eidc_fetcher_lists_then_fetches_each_record(monkeypatch):
+	list_url = "http://test.com/documents"
+	records = {"a": {"id": "a", "title": "Dataset A"}, "b": {"id": "b", "title": "Dataset B"}}
+	session = FakeSession({
+		list_url: {"results": [{"identifier": "a"}, {"identifier": "b"}]},
+		**{_record_url(id): r for id, r in records.items()},
+	})
+	monkeypatch.setattr(serka.fetchers, "_session", session)
+
+	result = EIDCFetcher(list_url).run()
+
+	assert result == {"data": [records["a"], records["b"]]}
+	assert session.calls[0] == (
+		list_url,
+		{"rows": 10000, "page": 1, "term": "state:published AND recordType:Dataset"},
+	)
+
+
+def test_eidc_fetcher_with_ids_skips_listing(monkeypatch):
+	session = FakeSession({_record_url("a"): {"id": "a"}})
+	monkeypatch.setattr(serka.fetchers, "_session", session)
+
+	assert EIDCFetcher().run(ids=["a"]) == {"data": [{"id": "a"}]}
+	assert [url for url, _ in session.calls] == [_record_url("a")]
 
 
 def test_concept_hierarchy_fetcher_walks_gemet_broader(monkeypatch):

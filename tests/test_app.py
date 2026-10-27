@@ -71,12 +71,14 @@ def test_feedback_submit_logs_and_returns_success(client):
 	mock_logger.log_feedback.assert_called_once_with(payload)
 
 
-def test_feedback_submit_rejects_unknown_fields(client):
-	app.dependency_overrides[get_feedback_logger] = lambda: MagicMock()
-	response = client.post(
-		"/v1/feedback/submit", json={"query": "q", "type": "VOTE", "injected": "bad"}
-	)
-	assert response.status_code == 422
+def test_feedback_submit_logs_extra_context_fields(client):
+	# The UI sends per-result context (vote, comment, dataset_uri, ...) alongside the core fields.
+	mock_logger = MagicMock()
+	app.dependency_overrides[get_feedback_logger] = lambda: mock_logger
+	payload = {"type": "VOTE", "vote": "up", "dataset_uri": "https://example.com/d"}
+	response = client.post("/v1/feedback/submit", json=payload)
+	assert response.status_code == 200
+	mock_logger.log_feedback.assert_called_once_with(payload)
 
 
 def test_feedback_submit_rejects_oversized_query(client):
