@@ -25,23 +25,17 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import { useSearchStore } from "../stores/searchStore";
 import type { SearchHit } from "../stores/searchStore";
 import FeedbackWidget from "./FeedbackWidget";
-import TypeChip from "./TypeChip";
+import TypeChip, { CHIP_SX } from "./TypeChip";
 import ScoreChip from "./ScoreChip";
 import RelationshipPanel from "./RelationshipPanel";
 import { TypeIcon } from "../typeMeta";
 import { curieToUrl } from "../ontology";
 
-export interface GroupedResult {
-  dataset: { uri: string; title: string; properties: Record<string, unknown> };
-  hits: SearchHit[]; // sorted desc by score
-}
-
 interface Props {
-  group: GroupedResult;
+  hits: SearchHit[]; // all matches for one dataset, sorted desc by score
   index: number;
 }
 
-const CHIP_SX = { fontSize: "0.65rem", height: 20 };
 const ICON_CHIP_SX = {
   ...CHIP_SX,
   "& .MuiChip-icon": { fontSize: "0.8rem", color: "text.disabled", mx: 0.4 },
@@ -260,12 +254,14 @@ function MetaTable({ items, type }: { items: MetaItem[]; type: string }) {
   );
 }
 
-export default function DatasetResultCard({ group, index }: Props) {
-  const { query } = useSearchStore();
+export default function DatasetResultCard({ hits, index }: Props) {
+  const query = useSearchStore((s) => s.query);
   const [expanded, setExpanded] = useState(false);
   const [metaOpen, setMetaOpen] = useState(false);
-  const { dataset, hits } = group;
-  const items = metaItems(dataset.properties);
+  const { entity } = hits[0];
+  const uri = entity["@id"] ?? "";
+  const title = entity.label || uri;
+  const items = metaItems(entity);
   const topScore = hits[0].score;
 
   return (
@@ -283,13 +279,13 @@ export default function DatasetResultCard({ group, index }: Props) {
               sx={{ fontSize: "0.875rem", fontWeight: 600, flex: 1, lineHeight: 1.4 }}
             >
               <Link
-                href={dataset.uri}
+                href={uri}
                 target="_blank"
                 rel="noopener noreferrer"
                 underline="hover"
                 color="primary"
               >
-                {dataset.title || dataset.uri}
+                {title}
               </Link>
             </Typography>
             <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", flexShrink: 0 }}>
@@ -304,13 +300,13 @@ export default function DatasetResultCard({ group, index }: Props) {
             sx={{ fontSize: "0.72rem", mb: 0.5 }}
           >
             <Link
-              href={dataset.uri}
+              href={uri}
               target="_blank"
               rel="noopener noreferrer"
               underline="hover"
               sx={{ color: "text.secondary" }}
             >
-              {dataset.uri}
+              {uri}
             </Link>
           </Typography>
 
@@ -338,7 +334,7 @@ export default function DatasetResultCard({ group, index }: Props) {
                 <RelationshipPanel
                   key={i}
                   hit={r}
-                  fallbackTitle={dataset.title}
+                  fallbackTitle={title}
                   divider={i > 0}
                 />
               ))}
@@ -361,7 +357,7 @@ export default function DatasetResultCard({ group, index }: Props) {
                   context={{
                     type: "result",
                     index,
-                    dataset_uri: dataset.uri,
+                    dataset_uri: uri,
                     query,
                   }}
                 />

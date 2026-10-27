@@ -18,6 +18,7 @@ from models import (
 	DatasetPage,
 	EntityList,
 	GeoCodedLocation,
+	JsonLd,
 	OntologyDescription,
 	PageMeta,
 	Relation,
@@ -38,11 +39,13 @@ from ontology import (
 	ROLE_CLASSES,
 	ROLES,
 	compact_iri,
+	expand_curie,
 	role_class,
 	role_individual,
 )
 from pydantic import BaseModel
 from queries import (
+	TEXT_REL_TYPES,
 	count_datasets_query,
 	escape_fts_query,
 	expand_theme_query,
@@ -75,9 +78,9 @@ def _entity_link(entity: BaseEntity) -> ResourceLink:
 	)
 
 
-def _result(model: BaseModel, entities: list[BaseEntity] = ()) -> ToolResult:
+def _result(model: JsonLd, entities: list[BaseEntity] = ()) -> ToolResult:
 	"""Structured JSON-LD result, mirrored as JSON text, plus a resource link per identified entity."""
-	data = model.dump() if hasattr(model, "dump") else model.model_dump(mode="json")
+	data = model.dump()
 	links = [_entity_link(e) for e in {e.id: e for e in entities if e.id}.values()]
 	return ToolResult(content=[TextContent(type="text", text=json.dumps(data)), *links], structured_content=data)
 
@@ -87,9 +90,11 @@ def _jsonld_resource(doc: dict[str, Any]) -> ResourceResult:
 	return ResourceResult([ResourceContent(json.dumps(doc), mime_type=_LD_JSON)])
 
 
-def _iri(curie: str) -> str:
-	prefix, _, local = curie.partition(":")
-	return PREFIXES[prefix] + local if prefix in PREFIXES else curie
+def _resolve_type(param: str, curie: str) -> str:
+	label = resolve_label(compact_iri(curie))
+	if label is None:
+		raise ToolError(f"Unknown {param} '{curie}'. Valid types: {sorted(NODE_TYPES.values())}.")
+	return label
 
 
 def _check_role(role: Optional[str]) -> Optional[str]:
@@ -153,9 +158,8 @@ def describe_ontology() -> OntologyDescription:
 		counts = session.execute_read(ontology_counts_query)
 
 	def info(curie: str, count: int) -> TermInfo:
-		return TermInfo(curie=curie, iri=_iri(curie), definition=DEFINITIONS.get(curie), count=count)
+		return TermInfo(curie=curie, iri=expand_curie(curie), definition=DEFINITIONS.get(curie), count=count)
 
-	label_for = {v: k for k, v in NODE_TYPES.items()}
 	rel_type_for = {v: k for k, v in RELATION_TYPES.items()}
 	role_counts: dict[str, int] = {}
 	for eidc_role, n in counts["roles"].items():
@@ -165,7 +169,7 @@ def describe_ontology() -> OntologyDescription:
 	return OntologyDescription(
 		doo_version=MAPPING["doo_version"],
 		prefixes=PREFIXES,
-		types=[info(c, counts["labels"].get(label_for[c], 0)) for c in NODE_TYPES.values()],
+		types=[info(c, counts["labels"].get(resolve_label(c), 0)) for c in NODE_TYPES.values()],
 		predicates=[
 			info(p, counts["rel_types"].get(rel_type_for[p], 0) if p in rel_type_for else counts["predicates"].get(p, 0))
 			for p in PREDICATES
@@ -177,7 +181,7 @@ def describe_ontology() -> OntologyDescription:
 		roles=[
 			RoleInfo(
 				curie=r,
-				iri=_iri(r),
+				iri=expand_curie(r),
 				role_class=role_class(r),
 				eidc_roles=sorted(k for k, v in ROLES.items() if v == r),
 				count=role_counts.get(r, 0),
@@ -284,9 +288,7 @@ def search(
 	target_label = None
 	if return_type:
 		return_type = compact_iri(return_type)
-		target_label = resolve_label(return_type)
-		if target_label is None:
-			raise ToolError(f"Unknown return_type '{return_type}'. Valid types: {sorted(NODE_TYPES.values())}.")
+		target_label = _resolve_type("return_type", return_type)
 	max_hops = max(0, min(hops, 5))
 
 	filters = {
@@ -349,7 +351,7 @@ def search(
 	reranked = reranking_enabled and len(results) > 1
 	if reranked:
 		t3 = time.perf_counter()
-		pairs = [(query, h.entity.label or h.excerpt or h.entity.id or "") for h in results]
+		pairs = [(query, h.excerpt or h.entity.label or h.entity.id or "") for h in results]
 		ce_scores = reranker.predict(pairs, batch_size=128, show_progress_bar=False)
 		for hit, score in zip(results, ce_scores):
 			hit.score = float(score)
@@ -398,11 +400,7 @@ def get_relations(
 	    JSON-LD document of Relation objects in @graph.
 	"""
 	logger.info(f"get_relations: {uri} [{direction}, predicate={predicate}, target_type={target_type}]")
-	target_label = None
-	if target_type:
-		target_label = resolve_label(compact_iri(target_type))
-		if target_label is None:
-			raise ToolError(f"Unknown target_type '{target_type}'. Valid types: {sorted(NODE_TYPES.values())}.")
+	target_label = _resolve_type("target_type", target_type) if target_type else None
 	predicate = compact_iri(predicate) if predicate else None
 
 	with neo4j_driver.session(database="neo4j") as session:
@@ -410,7 +408,7 @@ def get_relations(
 
 	relations = []
 	for row in rows:
-		if row["rel_type"] in ("PART_OF", "DESCRIPTION_OF", "LINEAGE_OF", "SUPPORTING_DOC_OF"):
+		if row["rel_type"] in TEXT_REL_TYPES:
 			continue  # text chunk plumbing, not ontology relations; use get_content
 		if target_label and target_label not in row["node_labels"]:
 			continue

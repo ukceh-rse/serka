@@ -43,7 +43,7 @@ async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable
 	) -> list:
 		args: dict[str, Any] = {"query": q, "hops": hops}
 		if return_type:
-			args["return_type"] = NODE_TYPES.get(str(return_type), str(return_type))
+			args["return_type"] = NODE_TYPES[return_type]
 		if published_after:
 			args["published_after"] = published_after
 		if published_before:

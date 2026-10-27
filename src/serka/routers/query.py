@@ -3,20 +3,14 @@ from enum import StrEnum
 from fastapi import APIRouter, Depends, Query
 
 from serka.feedback import FeedbackLogger
+from serka.ontology import NODE_TYPES
 from serka.routers.dependencies import get_feedback_logger, get_mcp_search
 
 router = APIRouter(prefix="/query", tags=["Query"])
 
 
-class ReturnType(StrEnum):
-	Dataset = "Dataset"
-	Person = "Person"
-	Organisation = "Organisation"
-	FundingAgency = "FundingAgency"
-	Grant = "Grant"
-	Concept = "Concept"
-	Document = "Document"
-	DigitalManifestation = "DigitalManifestation"
+# Values are DOO node labels; callers map them to CURIEs via NODE_TYPES
+ReturnType = StrEnum("ReturnType", {label: label for label in NODE_TYPES})
 
 
 @router.get("/semantic", summary="Perform a semantic search in the graph database")

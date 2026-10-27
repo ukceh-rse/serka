@@ -7,17 +7,14 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import HistoryIcon from '@mui/icons-material/History'
 import { EXAMPLE_SEARCHES } from '../constants'
 import { useSearchStore, type ReturnType } from '../stores/searchStore'
+import mapping from '../doo_mapping.json'
+import { typeMeta } from '../typeMeta'
+
+const NODE_TYPES: Record<ReturnType, string> = mapping.node_types
 
 const RETURN_TYPES: { value: string; label: string }[] = [
   { value: 'Any', label: 'All' },
-  { value: 'Dataset', label: 'Datasets' },
-  { value: 'Person', label: 'People' },
-  { value: 'Organisation', label: 'Organisations' },
-  { value: 'FundingAgency', label: 'Funders' },
-  { value: 'Grant', label: 'Grants' },
-  { value: 'Concept', label: 'Concepts' },
-  { value: 'Document', label: 'Documents' },
-  { value: 'DigitalManifestation', label: 'Supporting documents' },
+  ...(Object.keys(NODE_TYPES) as ReturnType[]).map((value) => ({ value, label: typeMeta(NODE_TYPES[value]).label })),
 ]
 
 interface Props {

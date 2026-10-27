@@ -20,9 +20,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import Masonry from "@mui/lab/Masonry";
 import SearchBar from "../components/SearchBar";
-import DatasetResultCard, {
-  type GroupedResult,
-} from "../components/DatasetResultCard";
+import DatasetResultCard from "../components/DatasetResultCard";
 import EntityResultCard from "../components/EntityResultCard";
 import AISummary from "../components/AISummary";
 import { useSearchStore } from "../stores/searchStore";
@@ -30,17 +28,7 @@ import type { Entity, ReturnType, SearchHit } from "../stores/searchStore";
 import { search } from "../api/search";
 import { streamSummary } from "../api/chat";
 import { EXAMPLE_SEARCHES } from "../constants";
-import { TypeIcon } from "../typeMeta";
-
-const TYPE_SECTION_LABEL: Record<string, string> = {
-  "dcat:Dataset": "Datasets",
-  "foaf:Person": "People",
-  "foaf:Organization": "Organisations",
-  "frapo:Grant": "Grants",
-  "skos:Concept": "Concepts",
-  "fabio:Expression": "Documents",
-  "fabio:DigitalManifestation": "Documents",
-};
+import { TYPE_ORDER, TypeIcon, typeMeta } from "../typeMeta";
 
 // Results within a type box are always sorted by score (inherited from unifiedGroups), so the
 // first group's top hit is that type's best score. Boxes whose best score trails the overall
@@ -56,28 +44,12 @@ function initialCountFor(topScore: number, bestOverallScore: number): number {
   return 1;
 }
 
-const ENTITY_TYPE_ORDER = [
-  "foaf:Person",
-  "foaf:Organization",
-  "frapo:Grant",
-  "skos:Concept",
-  "fabio:Expression",
-  "fabio:DigitalManifestation",
-];
+const ENTITY_TYPE_ORDER = TYPE_ORDER.filter((t) => t !== "dcat:Dataset");
 
 type EntityGroup = { entity: Entity; hits: SearchHit[] };
 
 const isDataset = (g: EntityGroup) => g.entity["@type"].includes("dcat:Dataset");
 const entityKey = (e: Entity) => e["@id"] ?? "";
-
-const toGroupedResult = (g: EntityGroup): GroupedResult => ({
-  dataset: {
-    uri: entityKey(g.entity),
-    title: g.entity.label ?? entityKey(g.entity),
-    properties: g.entity,
-  },
-  hits: g.hits,
-});
 
 export default function ResultsPage() {
   const [params, setSearchParams] = useSearchParams();
@@ -204,8 +176,8 @@ export default function ResultsPage() {
       .sort((a, b) => b.hits[0].score - a.hits[0].score);
   }, [results]);
 
-  const datasetGroups = useMemo<GroupedResult[]>(
-    () => unifiedGroups.filter(isDataset).map(toGroupedResult),
+  const datasetGroups = useMemo(
+    () => unifiedGroups.filter(isDataset),
     [unifiedGroups],
   );
 
@@ -233,7 +205,7 @@ export default function ResultsPage() {
     return Array.from(byType.entries())
       .map(([type, groups]) => ({
         type,
-        label: TYPE_SECTION_LABEL[type] ?? type,
+        label: typeMeta(type).label,
         groups,
         topScore: groups[0].hits[0].score,
       }))
@@ -400,7 +372,7 @@ export default function ResultsPage() {
                           isDatasetType ? (
                             <DatasetResultCard
                               key={entityKey(g.entity)}
-                              group={toGroupedResult(g)}
+                              hits={g.hits}
                               index={i}
                             />
                           ) : (
@@ -418,7 +390,7 @@ export default function ResultsPage() {
                             isDatasetType ? (
                               <DatasetResultCard
                                 key={entityKey(g.entity)}
-                                group={toGroupedResult(g)}
+                                hits={g.hits}
                                 index={initialCount + i}
                               />
                             ) : (
@@ -504,8 +476,8 @@ export default function ResultsPage() {
                     <Masonry columns={{ xs: 1, sm: 2, md: 3 }} spacing={2}>
                       {datasetGroups.map((g, i) => (
                         <DatasetResultCard
-                          key={g.dataset.uri}
-                          group={g}
+                          key={entityKey(g.entity)}
+                          hits={g.hits}
                           index={i}
                         />
                       ))}
@@ -514,8 +486,8 @@ export default function ResultsPage() {
                     <Stack spacing={2}>
                       {datasetGroups.map((g, i) => (
                         <DatasetResultCard
-                          key={g.dataset.uri}
-                          group={g}
+                          key={entityKey(g.entity)}
+                          hits={g.hits}
                           index={i}
                         />
                       ))}
@@ -528,7 +500,7 @@ export default function ResultsPage() {
                 ENTITY_TYPE_ORDER.filter((t) => entityByType.has(t)).map(
                   (type) => {
                     const groups = entityByType.get(type)!;
-                    const label = TYPE_SECTION_LABEL[type] ?? type;
+                    const label = typeMeta(type).label;
                     return (
                       <Box
                         key={type}

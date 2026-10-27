@@ -34,10 +34,10 @@ class Neo4jGraphWriter:
 			"MERGE (n:embedded {uri: node.uri}) "
 			f"SET n:{labels} "
 			"SET n += node "
-			"RETURN n",
+			"RETURN count(*) AS written",
 			nodes=batch,
 		)
-		return len(result.data())
+		return result.single()["written"]
 
 	@staticmethod
 	def _write_text_chunk_nodes(tx, batch: List[Dict[str, Any]]) -> int:
@@ -45,10 +45,10 @@ class Neo4jGraphWriter:
 			"UNWIND $docs as doc "
 			"MERGE (d:TextChunk:embedded {doc_id: doc.id}) "
 			"SET d.content = doc.content, d.embedding = doc.embedding, d.field = doc.field "
-			"RETURN d",
+			"RETURN count(*) AS written",
 			docs=batch,
 		)
-		return len(result.data())
+		return result.single()["written"]
 
 	@staticmethod
 	def _write_assoc_relations(tx, batch: List[Tuple]) -> int:
@@ -56,39 +56,6 @@ class Neo4jGraphWriter:
 			"UNWIND $relations as rel "
 			"MATCH (a:embedded {uri: rel[0]}), (b:embedded {uri: rel[1]}) "
 			"MERGE (a)-[:ASSOCIATED_WITH {role: rel[2]}]->(b) "
-			"RETURN count(*) AS created",
-			relations=batch,
-		)
-		return result.data()[0]["created"]
-
-	@staticmethod
-	def _write_affiliated_relations(tx, batch: List[Tuple]) -> int:
-		result = tx.run(
-			"UNWIND $relations as rel "
-			"MATCH (a:embedded {uri: rel[0]}), (b:embedded {uri: rel[1]}) "
-			"MERGE (a)-[:AFFILIATED_WITH]->(b) "
-			"RETURN count(*) AS created",
-			relations=batch,
-		)
-		return result.data()[0]["created"]
-
-	@staticmethod
-	def _write_theme_relations(tx, batch: List[Tuple]) -> int:
-		result = tx.run(
-			"UNWIND $relations as rel "
-			"MATCH (a:embedded {uri: rel[0]}), (b:embedded {uri: rel[1]}) "
-			"MERGE (a)-[:HAS_THEME]->(b) "
-			"RETURN count(*) AS created",
-			relations=batch,
-		)
-		return result.data()[0]["created"]
-
-	@staticmethod
-	def _write_broader_relations(tx, batch: List[Tuple]) -> int:
-		result = tx.run(
-			"UNWIND $relations as rel "
-			"MATCH (a:embedded {uri: rel[0]}), (b:embedded {uri: rel[1]}) "
-			"MERGE (a)-[:BROADER]->(b) "
 			"RETURN count(*) AS created",
 			relations=batch,
 		)
@@ -108,21 +75,11 @@ class Neo4jGraphWriter:
 		return result.data()[0]["created"]
 
 	@staticmethod
-	def _write_part_of_relations(tx, batch: List[Tuple]) -> int:
+	def _write_pair_relations(tx, rel_type: str, src: str, batch: List[Tuple]) -> int:
+		# src matches rel[0], e.g. "embedded {uri: rel[0]}" or "TextChunk {doc_id: rel[0]}"
 		result = tx.run(
 			"UNWIND $relations as rel "
-			"MATCH (a:TextChunk {doc_id: rel[0]}), (b:embedded {uri: rel[1]}) "
-			"MERGE (a)-[:PART_OF]->(b) "
-			"RETURN count(*) AS created",
-			relations=batch,
-		)
-		return result.data()[0]["created"]
-
-	@staticmethod
-	def _write_field_relations(tx, rel_type: str, batch: List[Tuple]) -> int:
-		result = tx.run(
-			"UNWIND $relations as rel "
-			f"MATCH (a:TextChunk {{doc_id: rel[0]}}), (b:embedded {{uri: rel[1]}}) "
+			f"MATCH (a:{src}), (b:embedded {{uri: rel[1]}}) "
 			f"MERGE (a)-[:{rel_type}]->(b) "
 			"RETURN count(*) AS created",
 			relations=batch,
@@ -184,118 +141,70 @@ class Neo4jGraphWriter:
 	) -> Dict[str, Any]:
 		docs_as_dicts = [self.doc_to_dict(doc) for doc in docs]
 
-		supporting_docs = [d for d in docs_as_dicts if d["field"] == "SUPPORTING_DOC"]
+		# Supporting files without a filename get a TextChunk but no DigitalManifestation
+		named_supporting_docs = [d for d in docs_as_dicts if d["field"] == "SUPPORTING_DOC" and d["filename"]]
 		field_docs = [d for d in docs_as_dicts if d["field"] != "SUPPORTING_DOC"]
 
 		# Supporting files have no bibliographic identity — DigitalManifestation (FRBR
 		# embodiment level), not Document/fabio:Expression which is for citable works.
-		manifestation_nodes = list(
-			{n["uri"]: n for d in supporting_docs if (n := self._supporting_doc_node(d))}.values()
+		all_nodes = {
+			**nodes,
+			"DigitalManifestation": [self._supporting_doc_node(d) for d in named_supporting_docs],
+		}
+
+		pair_relations: Dict[str, Tuple[str, List[Tuple]]] = {
+			rel_type: ("embedded {uri: rel[0]}", relations.get(rel_type, []))
+			for rel_type in ("AFFILIATED_WITH", "HAS_THEME", "BROADER")
+		}
+		# TextChunk → DigitalManifestation for supporting docs
+		pair_relations["PART_OF"] = (
+			"TextChunk {doc_id: rel[0]}",
+			[(d["id"], self._supporting_doc_uri(d)) for d in named_supporting_docs],
 		)
-		# Citation Document nodes come through nodes["Document"] from extractors
-		doc_nodes = list({n["uri"]: n for n in nodes.get("Document", [])}.values())
+		# TextChunk → Dataset field relations (DESCRIPTION_OF, LINEAGE_OF, etc.)
+		for d in field_docs:
+			rel_type = d["field"].upper() + "_OF"
+			pair_relations.setdefault(rel_type, ("TextChunk {doc_id: rel[0]}", []))[1].append((d["id"], d["uri"]))
+
+		# RELATION — from extractor (dataset↔dataset, citations) + supporting docs
+		predicate_rels = list(relations.get("RELATION", [])) + [
+			(d["uri"], "dcterms:references", self._supporting_doc_uri(d)) for d in named_supporting_docs
+		]
 
 		with self._driver.session(database="neo4j") as session:
+			def write_all(fn, items: list, *args) -> int:
+				return sum(session.execute_write(fn, *args, batch) for batch in _batched(items, _BATCH_SIZE))
+
 			# Phase 1: create lookup indexes before MERGE (idempotent)
 			session.execute_write(Neo4jGraphWriter._create_lookup_indexes)
 
 			# Phase 2: upsert nodes
-			node_result: Dict[str, int] = {}
-			for node_type, node_list in nodes.items():
-				if node_type == "Document":
-					continue  # handled below as doc_nodes
-				unique = list({n["uri"]: n for n in node_list}.values())
-				node_result[node_type] = sum(
-					session.execute_write(Neo4jGraphWriter._write_nodes, node_type, batch)
-					for batch in _batched(unique, _BATCH_SIZE)
-				) if unique else 0
-
-			node_result["Document"] = sum(
-				session.execute_write(Neo4jGraphWriter._write_nodes, "Document", batch)
-				for batch in _batched(doc_nodes, _BATCH_SIZE)
-			) if doc_nodes else 0
-
-			node_result["DigitalManifestation"] = sum(
-				session.execute_write(Neo4jGraphWriter._write_nodes, "DigitalManifestation", batch)
-				for batch in _batched(manifestation_nodes, _BATCH_SIZE)
-			) if manifestation_nodes else 0
-
+			node_result: Dict[str, int] = {
+				node_type: write_all(
+					Neo4jGraphWriter._write_nodes, list({n["uri"]: n for n in node_list}.values()), node_type
+				)
+				for node_type, node_list in all_nodes.items()
+			}
 			# TextChunk nodes (field docs + supporting docs)
-			all_chunks = list({d["id"]: d for d in field_docs + supporting_docs}.values())
-			node_result["TextChunk"] = sum(
-				session.execute_write(Neo4jGraphWriter._write_text_chunk_nodes, batch)
-				for batch in _batched(all_chunks, _BATCH_SIZE)
-			) if all_chunks else 0
+			node_result["TextChunk"] = write_all(
+				Neo4jGraphWriter._write_text_chunk_nodes, list({d["id"]: d for d in docs_as_dicts}.values())
+			)
 
 			# Phase 3: relationships
 			relation_result: Dict[str, int] = {}
-
 			if assoc := relations.get("ASSOCIATED_WITH"):
-				unique = list({(r[0], r[1], r[2]): r for r in assoc}.values())
-				relation_result["ASSOCIATED_WITH"] = sum(
-					session.execute_write(Neo4jGraphWriter._write_assoc_relations, batch)
-					for batch in _batched(unique, _BATCH_SIZE)
+				relation_result["ASSOCIATED_WITH"] = write_all(
+					Neo4jGraphWriter._write_assoc_relations, list({tuple(r[:3]) for r in assoc})
 				)
-
-			if affil := relations.get("AFFILIATED_WITH"):
-				unique = list(set(affil))
-				relation_result["AFFILIATED_WITH"] = sum(
-					session.execute_write(Neo4jGraphWriter._write_affiliated_relations, batch)
-					for batch in _batched(unique, _BATCH_SIZE)
+			if predicate_rels:
+				relation_result["RELATION"] = write_all(
+					Neo4jGraphWriter._write_predicate_relations, list({tuple(r[:3]) for r in predicate_rels})
 				)
-
-			if themes := relations.get("HAS_THEME"):
-				unique = list(set(themes))
-				relation_result["HAS_THEME"] = sum(
-					session.execute_write(Neo4jGraphWriter._write_theme_relations, batch)
-					for batch in _batched(unique, _BATCH_SIZE)
-				)
-
-			if broader := relations.get("BROADER"):
-				unique = list(set(broader))
-				relation_result["BROADER"] = sum(
-					session.execute_write(Neo4jGraphWriter._write_broader_relations, batch)
-					for batch in _batched(unique, _BATCH_SIZE)
-				)
-
-			# RELATION — from extractor (dataset↔dataset, citations) + supporting docs
-			supp_rels = [
-				(d["uri"], "dcterms:references", self._supporting_doc_uri(d))
-				for d in supporting_docs
-				if d.get("filename")
-			]
-			all_predicate_rels = list(relations.get("RELATION", [])) + supp_rels
-			if all_predicate_rels:
-				unique = list({(r[0], r[1], r[2]): r for r in all_predicate_rels}.values())
-				relation_result["RELATION"] = sum(
-					session.execute_write(Neo4jGraphWriter._write_predicate_relations, batch)
-					for batch in _batched(unique, _BATCH_SIZE)
-				)
-
-			# TextChunk → Document (PART_OF) for supporting docs
-			part_of = [
-				(d["id"], self._supporting_doc_uri(d))
-				for d in supporting_docs
-				if d.get("filename")
-			]
-			if part_of:
-				unique = list(set(part_of))
-				relation_result["PART_OF"] = sum(
-					session.execute_write(Neo4jGraphWriter._write_part_of_relations, batch)
-					for batch in _batched(unique, _BATCH_SIZE)
-				)
-
-			# TextChunk → Dataset field relations (DESCRIPTION_OF, LINEAGE_OF, etc.)
-			field_rel_map: Dict[str, List[Tuple]] = {}
-			for d in field_docs:
-				rel_type = d["field"].upper() + "_OF"
-				field_rel_map.setdefault(rel_type, []).append((d["id"], d["uri"]))
-			for rel_type, rel_list in field_rel_map.items():
-				unique = list(set(rel_list))
-				relation_result[rel_type] = sum(
-					session.execute_write(Neo4jGraphWriter._write_field_relations, rel_type, batch)
-					for batch in _batched(unique, _BATCH_SIZE)
-				)
+			for rel_type, (src, rels) in pair_relations.items():
+				if rels:
+					relation_result[rel_type] = write_all(
+						Neo4jGraphWriter._write_pair_relations, list(set(rels)), rel_type, src
+					)
 
 			# Phase 4: build search indexes
 			session.execute_write(Neo4jGraphWriter._create_search_indexes)
