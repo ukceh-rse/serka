@@ -7,8 +7,8 @@ class Settings(BaseSettings):
 	# Neo4j
 	neo4j_host: str = "localhost"
 	neo4j_port: int = 7687
-	neo4j_username: str
-	neo4j_password: str
+	neo4j_username: Optional[str] = None
+	neo4j_password: Optional[str] = None
 
 	# Feedback
 	feedback_log_path: str = "feedback.jsonl"
