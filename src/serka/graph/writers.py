@@ -5,6 +5,9 @@ from neo4j import GraphDatabase
 
 _BATCH_SIZE = 500
 
+# Extractor node type -> Neo4j labels, where a type adds to another (a funder is an Organisation)
+_NODE_LABELS: Dict[str, str] = {"FundingAgency": "Organisation:FundingAgency"}
+
 
 def _batched(lst: list, n: int):
 	for i in range(0, len(lst), n):
@@ -23,9 +26,13 @@ class Neo4jGraphWriter:
 
 	@staticmethod
 	def _write_nodes(tx, node_type: str, batch: List[Dict[str, Any]]) -> int:
+		# MERGE on uri alone: the node may already exist as an unlabelled RELATION target
+		# or under another type (an Organisation that is also a FundingAgency).
+		labels = _NODE_LABELS.get(node_type, node_type)
 		result = tx.run(
 			"UNWIND $nodes as node "
-			f"MERGE (n:{node_type}:embedded {{uri: node.uri}}) "
+			"MERGE (n:embedded {uri: node.uri}) "
+			f"SET n:{labels} "
 			"SET n += node "
 			"RETURN n",
 			nodes=batch,
@@ -77,6 +84,17 @@ class Neo4jGraphWriter:
 		return result.data()[0]["created"]
 
 	@staticmethod
+	def _write_broader_relations(tx, batch: List[Tuple]) -> int:
+		result = tx.run(
+			"UNWIND $relations as rel "
+			"MATCH (a:embedded {uri: rel[0]}), (b:embedded {uri: rel[1]}) "
+			"MERGE (a)-[:BROADER]->(b) "
+			"RETURN count(*) AS created",
+			relations=batch,
+		)
+		return result.data()[0]["created"]
+
+	@staticmethod
 	def _write_predicate_relations(tx, batch: List[Tuple]) -> int:
 		# 3-tuples: (src_uri, predicate, tgt_uri). Target may not exist → MERGE placeholder.
 		result = tx.run(
@@ -121,7 +139,7 @@ class Neo4jGraphWriter:
 		tx.run("CREATE VECTOR INDEX vec_lookup IF NOT EXISTS FOR (n:embedded) ON n.embedding")
 		tx.run(
 			"CREATE FULLTEXT INDEX ft_search IF NOT EXISTS "
-			"FOR (n:Dataset|TextChunk|Person|Organisation|Concept) ON EACH [n.title, n.content, n.name, n.label] "
+			"FOR (n:Dataset|TextChunk|Person|Organisation|Concept|Grant) ON EACH [n.title, n.content, n.name, n.label] "
 			"OPTIONS {indexConfig: {`fulltext.analyzer`: 'english'}}"
 		)
 
@@ -230,6 +248,13 @@ class Neo4jGraphWriter:
 				unique = list(set(themes))
 				relation_result["HAS_THEME"] = sum(
 					session.execute_write(Neo4jGraphWriter._write_theme_relations, batch)
+					for batch in _batched(unique, _BATCH_SIZE)
+				)
+
+			if broader := relations.get("BROADER"):
+				unique = list(set(broader))
+				relation_result["BROADER"] = sum(
+					session.execute_write(Neo4jGraphWriter._write_broader_relations, batch)
 					for batch in _batched(unique, _BATCH_SIZE)
 				)
 

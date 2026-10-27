@@ -4,7 +4,7 @@ from haystack.components.preprocessors import DocumentSplitter
 from serka.graph.embedders import BedrockNodeEmbedder, CachedDocumentEmbedder
 from serka.graph.writers import Neo4jGraphWriter
 from serka.graph.extractors import EntityExtractor, TextExtractor, DocumentTruncator
-from serka.fetchers import EIDCFetcher, LegiloFetcher
+from serka.fetchers import ConceptHierarchyFetcher, EIDCFetcher, LegiloFetcher
 from typing import Optional, Callable
 from haystack_integrations.components.embedders.amazon_bedrock import (
 	AmazonBedrockTextEmbedder,
@@ -68,6 +68,7 @@ class PipelineBuilder:
 			LegiloFetcher(username=self.legilo_user, password=self.legilo_password),
 		)
 		p.add_component("ent_extractor", EntityExtractor())
+		p.add_component("concept_hierarchy", ConceptHierarchyFetcher())
 		p.add_component("text_extractor", TextExtractor(["description", "lineage"]))
 		p.add_component("joiner", DocumentJoiner())
 		p.add_component(
@@ -99,8 +100,10 @@ class PipelineBuilder:
 		p.connect("truncator", "doc_emb")
 		p.connect("doc_emb", "graph_writer.docs")
 
-		p.connect("ent_extractor", "node_emb")
+		p.connect("ent_extractor.nodes", "concept_hierarchy.nodes")
+		p.connect("ent_extractor.relationships", "concept_hierarchy.relationships")
+		p.connect("concept_hierarchy.nodes", "node_emb")
 		p.connect("node_emb", "graph_writer.nodes")
-		p.connect("ent_extractor.relationships", "graph_writer.relations")
+		p.connect("concept_hierarchy.relationships", "graph_writer.relations")
 		return p
 

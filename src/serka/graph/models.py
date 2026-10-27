@@ -25,6 +25,16 @@ class Concept(StructuredNode):
 	uri = StringProperty(unique_index=True, required=True)
 	label = StringProperty()
 	scheme = StringProperty()
+	broader = RelationshipTo("Concept", "BROADER")
+
+
+class Grant(StructuredNode):
+	"""A funding award — frapo:Grant. Funders are Organisation nodes also labelled FundingAgency."""
+
+	uri = StringProperty(unique_index=True, required=True)
+	title = StringProperty()
+	grant_number = StringProperty()
+	see_also = StringProperty()
 
 
 class Document(StructuredNode):
