@@ -24,6 +24,7 @@ from pathlib import Path
 import httpx
 from fastmcp import Client
 from neo4j import GraphDatabase
+from pyld import jsonld
 
 ROOT = Path(__file__).resolve().parent.parent
 IDS_FILE = ROOT / "tests" / "smoke" / "datasets.txt"
@@ -41,6 +42,8 @@ RETURN_TYPES = {
 	"Dataset": "dcat:Dataset",
 	"Person": "foaf:Person",
 	"Organisation": "foaf:Organization",
+	"FundingAgency": "frapo:FundingAgency",
+	"Grant": "frapo:Grant",
 	"Concept": "skos:Concept",
 	"Document": "fabio:Expression",
 	"DigitalManifestation": "fabio:DigitalManifestation",
@@ -114,19 +117,31 @@ def search_raw(q: str, **params) -> httpx.Response:
 	return httpx.get(f"{API}/v1/query/semantic", params={"q": q, **params}, timeout=120)
 
 
-def mcp_call(tool: str, args: dict):
-	async def _call():
-		async with Client(MCP) as client:
-			result = await client.call_tool(tool, args, raise_on_error=False)
-		if not result.content:  # an empty list result comes back with no content
-			return []
-		text = result.content[0].text
-		try:
-			return json.loads(text)
-		except json.JSONDecodeError:
-			return text
+def mcp(fn):
+	"""Run `fn(client)` against the MCP server and return its result."""
 
-	return asyncio.run(_call())
+	async def _run():
+		async with Client(MCP) as client:
+			return await fn(client)
+
+	return asyncio.run(_run())
+
+
+def mcp_call(tool: str, args: dict | None = None):
+	"""Call a tool without raising on tool errors; returns the CallToolResult."""
+	return mcp(lambda c: c.call_tool(tool, args or {}, raise_on_error=False))
+
+
+def mcp_data(tool: str, args: dict | None = None) -> dict:
+	"""A tool's structured (JSON-LD) result; an error result yields {}."""
+	result = mcp_call(tool, args)
+	return {} if result.is_error else result.structured_content
+
+
+def graph_query(cypher: str, **params) -> list[dict]:
+	with GraphDatabase.driver(f"bolt://localhost:{NEO4J_PORT}", auth=("neo4j", NEO4J_PASSWORD)) as d:
+		records, _, _ = d.execute_query(cypher, **params)
+	return [r.data() for r in records]
 
 
 def chat(message: str) -> str:
@@ -173,6 +188,7 @@ def run_tests() -> list[str]:
 		)
 
 	run_doo_tests(check)
+	run_ontology_tests(check)
 
 	answer = chat(CHAT_QUESTION)
 	log(f"chat answer: {answer.strip()}")
@@ -207,7 +223,7 @@ def run_doo_tests(check) -> None:
 		hits = r.json() if r.status_code == 200 else []
 		check(
 			f"return_type={rt} yields only {doo_type}",
-			r.status_code == 200 and all(doo_type in h["entity"]["type"] for h in hits),
+			r.status_code == 200 and all(doo_type in h["entity"]["@type"] for h in hits),
 			f"status {r.status_code}: {r.text[:200]}",
 		)
 
@@ -229,32 +245,206 @@ def run_doo_tests(check) -> None:
 	check("contributor roles are DOO terms", all(":" in p for p in preds), f"predicates: {preds}")
 
 	res = mcp_call("search", {"query": "pike", "return_type": "foaf:Persn"})
-	check("unknown return_type is an error", isinstance(res, dict) and "Unknown return_type" in res.get("msg", ""), str(res))
+	check("unknown return_type is a tool error", res.is_error and "Unknown return_type" in res.content[0].text, str(res)[:200])
 
-	res = mcp_call("search", {"query": "data", "limit": 3})
-	check("search respects limit", isinstance(res, list) and 0 < len(res) <= 3, f"{len(res)} hits")
+	hits = mcp_data("search", {"query": "data", "limit": 3}).get("@graph", [])
+	check("search respects limit", 0 < len(hits) <= 3, f"{len(hits)} hits")
 
-	res = mcp_call("search", {"query": ORPHAN_TOKEN})
+	hits = mcp_data("search", {"query": ORPHAN_TOKEN}).get("@graph", [])
 	check(
 		"orphan TextChunk returned as hit",
-		isinstance(res, list) and any(ORPHAN_TOKEN in (h.get("excerpt") or "") for h in res),
-		str(res)[:200],
+		any(ORPHAN_TOKEN in (h.get("excerpt") or "") for h in hits),
+		str(hits)[:200],
 	)
 
-	res = mcp_call("search", {"query": "data", "return_type": "dcat:Dataset", "min_citations": 10**6})
-	check("min_citations excludes datasets", res == [], str(res)[:200])
-	res = mcp_call("search", {"query": "data", "return_type": "dcat:Dataset", "min_citations": 1})
+	res = mcp_data("search", {"query": "data", "return_type": "dcat:Dataset", "min_citations": 10**6})
+	check("min_citations excludes datasets", res.get("@graph") == [], str(res)[:200])
+	hits = mcp_data("search", {"query": "data", "return_type": "dcat:Dataset", "min_citations": 1}).get("@graph")
 	check(
 		"min_citations keeps cited datasets",
-		isinstance(res, list) and all((h["entity"]["properties"].get("citations") or 0) >= 1 for h in res),
-		str(res)[:200],
+		hits is not None and all((h["entity"].get("citations") or 0) >= 1 for h in hits),
+		str(hits)[:200],
 	)
 
 	if supp is None:
 		check("get_content includes supporting docs", False, "no supporting doc chunks in graph")
 	else:
-		content = mcp_call("get_content", {"uri": supp["uri"]})
-		check("get_content includes supporting docs", supp["content"] in str(content), str(content)[:200])
+		res = mcp_call("get_content", {"uri": supp["uri"]})
+		content = "" if res.is_error else res.content[0].text
+		check("get_content includes supporting docs", supp["content"] in content, content[:200])
+
+
+WINDERMERE = "https://catalogue.ceh.ac.uk/id/4b255fc4-33d3-4beb-a238-37e1a8cf32a2"
+CHERNOBYL = "https://catalogue.ceh.ac.uk/id/ae02f4e8-9486-4b47-93ef-e49dd9ddecd4"
+CHERNOBYL_PARENT = "https://catalogue.ceh.ac.uk/id/3124e313-7ce8-4832-98b4-2357fab9284c"
+NERC = "https://ror.org/02b5d8509"
+DCAT = "http://www.w3.org/ns/dcat#"
+MAPPING = json.loads((ROOT / "mcp-server" / "src" / "serka-mcp" / "doo_mapping.json").read_text())
+
+
+def run_ontology_tests(check) -> None:
+	"""Checks for DOO conformance of ingestion and the MCP tools (doo_review_and_mcp_recommendations.md)."""
+	count = lambda cypher, **kw: graph_query(cypher, **kw)[0]["n"]
+
+	# --- ingestion: fields that were previously dropped -------------------------------------
+	n = count(
+		"MATCH (:Dataset {uri: $uri})-[r:RELATION {predicate: 'dcterms:isPartOf'}]->({uri: $parent}) RETURN count(r) AS n",
+		uri=CHERNOBYL, parent=CHERNOBYL_PARENT,
+	)
+	check("dataset relationships ingested as CURIE predicates", n == 1, f"{n} isPartOf edges")
+	n = count("MATCH ()-[r:RELATION]->() WHERE r.predicate STARTS WITH 'http' RETURN count(r) AS n")
+	check("no full-IRI relation predicates", n == 0, f"{n} edges")
+	for role in ("pointOfContact", "rightsHolder"):
+		n = count("MATCH (:Dataset)-[r:ASSOCIATED_WITH {role: $role}]->() RETURN count(r) AS n", role=role)
+		check(f"{role} associations ingested", n > 0, "none")
+	n = count(
+		"MATCH (:Dataset {uri: $uri})-[:HAS_THEME]->(c:Concept {label: 'Radioecology'}) RETURN count(c) AS n", uri=CHERNOBYL
+	)
+	check("keywordsTheme concepts ingested", n == 1, f"{n} Radioecology themes")
+	n = count(
+		"MATCH (d:Dataset)-[:ASSOCIATED_WITH {role: 'author'}]->(p:Person)-[:AFFILIATED_WITH]->(o:Organisation), "
+		"(d)-[:ASSOCIATED_WITH {role: 'author'}]->(o) RETURN count(o) AS n"
+	)
+	check("organisations don't inherit their members' author role", n == 0, f"{n} organisations credited as author")
+
+	# --- ingestion: funding (frapo) and concept hierarchy (skos:broader) ---------------------
+	n = count("MATCH (d:Dataset)-[:RELATION {predicate: 'doo:originatingGrant'}]->(:Grant) RETURN count(DISTINCT d) AS n")
+	check("datasets linked to their grants", n == 6, f"{n} datasets with grants")
+	n = count(
+		"MATCH (f:Organisation:FundingAgency {uri: $nerc})-[:RELATION {predicate: 'frapo:awards'}]->(g:Grant) "
+		"RETURN count(g) AS n",
+		nerc=NERC,
+	)
+	check("NERC is a FundingAgency awarding the grants", n == 7, f"{n} grants awarded by NERC")
+	n = count("MATCH (:Concept)-[r:BROADER]->(:Concept) RETURN count(r) AS n")
+	check("GEMET broader hierarchy ingested", n > 0, "no BROADER edges")
+
+	# --- MCP: server metadata and schemas ----------------------------------------------------
+	init = mcp(lambda c: asyncio.sleep(0, c.initialize_result))
+	check("server instructions describe DOO", "Digital Objects Ontology" in (init.instructions or ""), str(init.instructions)[:200])
+	tools = {t.name: t for t in mcp(lambda c: c.list_tools())}
+	jsonld_tools = ["search", "get_entity", "get_relations", "get_contributors", "find_by_contributor", "list_datasets"]
+	check(
+		"JSON-LD tools declare @context/@graph output schemas",
+		all({"@context", "@graph"} <= set((tools[t].outputSchema or {}).get("properties", {})) for t in jsonld_tools),
+		str({t: list((tools[t].outputSchema or {}).get("properties", {})) for t in jsonld_tools}),
+	)
+	entity_schemas = tools["search"].outputSchema["properties"]["@graph"]["items"]["properties"]["entity"]["anyOf"]
+	check(
+		"output schema annotates entity classes",
+		{"dcat:Dataset", "foaf:Person", "frapo:Grant"} <= {o.get("x-rdf-type") for o in entity_schemas},
+		str([o.get("x-rdf-type") for o in entity_schemas]),
+	)
+
+	# --- MCP: search output is JSON-LD with resource links ------------------------------------
+	res = mcp_call("search", {"query": "pike in Windermere", "return_type": "dcat:Dataset", "limit": 5})
+	data = res.structured_content or {}
+	hits = data.get("@graph", [])
+	check("search returns @context and typed @graph", bool(hits) and "@context" in data and all(
+		h["entity"].get("@id") and h["entity"].get("@type") == ["dcat:Dataset"] for h in hits
+	), str(data)[:300])
+	check("search text content mirrors structured content", json.loads(res.content[0].text) == data)
+	links = {str(c.uri) for c in res.content if c.type == "resource_link"}
+	check("search links each hit as a doo://entity resource", {f"doo://entity/{h['entity']['@id']}" for h in hits} <= links, str(links))
+	try:
+		expanded = jsonld.expand(data)
+		types = {t for hit in expanded[0]["@graph"] for t in hit["urn:serka:entity"][0]["@type"]}
+		check("search output expands to DOO IRIs", types == {f"{DCAT}Dataset"}, str(types))
+	except Exception as e:
+		check("search output expands to DOO IRIs", False, repr(e))
+
+	contents = mcp(lambda c: c.read_resource(f"doo://entity/{WINDERMERE}"))
+	doc = json.loads(contents[0].text)
+	check(
+		"doo://entity resource is a JSON-LD document",
+		doc.get("@id") == WINDERMERE and "@context" in doc and contents[0].mimeType == "application/ld+json",
+		f"{contents[0].mimeType}: {contents[0].text[:200]}",
+	)
+
+	# --- MCP: discovery ------------------------------------------------------------------------
+	desc = mcp_data("describe_ontology")
+	types = {t["curie"]: t["count"] for t in desc.get("types", [])}
+	predicates = {t["curie"]: t["count"] for t in desc.get("predicates", [])}
+	roles = {t["curie"]: t["count"] for t in desc.get("roles", [])}
+	check("describe_ontology counts datasets", types.get("dcat:Dataset") == 10, str(types))
+	check(
+		"describe_ontology counts grants, hierarchy and roles",
+		types.get("frapo:Grant", 0) > 0 and predicates.get("skos:broader", 0) > 0 and roles.get("pro:author", 0) > 0,
+		f"{types} {predicates} {roles}",
+	)
+
+	# --- MCP: DOO role pattern -----------------------------------------------------------------
+	attributions = mcp_data("get_contributors", {"dataset_uri": WINDERMERE}).get("@graph", [])
+	check(
+		"contributor roles are DOO role individuals with their class",
+		bool(attributions) and all(
+			a["@type"] == "pro:RoleInTime" and MAPPING["role_classes"].get(a["role"]) == a["role_type"] for a in attributions
+		),
+		str([(a["role"], a["role_type"]) for a in attributions]),
+	)
+	check(
+		"Windermere roles include author, curator and contact",
+		{"pro:author", "scoro:data-curator", "scoro:contact-person"} <= {a["role"] for a in attributions},
+		str({a["role"] for a in attributions}),
+	)
+	data_roles = mcp_data("get_contributors", {"dataset_uri": WINDERMERE, "role": "scoro:DataRole"}).get("@graph", [])
+	check(
+		"role class filter returns only roles of that class",
+		bool(data_roles) and all(a["role_type"] == "scoro:DataRole" for a in data_roles),
+		str([a["role"] for a in data_roles]),
+	)
+	author = next((a["agent"]["@id"] for a in attributions if a["role"] == "pro:author"), None)
+	found = mcp_data("find_by_contributor", {"agent_uri": author or "", "role": "pro:PublishingRole"}).get("@graph", [])
+	check("find_by_contributor filters by role class", WINDERMERE in {e["@id"] for e in found}, str(found)[:200])
+
+	# --- MCP: relations, funding and theme expansion -------------------------------------------
+	rels = mcp_data("get_relations", {"uri": CHERNOBYL, "predicate": "dcterms:isPartOf"}).get("@graph", [])
+	check("get_relations follows dcterms:isPartOf", [r["target"]["@id"] for r in rels] == [CHERNOBYL_PARENT], str(rels)[:200])
+	[grant] = graph_query("MATCH (d:Dataset)-[:RELATION {predicate: 'doo:originatingGrant'}]->(g:Grant) RETURN g.uri AS uri LIMIT 1")
+	funded = mcp_data("get_relations", {"uri": grant["uri"], "direction": "incoming", "predicate": "doo:originatingGrant"})
+	check(
+		"grants lead back to the datasets they funded",
+		any("dcat:Dataset" in r["target"]["@type"] for r in funded.get("@graph", [])),
+		str(funded)[:200],
+	)
+	hits = mcp_data("search", {"query": "South Asian Nitrogen Hub", "return_type": "frapo:Grant"}).get("@graph", [])
+	check(
+		"search finds grants by award title",
+		any("Nitrogen" in (h["entity"].get("title") or "") for h in hits),
+		str([h["entity"].get("title") for h in hits]),
+	)
+
+	rows = graph_query(
+		"MATCH (d:Dataset)-[:HAS_THEME]->(c:Concept)-[:BROADER]->(p:Concept) "
+		"RETURN d.uri AS dataset, d.title AS title, p.uri AS broader LIMIT 1"
+	)
+	if not rows:
+		check("theme filter expands broader concepts", False, "no dataset theme with a broader concept")
+	else:
+		row = rows[0]
+		res = mcp_data("search", {"query": row["title"], "return_type": "dcat:Dataset", "theme": row["broader"]})
+		expansion = (res.get("meta") or {}).get("theme_expansion") or {}
+		check(
+			"theme filter expands broader concepts",
+			row["dataset"] in {h["entity"]["@id"] for h in res.get("@graph", [])} and expansion.get(row["broader"], 0) > 1,
+			f"expansion {expansion}, hits {[h['entity']['@id'] for h in res.get('@graph', [])]}",
+		)
+	res = mcp_call("search", {"query": "pike", "theme": "no such theme zzz"})
+	check("unknown theme is a tool error", res.is_error and "Unknown theme" in res.content[0].text, str(res)[:200])
+
+	res = mcp_data("search", {
+		"query": "pike", "return_type": "foaf:Person",
+		"bounding_box": {"south": 54.0, "north": 54.6, "west": -3.2, "east": -2.7},
+	})
+	check("search meta warns about dataset-only filters", any("bounding_box" in w for w in res["meta"]["warnings"]), str(res.get("meta")))
+
+	# --- API: new return types --------------------------------------------------------------------
+	r = search_raw("South Asian Nitrogen Hub", return_type="Grant")
+	check(
+		"API return_type=Grant yields grants",
+		r.status_code == 200 and len(r.json()) > 0 and all("frapo:Grant" in h["entity"]["@type"] for h in r.json()),
+		f"status {r.status_code}: {r.text[:200]}",
+	)
 
 
 def main() -> int:
