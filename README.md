@@ -47,6 +47,8 @@ To ingest specific datasets instead, pass a file of EIDC IDs (one per line): `uv
 
 `uv run scripts/smoke-test.py` runs an end-to-end check. It starts a throwaway Neo4j container on port 17687 and ingests the 10 datasets in `tests/smoke/datasets.txt`. It then starts the MCP server (port 8000) and API (port 19000), runs some search and chat queries, and tears everything down. It needs podman or docker and AWS credentials for Bedrock.
 
+Add `--keep-running` to leave Neo4j, the MCP server and the API up after the checks so you can sanity-check things by hand. The script prints the endpoints and the command to start the UI against them. Press Ctrl+C to tear everything down.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, commit guidelines, and release process.

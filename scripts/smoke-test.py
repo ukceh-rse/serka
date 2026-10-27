@@ -8,8 +8,10 @@ Requires podman (or docker), AWS credentials for Bedrock, and a .env file with
 Legilo credentials. Your normal Neo4j data is not touched.
 
 	uv run scripts/smoke-test.py
+	uv run scripts/smoke-test.py --keep-running  # leave the stack up for manual testing
 """
 
+import argparse
 import asyncio
 import json
 import os
@@ -447,7 +449,28 @@ def run_ontology_tests(check) -> None:
 	)
 
 
+def wait_for_manual_testing() -> None:
+	log("stack left running for manual testing:")
+	log(f"  API:    {API}  (docs at {API}/docs)")
+	log(f"  MCP:    {MCP}")
+	log(f"  Neo4j:  bolt://localhost:{NEO4J_PORT}  (neo4j / {NEO4J_PASSWORD})")
+	log(f"  UI:     cd ui && VITE_PROXY_TARGET={API} npm run dev")
+	log("press Ctrl+C to tear everything down")
+	try:
+		while True:
+			time.sleep(3600)
+	except KeyboardInterrupt:
+		print()
+
+
 def main() -> int:
+	parser = argparse.ArgumentParser(description="End-to-end smoke test for Serka.")
+	parser.add_argument(
+		"--keep-running", action="store_true",
+		help="after the checks, leave Neo4j, the MCP server and the API running until Ctrl+C",
+	)
+	args = parser.parse_args()
+
 	runtime = shutil.which("podman") or shutil.which("docker")
 	if not runtime:
 		log("podman or docker is required")
@@ -492,6 +515,9 @@ def main() -> int:
 		wait_for(lambda: httpx.get(f"{API}/health").status_code == 200, "Serka API")
 
 		failures = run_tests()
+		if args.keep_running:
+			log(f"{len(failures)} check(s) failed: {', '.join(failures)}" if failures else "all checks passed")
+			wait_for_manual_testing()
 	finally:
 		for p in procs:
 			p.terminate()
