@@ -94,7 +94,8 @@ def _rrf_merge(lists: list[list[SearchHit]], k: int = 60) -> list[SearchHit]:
 	items: dict[str, SearchHit] = {}
 	for ranked_list in lists:
 		for rank, hit in enumerate(ranked_list, start=1):
-			key = hit.entity.id
+			# TextChunk hits have no URI; key them on their content so distinct chunks don't collapse.
+			key = hit.entity.id or hit.excerpt or ""
 			scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
 			if key not in items:
 				items[key] = hit
@@ -283,7 +284,7 @@ def search(
 
 		if reranking_enabled and len(results) > 1:
 			t3 = time.perf_counter()
-			pairs = [(query, h.entity.label or h.entity.id) for h in results]
+			pairs = [(query, h.entity.label or h.excerpt or h.entity.id) for h in results]
 			ce_scores = reranker.predict(pairs, batch_size=128, show_progress_bar=False)
 			for hit, score in zip(results, ce_scores):
 				hit.score = float(score)
