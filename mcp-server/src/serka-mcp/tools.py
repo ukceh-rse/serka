@@ -53,8 +53,7 @@ def _rel_to_predicate(rel_type: str, rel_props: dict) -> str:
 	if rel_type == "RELATION":
 		return rel_props.get("predicate", "dcterms:relation")
 	if rel_type == "ASSOCIATED_WITH":
-		role = rel_props.get("role", "")
-		return ROLE_TERMS.get(role, role or "pro:RoleInTime")
+		return ROLE_TERMS.get(rel_props.get("role", ""), "pro:RoleInTime")
 	return _REL_TYPE_TO_PREDICATE.get(rel_type, rel_type)
 
 
