@@ -1,67 +1,99 @@
-import { Box, Card, CardContent, Link, Typography } from "@mui/material";
+import { useState } from "react";
+import { Box, Button, Card, CardContent, Collapse, Link, Typography } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import { useSearchStore } from "../stores/searchStore";
 import type { SearchHit } from "../stores/searchStore";
+import FeedbackWidget from "./FeedbackWidget";
 import TypeChip from "./TypeChip";
+import ScoreChip from "./ScoreChip";
 import RelationshipPanel from "./RelationshipPanel";
 import { TypeIcon, typeMeta } from "../typeMeta";
 
 interface Props {
   hits: SearchHit[]; // all matches for one entity, sorted desc by score
+  index?: number;
 }
 
-const HIGHLIGHT_PROPS = ["orcid", "url", "notation", "scheme"];
-
-export default function EntityResultCard({ hits }: Props) {
+export default function EntityResultCard({ hits, index = 0 }: Props) {
+  const { query } = useSearchStore();
+  const [expanded, setExpanded] = useState(false);
   const { entity } = hits[0];
   const typeUri = entity.type[0] ?? "";
-
-  const extras = HIGHLIGHT_PROPS.flatMap((k) => {
-    const v = entity.properties[k];
-    return v ? [`${k}: ${v}`] : [];
-  });
+  const topScore = hits[0].score;
 
   return (
     <Card variant="outlined">
-      <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
-        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-          <Box sx={{ flex: 1 }}>
-            <Typography
-              component="h2"
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.75,
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                lineHeight: 1.4,
-                mb: extras.length > 0 ? 0.5 : 0,
-              }}
-            >
-              <TypeIcon type={typeUri} />
-              <Link
-                href={entity.id}
-                target="_blank"
-                rel="noopener noreferrer"
-                underline="hover"
-                color="primary"
+      <CardContent
+        sx={{ p: 1.5, display: "flex", gap: 1.25, "&:last-child": { pb: 1.5 } }}
+      >
+        <TypeIcon type={typeUri} fontSize="1.75rem" />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+            <Box sx={{ flex: 1 }}>
+              <Typography
+                component="h2"
+                sx={{ fontSize: "0.875rem", fontWeight: 600, lineHeight: 1.4 }}
               >
-                {entity.label ?? entity.id}
-              </Link>
-            </Typography>
-            {extras.length > 0 && (
+                <Link
+                  href={entity.id}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  underline="hover"
+                  color="primary"
+                >
+                  {entity.label ?? entity.id}
+                </Link>
+              </Typography>
               <Typography
                 variant="body2"
-                color="text.secondary"
-                sx={{ fontSize: "0.75rem" }}
+                noWrap
+                sx={{ fontSize: "0.72rem", mb: 0.5 }}
               >
-                {extras.join(" · ")}
+                <Link
+                  href={entity.id}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  underline="hover"
+                  sx={{ color: "text.secondary" }}
+                >
+                  {entity.id}
+                </Link>
               </Typography>
+            </Box>
+            <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", flexShrink: 0 }}>
+              <ScoreChip score={topScore} />
+              <TypeChip type={typeUri} color={typeMeta(typeUri).color} />
+            </Box>
+          </Box>
+
+          <Collapse in={expanded} unmountOnExit>
+            <Box>
+              {hits.map((hit, i) => (
+                <RelationshipPanel key={i} hit={hit} divider={i > 0} />
+              ))}
+            </Box>
+          </Collapse>
+
+          <Box sx={{ display: "flex", alignItems: "center", mt: 0.75 }}>
+            <Button
+              size="small"
+              color="primary"
+              onClick={() => setExpanded((v) => !v)}
+              startIcon={expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              sx={{ fontSize: "0.7rem", textTransform: "none" }}
+            >
+              {expanded ? "Show less" : "Show more"}
+            </Button>
+            {expanded && (
+              <Box sx={{ ml: "auto" }}>
+                <FeedbackWidget
+                  context={{ type: "result", index, entity_uri: entity.id, query }}
+                />
+              </Box>
             )}
           </Box>
-          <TypeChip type={typeUri} color={typeMeta(typeUri).color} />
         </Box>
-        {hits.map((hit, i) => (
-          <RelationshipPanel key={i} hit={hit} />
-        ))}
       </CardContent>
     </Card>
   );

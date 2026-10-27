@@ -20,14 +20,16 @@ import GavelIcon from "@mui/icons-material/Gavel";
 import LinkIcon from "@mui/icons-material/Link";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import CloseIcon from "@mui/icons-material/Close";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import { useSearchStore } from "../stores/searchStore";
 import type { SearchHit } from "../stores/searchStore";
 import FeedbackWidget from "./FeedbackWidget";
 import TypeChip from "./TypeChip";
+import ScoreChip from "./ScoreChip";
 import RelationshipPanel from "./RelationshipPanel";
 import { TypeIcon } from "../typeMeta";
 import { curieToUrl } from "../ontology";
-import { EXPANDED_MAX } from "../constants";
 
 export interface GroupedResult {
   dataset: { uri: string; title: string; properties: Record<string, unknown> };
@@ -37,7 +39,6 @@ export interface GroupedResult {
 interface Props {
   group: GroupedResult;
   index: number;
-  collapsedLines: number;
 }
 
 const CHIP_SX = { fontSize: "0.65rem", height: 20 };
@@ -46,13 +47,10 @@ const ICON_CHIP_SX = {
   "& .MuiChip-icon": { fontSize: "0.8rem", color: "text.disabled", mx: 0.4 },
   "& .MuiChip-label": { px: 0 },
 };
-// Shared panel styling for the metadata table and match-result blocks.
+// Plain (no background/border box, no divider — this is always the first/only content block).
 const PANEL_SX = {
-  bgcolor: "action.hover",
-  border: 1,
-  borderColor: "divider",
-  borderRadius: 1,
-  p: 1,
+  mt: 0.5,
+  mb: 1,
 };
 
 const str = (v: unknown): string | null => (v == null ? null : String(v));
@@ -198,8 +196,6 @@ function MetaChips({ items }: { items: MetaItem[] }) {
         gap: 0.5,
         flexWrap: "wrap",
         alignItems: "center",
-        justifyContent: "flex-end",
-        flexShrink: 0,
       }}
     >
       {items.slice(0, 3).map((it) => (
@@ -258,120 +254,113 @@ function MetaTable({ items, type }: { items: MetaItem[]; type: string }) {
   );
 }
 
-export default function DatasetResultCard({
-  group,
-  index,
-  collapsedLines,
-}: Props) {
+export default function DatasetResultCard({ group, index }: Props) {
   const { query } = useSearchStore();
   const [expanded, setExpanded] = useState(false);
   const [metaOpen, setMetaOpen] = useState(false);
   const { dataset, hits } = group;
-  const top = hits[0];
-  const needsExpand = hits.length > 1 || (top.excerpt?.length ?? 0) > 120;
   const items = metaItems(dataset.properties);
+  const topScore = hits[0].score;
 
   return (
     <Card variant="outlined">
-      <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
-        <Box
-          sx={{ display: "flex", alignItems: "flex-start", gap: 0.5, mb: 0.5 }}
-        >
-          <Typography
-            component="h2"
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 0.75,
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              flex: 1,
-              lineHeight: 1.4,
-            }}
+      <CardContent
+        sx={{ p: 1.5, display: "flex", gap: 1.25, "&:last-child": { pb: 1.5 } }}
+      >
+        <TypeIcon type="dcat:Dataset" fontSize="1.75rem" />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box
+            sx={{ display: "flex", alignItems: "flex-start", gap: 0.5, mb: 0.5 }}
           >
-            <TypeIcon type="dcat:Dataset" />
+            <Typography
+              component="h2"
+              sx={{ fontSize: "0.875rem", fontWeight: 600, flex: 1, lineHeight: 1.4 }}
+            >
+              <Link
+                href={dataset.uri}
+                target="_blank"
+                rel="noopener noreferrer"
+                underline="hover"
+                color="primary"
+              >
+                {dataset.title || dataset.uri}
+              </Link>
+            </Typography>
+            <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", flexShrink: 0 }}>
+              <ScoreChip score={topScore} />
+              <TypeChip type="dcat:Dataset" color="primary" />
+            </Box>
+          </Box>
+
+          <Typography
+            variant="body2"
+            noWrap
+            sx={{ fontSize: "0.72rem", mb: 0.5 }}
+          >
             <Link
               href={dataset.uri}
               target="_blank"
               rel="noopener noreferrer"
               underline="hover"
-              color="primary"
+              sx={{ color: "text.secondary" }}
             >
-              {dataset.title || dataset.uri}
+              {dataset.uri}
             </Link>
           </Typography>
-          {!metaOpen && items.length > 0 && <MetaChips items={items} />}
-          {!metaOpen && <TypeChip type="dcat:Dataset" color="primary" />}
-          {items.length > 3 && (
-            <MetaToggleChip
-              open={metaOpen}
-              onClick={() => setMetaOpen((v) => !v)}
-            />
+
+          {items.length > 0 && (
+            <Box
+              sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", mb: 0.5 }}
+            >
+              {!metaOpen && <MetaChips items={items} />}
+              {items.length > 3 && (
+                <MetaToggleChip
+                  open={metaOpen}
+                  onClick={() => setMetaOpen((v) => !v)}
+                />
+              )}
+            </Box>
           )}
-        </Box>
 
-        <Collapse in={metaOpen} unmountOnExit>
-          <MetaTable items={items} type="dcat:Dataset" />
-        </Collapse>
+          <Collapse in={metaOpen} unmountOnExit>
+            <MetaTable items={items} type="dcat:Dataset" />
+          </Collapse>
 
-        <Box
-          sx={(theme) => ({
-            position: "relative",
-            ...(!expanded &&
-              needsExpand && {
-                "&::after": {
-                  content: '""',
-                  position: "absolute",
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: "1.5rem",
-                  background: `linear-gradient(transparent, ${theme.palette.background.paper})`,
-                  pointerEvents: "none",
-                },
-              }),
-          })}
-        >
-          <Box
-            sx={{
-              maxHeight: expanded ? EXPANDED_MAX : `${collapsedLines * 1.5}rem`,
-              overflow: "hidden",
-              transition: "max-height 0.3s ease-in-out",
-            }}
-          >
-            {hits.map((r, i) => (
-              <RelationshipPanel
-                key={i}
-                hit={r}
-                fallbackTitle={dataset.title}
-              />
-            ))}
-          </Box>
-        </Box>
+          <Collapse in={expanded} unmountOnExit>
+            <Box>
+              {hits.map((r, i) => (
+                <RelationshipPanel
+                  key={i}
+                  hit={r}
+                  fallbackTitle={dataset.title}
+                  divider={i > 0}
+                />
+              ))}
+            </Box>
+          </Collapse>
 
-        {needsExpand && (
-          <Box sx={{ display: "flex", justifyContent: "center", mt: "4px" }}>
+          <Box sx={{ display: "flex", alignItems: "center", mt: 0.75 }}>
             <Button
               size="small"
               color="primary"
               onClick={() => setExpanded((v) => !v)}
+              startIcon={expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
               sx={{ fontSize: "0.7rem", textTransform: "none" }}
             >
               {expanded ? "Show less" : "Show more"}
             </Button>
-          </Box>
-        )}
-
-        <Box sx={{ display: "flex", alignItems: "center", mt: 0.75 }}>
-          <Box sx={{ ml: "auto" }}>
-            <FeedbackWidget
-              context={{
-                type: "result",
-                index,
-                dataset_uri: dataset.uri,
-                query,
-              }}
-            />
+            {expanded && (
+              <Box sx={{ ml: "auto" }}>
+                <FeedbackWidget
+                  context={{
+                    type: "result",
+                    index,
+                    dataset_uri: dataset.uri,
+                    query,
+                  }}
+                />
+              </Box>
+            )}
           </Box>
         </Box>
       </CardContent>

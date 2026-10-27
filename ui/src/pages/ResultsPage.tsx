@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Box,
+  Button,
   Card,
   CardContent,
+  Collapse,
   Container,
   Divider,
   IconButton,
@@ -14,6 +16,8 @@ import {
 } from "@mui/material";
 import ViewModuleIcon from "@mui/icons-material/ViewModule";
 import ViewListIcon from "@mui/icons-material/ViewList";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import Masonry from "@mui/lab/Masonry";
 import SearchBar from "../components/SearchBar";
 import DatasetResultCard, {
@@ -26,19 +30,37 @@ import type { Entity, ReturnType, SearchHit } from "../stores/searchStore";
 import { search } from "../api/search";
 import { streamSummary } from "../api/chat";
 import { EXAMPLE_SEARCHES } from "../constants";
+import { TypeIcon } from "../typeMeta";
 
 const TYPE_SECTION_LABEL: Record<string, string> = {
+  "dcat:Dataset": "Datasets",
   "foaf:Person": "People",
   "foaf:Organization": "Organisations",
   "skos:Concept": "Concepts",
   "fabio:Expression": "Documents",
+  "fabio:DigitalManifestation": "Documents",
 };
+
+// Results within a type box are always sorted by score (inherited from unifiedGroups), so the
+// first group's top hit is that type's best score. Boxes whose best score trails the overall
+// best by a wide margin start collapsed to 1-2 items instead of the full 3 — a big relevance
+// gap is a signal the type is a weaker match, not worth as much initial screen space.
+const INITIAL_COUNT_MAX = 3;
+
+function initialCountFor(topScore: number, bestOverallScore: number): number {
+  if (bestOverallScore <= 0) return INITIAL_COUNT_MAX;
+  const ratio = topScore / bestOverallScore;
+  if (ratio >= 0.85) return INITIAL_COUNT_MAX;
+  if (ratio >= 0.6) return 2;
+  return 1;
+}
 
 const ENTITY_TYPE_ORDER = [
   "foaf:Person",
   "foaf:Organization",
   "skos:Concept",
   "fabio:Expression",
+  "fabio:DigitalManifestation",
 ];
 
 type EntityGroup = { entity: Entity; hits: SearchHit[] };
@@ -195,6 +217,30 @@ export default function ResultsPage() {
     return byType;
   }, [unifiedGroups]);
 
+  // Type boxes for the unfiltered ("Any") view: one box per DOO type, each internally sorted
+  // by score (inherited from unifiedGroups), boxes ordered by their own best score descending.
+  const typeSections = useMemo(() => {
+    const byType = new Map<string, EntityGroup[]>();
+    for (const g of unifiedGroups) {
+      const type = isDataset(g) ? "dcat:Dataset" : (g.entity.type[0] ?? "unknown");
+      if (!byType.has(type)) byType.set(type, []);
+      byType.get(type)!.push(g);
+    }
+    return Array.from(byType.entries())
+      .map(([type, groups]) => ({
+        type,
+        label: TYPE_SECTION_LABEL[type] ?? type,
+        groups,
+        topScore: groups[0].hits[0].score,
+      }))
+      .sort((a, b) => b.topScore - a.topScore);
+  }, [unifiedGroups]);
+
+  const [expandedTypes, setExpandedTypes] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setExpandedTypes({});
+  }, [q, rt]);
+
   const hasResults = unifiedGroups.length > 0;
 
   const [viewMode, setViewMode] = useState<"masonry" | "list">("list");
@@ -301,18 +347,114 @@ export default function ResultsPage() {
                 <strong>{q}</strong>"
               </Typography>
               <Stack spacing={2}>
-                {unifiedGroups.map((g, i) =>
-                  isDataset(g) ? (
-                    <DatasetResultCard
-                      key={g.entity.id}
-                      group={toGroupedResult(g)}
-                      index={i}
-                      collapsedLines={5}
-                    />
-                  ) : (
-                    <EntityResultCard key={g.entity.id} hits={g.hits} />
-                  ),
-                )}
+                {typeSections.map((section) => {
+                  const bestOverallScore = typeSections[0].topScore;
+                  const initialCount = Math.min(
+                    initialCountFor(section.topScore, bestOverallScore),
+                    section.groups.length,
+                  );
+                  const expanded = expandedTypes[section.type] ?? false;
+                  const initial = section.groups.slice(0, initialCount);
+                  const extra = section.groups.slice(initialCount);
+                  const isDatasetType = section.type === "dcat:Dataset";
+                  const canCollapse = extra.length > 0;
+
+                  return (
+                    <Box
+                      key={section.type}
+                      sx={{
+                        border: 1,
+                        borderColor: "divider",
+                        borderRadius: 2,
+                        p: 2,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 0.75,
+                          mb: 1.5,
+                        }}
+                      >
+                        <TypeIcon type={section.type} />
+                        <Typography
+                          variant="subtitle2"
+                          sx={{ fontWeight: 600 }}
+                        >
+                          {section.label}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                        >
+                          ({section.groups.length})
+                        </Typography>
+                      </Box>
+                      <Stack spacing={1.5}>
+                        {initial.map((g, i) =>
+                          isDatasetType ? (
+                            <DatasetResultCard
+                              key={g.entity.id}
+                              group={toGroupedResult(g)}
+                              index={i}
+                            />
+                          ) : (
+                            <EntityResultCard
+                              key={g.entity.id}
+                              hits={g.hits}
+                              index={i}
+                            />
+                          ),
+                        )}
+                      </Stack>
+                      <Collapse in={expanded} unmountOnExit>
+                        <Stack spacing={1.5} sx={{ mt: extra.length > 0 ? 1.5 : 0 }}>
+                          {extra.map((g, i) =>
+                            isDatasetType ? (
+                              <DatasetResultCard
+                                key={g.entity.id}
+                                group={toGroupedResult(g)}
+                                index={initialCount + i}
+                              />
+                            ) : (
+                              <EntityResultCard
+                                key={g.entity.id}
+                                hits={g.hits}
+                                index={initialCount + i}
+                              />
+                            ),
+                          )}
+                        </Stack>
+                      </Collapse>
+                      {canCollapse && (
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            setExpandedTypes((s) => ({
+                              ...s,
+                              [section.type]: !expanded,
+                            }))
+                          }
+                          startIcon={
+                            expanded ? (
+                              <ExpandLessIcon />
+                            ) : (
+                              <ExpandMoreIcon />
+                            )
+                          }
+                          sx={{ mt: 1, textTransform: "none" }}
+                        >
+                          {expanded
+                            ? `Show fewer ${section.label.toLowerCase()}`
+                            : `Show more ${section.label.toLowerCase()} (${
+                                section.groups.length - initialCount
+                              } more)`}
+                        </Button>
+                      )}
+                    </Box>
+                  );
+                })}
               </Stack>
             </>
           ) : (
@@ -361,7 +503,6 @@ export default function ResultsPage() {
                           key={g.dataset.uri}
                           group={g}
                           index={i}
-                          collapsedLines={Math.min(g.hits.length * 3 + 2, 20)}
                         />
                       ))}
                     </Masonry>
@@ -372,7 +513,6 @@ export default function ResultsPage() {
                           key={g.dataset.uri}
                           group={g}
                           index={i}
-                          collapsedLines={5}
                         />
                       ))}
                     </Stack>
@@ -400,8 +540,12 @@ export default function ResultsPage() {
                           <strong>{q}</strong>"
                         </Typography>
                         <Stack spacing={1.5}>
-                          {groups.map((g) => (
-                            <EntityResultCard key={g.entity.id} hits={g.hits} />
+                          {groups.map((g, i) => (
+                            <EntityResultCard
+                              key={g.entity.id}
+                              hits={g.hits}
+                              index={i}
+                            />
                           ))}
                         </Stack>
                       </Box>
