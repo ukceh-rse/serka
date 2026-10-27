@@ -133,8 +133,15 @@ class Neo4jGraphWriter:
 			"field": doc.meta.get("field", ""),
 			"uri": doc.meta.get("uri", ""),
 			"filename": doc.meta.get("filename", ""),
+			"source_id": doc.meta.get("source_id", doc.id),
 			"embedding": doc.embedding,
 		}
+
+	@staticmethod
+	def _supporting_doc_uri(doc_dict: Dict[str, Any]) -> str:
+		# Key on the splitter's source_id (parent file id, shared across a file's chunks)
+		# so a file's chunks dedup to one DigitalManifestation node and same-named files stay distinct.
+		return f"{doc_dict['uri']}#{doc_dict['source_id']}"
 
 	@staticmethod
 	def _supporting_doc_node(doc_dict: Dict[str, Any]) -> Dict[str, Any] | None:
@@ -143,7 +150,7 @@ class Neo4jGraphWriter:
 			return None
 		mime_type, _ = mimetypes.guess_type(filename)
 		return {
-			"uri": f"{doc_dict['uri']}#{filename}",
+			"uri": Neo4jGraphWriter._supporting_doc_uri(doc_dict),
 			"title": filename,
 			"format": mime_type or "application/octet-stream",
 		}
@@ -228,7 +235,7 @@ class Neo4jGraphWriter:
 
 			# RELATION — from extractor (dataset↔dataset, citations) + supporting docs
 			supp_rels = [
-				(d["uri"], "dcterms:references", f"{d['uri']}#{d['filename']}")
+				(d["uri"], "dcterms:references", self._supporting_doc_uri(d))
 				for d in supporting_docs
 				if d.get("filename")
 			]
@@ -242,7 +249,7 @@ class Neo4jGraphWriter:
 
 			# TextChunk → Document (PART_OF) for supporting docs
 			part_of = [
-				(d["id"], f"{d['uri']}#{d['filename']}")
+				(d["id"], self._supporting_doc_uri(d))
 				for d in supporting_docs
 				if d.get("filename")
 			]
