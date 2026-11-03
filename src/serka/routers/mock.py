@@ -244,11 +244,111 @@ def _mock_keyword_run(thread_id: str, run_id: str) -> List[str]:
 		"score": 5, "feedback": "Grounded and well cited.",
 	})
 	e.run_finished(thread_id, run_id)
+	return _drain(e)
+
+
+def _drain(e: Any) -> List[str]:
+	"""Closes an Emitter and returns every encoded SSE line it queued."""
 	e.close()
 	lines: List[str] = []
 	while (line := e.queue.get_nowait()) is not None:
 		lines.append(line)
 	return lines
+
+
+_INSIGHT_DRAFT_1 = (
+	"Butterfly numbers have changed over time. The UKBMS has data. "
+	f"See [{_DATASETS[2]['title']}]({_DATASETS[2]['uri']})."
+)
+_INSIGHT_ANSWER = (
+	"Long-term trends in UK butterfly and pollinator populations can be explored with two datasets. "
+	f"The [{_DATASETS[2]['title']}]({_DATASETS[2]['uri']}) provides weekly transect counts from over 2,500 sites "
+	"between 2000 and 2023, so it is the best source for multi-decade trends. "
+	f"The [{_DATASETS[5]['title']}]({_DATASETS[5]['uri']}) adds standardised insect counts from 2017 to 2023, "
+	"alongside floral resource surveys."
+)
+
+
+def _mock_insight_retry_run(thread_id: str, run_id: str) -> List[str]:
+	"""A scripted insight run whose first draft fails evaluation (writing) and is accepted on attempt 2."""
+	from serka.chat.events import Emitter
+
+	e = Emitter()
+	m = _MOCK_MODELS
+	max_attempts = 3
+
+	def step(name: str, model: Optional[str], attempt: int = 1) -> Any:
+		return e.step(name, attempt=attempt, max_attempts=max_attempts, model=model)
+
+	e.run_started(thread_id, run_id)
+	with e.step("classify", attempt=1, max_attempts=None, model=m["classify"]):
+		e.custom("serka.classification", {"inScope": True, "label": "insight", "reason": "Asks about population trends."})
+	with step("route", None):
+		e.metadata(m["synthesize_insight"], m)
+	with step("plan", m["plan_insight"]):
+		e.custom("serka.plan", {
+			"summary": "Find long-term butterfly and pollinator monitoring datasets and compare their coverage.",
+			"steps": [
+				'search {"query": "butterfly monitoring", "return_type": "dcat:Dataset"}',
+				'search {"query": "pollinator monitoring", "return_type": "dcat:Dataset"}',
+			],
+		})
+	with step("execute", m["execute_insight"]):
+		for i, query in enumerate(["butterfly monitoring", "pollinator monitoring"]):
+			call_id = f"mock-insight-search-{i + 1}"
+			e.tool_call_start(call_id, "search", json.dumps({"query": query, "return_type": "dcat:Dataset"}))
+			hits = [_dataset_hit(_DATASETS[2 + 3 * i])] + _MOCK_HITS[:2]
+			e.tool_call_result(call_id, json.dumps({"@graph": hits}))
+	with step("synthesize", m["synthesize_insight"], attempt=1):
+		e.custom("serka.draft", {"attempt": 1, "text": _INSIGHT_DRAFT_1})
+	with step("evaluate", m["evaluate"], attempt=1):
+		e.custom("serka.evaluation", {
+			"attempt": 1, "passed": False, "score": 2, "problem": "writing",
+			"feedback": "Too vague: give the date ranges and mention the pollinator dataset.",
+		})
+	with step("synthesize", m["synthesize_insight"], attempt=2):
+		e.custom("serka.draft", {"attempt": 2, "text": _INSIGHT_ANSWER})
+	with step("evaluate", m["evaluate"], attempt=2):
+		e.custom("serka.evaluation", {
+			"attempt": 2, "passed": True, "score": 4, "problem": "none", "feedback": "Clear, grounded and cited.",
+		})
+	e.text(_INSIGHT_ANSWER)
+	e.custom("serka.outcome", {
+		"status": "accepted", "path": "insight", "attemptsUsed": 2, "maxAttempts": max_attempts,
+		"score": 4, "feedback": "Clear, grounded and cited.",
+	})
+	e.run_finished(thread_id, run_id)
+	return _drain(e)
+
+
+def _mock_refused_run(thread_id: str, run_id: str) -> List[str]:
+	"""A scripted out-of-scope run: classify, then refuse."""
+	from serka import prompts
+	from serka.chat.events import Emitter
+
+	e = Emitter()
+	m = _MOCK_MODELS
+	e.run_started(thread_id, run_id)
+	with e.step("classify", attempt=1, max_attempts=None, model=m["classify"]):
+		e.custom("serka.classification", {"inScope": False, "label": None, "reason": "Not about environmental data."})
+	e.metadata(m["classify"], m)
+	with e.step("refuse", attempt=1, max_attempts=None, model=None):
+		e.text(prompts.REFUSAL_MESSAGE)
+	e.custom("serka.outcome", {
+		"status": "refused", "path": None, "attemptsUsed": 0, "maxAttempts": None, "score": None, "feedback": None,
+	})
+	e.run_finished(thread_id, run_id)
+	return _drain(e)
+
+
+def _select_run(query: str) -> Any:
+	"""Test-mode scenario chosen by the query text: "trend" -> insight retry, "weather" -> refused."""
+	q = query.lower()
+	if "trend" in q:
+		return _mock_insight_retry_run
+	if "weather" in q:
+		return _mock_refused_run
+	return _mock_keyword_run
 
 
 def _matches_return_type(hit: Dict[str, Any], return_type: Optional[str]) -> bool:
@@ -279,14 +379,18 @@ class MockFeedbackLogger:
 
 def mock_stream_fn() -> Any:
 	"""Drop-in replacement for get_stream_fn. Returns a stream handler that replays a
-	scripted keyword run (following the chat event contract) with realistic delays."""
+	scripted run (following the chat event contract) with realistic delays. The query text
+	picks the run: "trend" plays insight with a retry, "weather" a refusal, anything else keyword."""
+	from serka.chat.service import split_messages
 
-	async def _events(thread_id: str, run_id: str) -> AsyncIterator[str]:
-		for line in _mock_keyword_run(thread_id, run_id):
+	async def _events(lines: List[str]) -> AsyncIterator[str]:
+		for line in lines:
 			yield line
 			await asyncio.sleep(0.15)
 
 	def stream(run_input: Any, request: Request) -> Response:
-		return StreamingResponse(_events(run_input.thread_id, run_input.run_id), media_type="text/event-stream")
+		query, _ = split_messages(run_input.messages)
+		lines = _select_run(query)(run_input.thread_id, run_input.run_id)
+		return StreamingResponse(_events(lines), media_type="text/event-stream")
 
 	return stream
