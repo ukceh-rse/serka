@@ -6,12 +6,14 @@ to be developed and tested without Neo4j, Bedrock, or the MCP server.
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from typing import Any, Dict, List, Optional
 
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 
 from serka.ontology import NODE_TYPES
+from serka.settings import Settings
 
 # Fixture datasets. Each becomes a direct SearchHit (matched via its excerpt) and doubles
 # as the "via" anchor for the Person/Organisation/Concept/Document hits below.
@@ -194,24 +196,59 @@ _MOCK_HITS: List[Dict[str, Any]] = [_dataset_hit(d) for d in _DATASETS] + [
 	),
 ]
 
-_MOCK_STREAM_EVENTS = [
-	{"type": "THINKING_START"},
-	{"type": "TOOL_CALL_START", "toolCallName": "search_datasets"},
-	{"type": "TOOL_CALL_START", "toolCallName": "get_dataset_documents"},
-	{
-		"type": "TEXT_MESSAGE_CONTENT",
-		"delta": "Based on the EIDC catalogue, I found several relevant datasets.\n\n",
-	},
-	{
-		"type": "TEXT_MESSAGE_CONTENT",
-		"delta": "The **Long-term soil carbon stocks** dataset (1978–2019) is likely the most directly relevant.\n\n",
-	},
-	{
-		"type": "TEXT_MESSAGE_CONTENT",
-		"delta": "Would you like me to retrieve the full supporting documentation for any of these?",
-	},
-	{"type": "RUN_FINISHED"},
+_MOCK_ANSWER_CHUNKS = [
+	"Soil carbon measurements for UK uplands are available in the ",
+	f"[{_DATASETS[0]['title']}]({_DATASETS[0]['uri']}), ",
+	"which covers 1978–2019 at three sampling depths. Related land cover context can be found in the ",
+	f"[{_DATASETS[4]['title']}]({_DATASETS[4]['uri']}).",
 ]
+# Stage -> default model ID, as the real pipeline reports it in RUN_METADATA.
+_MOCK_MODELS = {
+	name.removeprefix("models_"): f.default
+	for name, f in Settings.model_fields.items()
+	if name.startswith("models_") and name != "models_embedding"
+}
+
+
+def _mock_keyword_run(thread_id: str, run_id: str) -> List[str]:
+	"""A scripted keyword run that follows the chat event contract, as encoded SSE lines."""
+	from serka.chat.events import Emitter
+
+	e = Emitter()
+	m = _MOCK_MODELS
+
+	def step(name: str, model: Optional[str], max_attempts: Optional[int] = 1) -> Any:
+		return e.step(name, attempt=1, max_attempts=max_attempts, model=model)
+
+	e.run_started(thread_id, run_id)
+	with step("classify", m["classify"], max_attempts=None):
+		e.custom("serka.classification", {"inScope": True, "label": "keyword", "reason": "Dataset search."})
+	with step("route", None):
+		e.metadata(m["synthesize_keyword"], m)
+	with step("plan", m["plan_keyword"]):
+		e.custom("serka.plan", {
+			"summary": "Search the catalogue for datasets matching 'soil carbon uplands'.",
+			"steps": ['search {"query": "soil carbon uplands", "return_type": "dcat:Dataset"}'],
+		})
+	with step("execute", None):
+		e.tool_call_start("mock-search", "search", json.dumps({"query": "soil carbon uplands", "return_type": "dcat:Dataset"}))
+		e.tool_call_result("mock-search", json.dumps({"@graph": _MOCK_HITS[:3]}))
+	with step("synthesize", m["synthesize_keyword"]):
+		for chunk in _MOCK_ANSWER_CHUNKS:
+			e.text_delta(chunk)
+	with step("evaluate", m["evaluate"]):
+		e.custom("serka.evaluation", {"attempt": 1, "passed": True, "score": 5, "problem": "none", "feedback": "Grounded and well cited."})
+	e.text_end()
+	e.custom("serka.outcome", {
+		"status": "accepted", "path": "keyword", "attemptsUsed": 1, "maxAttempts": 1,
+		"score": 5, "feedback": "Grounded and well cited.",
+	})
+	e.run_finished(thread_id, run_id)
+	e.close()
+	lines: List[str] = []
+	while (line := e.queue.get_nowait()) is not None:
+		lines.append(line)
+	return lines
 
 
 def _matches_return_type(hit: Dict[str, Any], return_type: Optional[str]) -> bool:
@@ -241,15 +278,15 @@ class MockFeedbackLogger:
 
 
 def mock_stream_fn() -> Any:
-	"""Drop-in replacement for get_stream_fn. Returns a stream handler that
-	yields fake SSE events with realistic delays."""
+	"""Drop-in replacement for get_stream_fn. Returns a stream handler that replays a
+	scripted keyword run (following the chat event contract) with realistic delays."""
 
-	async def _events():
-		for event in _MOCK_STREAM_EVENTS:
-			yield f"data: {json.dumps(event)}\n\n"
-			await asyncio.sleep(0.35)
+	async def _events(thread_id: str, run_id: str) -> AsyncIterator[str]:
+		for line in _mock_keyword_run(thread_id, run_id):
+			yield line
+			await asyncio.sleep(0.15)
 
 	def stream(run_input: Any, request: Request) -> Response:
-		return StreamingResponse(_events(), media_type="text/event-stream")
+		return StreamingResponse(_events(run_input.thread_id, run_input.run_id), media_type="text/event-stream")
 
 	return stream
