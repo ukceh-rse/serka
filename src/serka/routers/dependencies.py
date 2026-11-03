@@ -1,5 +1,3 @@
-import json
-from collections.abc import AsyncGenerator
 from functools import lru_cache
 from typing import Any, Callable
 
@@ -67,41 +65,25 @@ def get_feedback_logger(settings: Settings = Depends(get_settings)) -> FeedbackL
 	return _feedback_logger
 
 
-async def _prepend_metadata(stream: AsyncGenerator[bytes, None], model_id: str) -> AsyncGenerator[bytes, None]:
-	yield f'event: RUN_METADATA\ndata: {json.dumps({"type": "RUN_METADATA", "model": model_id})}\n\n'.encode()
-	async for chunk in stream:
-		yield chunk
-
-
 def get_stream_fn(settings: Settings = Depends(get_settings)) -> StreamFn:
-	"""Builds and returns the chat stream handler for the current config.
+	"""Builds and returns the chat pipeline stream handler for the current config.
 	Override this dependency to swap in a mock stream without touching the chat router."""
 	global _stream_fn
 	if _stream_fn is not None:
 		return _stream_fn
 
 	# Deferred imports so pydantic-ai/bedrock are not required at module load time.
-	from pydantic_ai import Agent
-	from pydantic_ai.mcp import MCPServerStreamableHTTP
-	from pydantic_ai.models.bedrock import BedrockConverseModel
-	from pydantic_ai.ui import SSE_CONTENT_TYPE
-	from pydantic_ai.ui.ag_ui import AGUIAdapter
-	from starlette.responses import StreamingResponse
+	from pydantic_ai.mcp import MCPToolset
 
-	from serka.prompts import AGENT_PROMPT
+	from serka.chat.models import build_stage_models
+	from serka.chat.service import make_stream_fn
 
 	mcp_url = f"http://{settings.mcp_host}:{settings.mcp_port}/mcp"
-	agent = Agent(
-		BedrockConverseModel(settings.models_synthesize_insight),
-		instructions=AGENT_PROMPT,
-		toolsets=[MCPServerStreamableHTTP(mcp_url)],
-	)
 
-	def stream(run_input: Any, request: Request) -> Response:
-		accept = request.headers.get("accept", SSE_CONTENT_TYPE)
-		adapter = AGUIAdapter(agent=agent, run_input=run_input, accept=accept)
-		encoded = adapter.encode_stream(adapter.run_stream())
-		return StreamingResponse(_prepend_metadata(encoded, settings.models_synthesize_insight), media_type=accept)
+	async def call_tool(name: str, args: dict[str, Any]) -> Any:
+		async with Client(mcp_url) as client:
+			result = await client.call_tool(name, args)
+		return result.structured_content
 
-	_stream_fn = stream
+	_stream_fn = make_stream_fn(build_stage_models(settings), call_tool, MCPToolset(mcp_url))
 	return _stream_fn
