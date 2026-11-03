@@ -9,18 +9,18 @@ uv sync
 
 ### Running specific services
 
-The Serka application has 3 services which must all be run in order to function (`neo4j`, `mcp` and `serka`). Each of these services can be run through podman individually.
+The Serka application has 3 services which must all be run in order to function (`neo4j`, `mcp` and `serka`). Each of these services can be run through Docker Compose individually.
 
 To run just Neo4j (e.g. when running the app outside of a container):
 ```bash
-podman-compose up neo4j -d
+docker compose up neo4j -d
 ```
 
 The Neo4j browser UI is available at [localhost:7474](http://localhost:7474) when running locally.
 
 To run Neo4j and the MCP server only:
 ```bash
-podman-compose up neo4j mcp -d
+docker compose up neo4j mcp -d
 ```
 
 To run the app locally for development instance:
@@ -34,7 +34,7 @@ uv run fastapi dev src/serka/main.py --port 8080
 edits take effect without rebuilding images:
 
 ```bash
-podman-compose -f compose.dev.yml up --build
+docker compose -f compose.dev.yml up --build
 ```
 
 | Service       | Reload behaviour                                                     | URL                                            |
@@ -42,7 +42,7 @@ podman-compose -f compose.dev.yml up --build
 | `ui`          | Vite dev server with HMR (`./ui` mounted)                           | [localhost:5173](http://localhost:5173)        |
 | `serka` (API) | `fastapi dev` auto-reloads on edits under `./src`                   | [localhost:9000](http://localhost:9000)        |
 | `mcp`         | `watchfiles` restarts the server on edits under `./mcp-server/src` | [localhost:8000](http://localhost:8000)        |
-| `neo4j`       | Same `./.neo4j` data volume as `compose.yml` — no re-ingest needed | [localhost:7474](http://localhost:7474)        |
+| `neo4j`       | Same `./.neo4j` data volume as `compose.yaml` — no re-ingest needed | [localhost:7474](http://localhost:7474)        |
 
 Notes:
 
