@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type mapping from '../doo_mapping.json'
+import { emptyRun, reduceRun, type RunEvent, type RunTrace } from '../run/runTrace'
 
 /** A JSON-LD entity from the MCP server: @id/@type plus DOO-mapped properties (title, name, temporal, ...). */
 export interface Entity {
@@ -40,10 +41,8 @@ interface SearchState {
   error: string | null
   aiSummaryEnabled: boolean
   aiSummary: string
-  aiModel: string
-  aiDate: string
-  aiThinking: boolean
-  aiLoading: boolean
+  /** The current summary run, built from its event stream; null before a run starts. */
+  aiRun: RunTrace | null
   recentSearches: string[]
   setQuery: (q: string) => void
   setReturnType: (rt: ReturnType | null) => void
@@ -53,10 +52,9 @@ interface SearchState {
   setAiSummaryEnabled: (v: boolean) => void
   toggleAiSummary: () => void
   appendAiSummary: (delta: string) => void
-  setAiModel: (model: string) => void
-  setAiDate: (date: string) => void
-  setAiThinking: (v: boolean) => void
-  setAiLoading: (v: boolean) => void
+  /** Starts a fresh run trace. */
+  startAiRun: () => void
+  applyAiEvent: (event: RunEvent) => void
   resetAiSummary: () => void
   addRecentSearch: (q: string) => void
 }
@@ -69,10 +67,7 @@ export const useSearchStore = create<SearchState>()((set) => ({
   error: null,
   aiSummaryEnabled: false,
   aiSummary: '',
-  aiModel: '',
-  aiDate: '',
-  aiThinking: false,
-  aiLoading: false,
+  aiRun: null,
   recentSearches: JSON.parse(localStorage.getItem('serka_recent') ?? '[]') as string[],
   setQuery: (q) => set({ query: q }),
   setReturnType: (rt) => set({ returnType: rt }),
@@ -82,11 +77,14 @@ export const useSearchStore = create<SearchState>()((set) => ({
   setAiSummaryEnabled: (v) => set({ aiSummaryEnabled: v }),
   toggleAiSummary: () => set((s) => ({ aiSummaryEnabled: !s.aiSummaryEnabled })),
   appendAiSummary: (delta) => set((s) => ({ aiSummary: s.aiSummary + delta })),
-  setAiModel: (model) => set({ aiModel: model }),
-  setAiDate: (date) => set({ aiDate: date }),
-  setAiThinking: (v) => set({ aiThinking: v }),
-  setAiLoading: (v) => set({ aiLoading: v }),
-  resetAiSummary: () => set({ aiSummary: '', aiModel: '', aiDate: '', aiThinking: false, aiLoading: false }),
+  startAiRun: () => set({ aiRun: emptyRun(Date.now()) }),
+  applyAiEvent: (event) => set((s) => {
+    if (!s.aiRun) return s
+    const aiRun = reduceRun(s.aiRun, event, Date.now())
+    // Returning the same state skips notifying subscribers (most events, e.g. text deltas, leave the trace as is).
+    return aiRun === s.aiRun ? s : { aiRun }
+  }),
+  resetAiSummary: () => set({ aiSummary: '', aiRun: null }),
   addRecentSearch: (q) => set((s) => {
     const updated = [q, ...s.recentSearches.filter((r) => r !== q)].slice(0, 5)
     localStorage.setItem('serka_recent', JSON.stringify(updated))

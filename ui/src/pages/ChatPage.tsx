@@ -93,8 +93,6 @@ export default function ChatPage() {
 
     try {
       await streamChat(history, threadId, (event) => {
-        if (event.type === 'THINKING_START') setLastThinking(true)
-        if (event.type === 'THINKING_END') setLastThinking(false)
         if (event.type === 'TEXT_MESSAGE_CONTENT' && event.delta) {
           setLastThinking(false)
           appendToLast(event.delta)
