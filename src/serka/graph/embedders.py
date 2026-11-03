@@ -70,9 +70,25 @@ class BedrockNodeEmbedder:
 
 @component
 class CachedDocumentEmbedder:
-	def __init__(self, model: str = "amazon.titan-embed-text-v2:0", max_chars: int = 30_000):
-		self.embedder = AmazonBedrockDocumentEmbedder(model=model, progress_bar=True)
+	def __init__(self, model: str = "amazon.titan-embed-text-v2:0", max_chars: int = 30_000, batch_size: int = 100):
+		self.embedder = AmazonBedrockDocumentEmbedder(model=model, progress_bar=False)
 		self.max_chars = max_chars
+		self.batch_size = batch_size
+
+	def _embed(self, docs: List[Document]) -> List[Document | None]:
+		"""Embed a batch; if it fails, retry one by one so a single bad document only drops itself."""
+		try:
+			return self.embedder.run(documents=docs)["documents"]
+		except Exception as e:
+			if len(docs) == 1:
+				logger.error(
+					"Document embedding failed: %s | uri=%s | file=%s",
+					e,
+					docs[0].meta.get("uri", "?"),
+					docs[0].meta.get("filename", ""),
+				)
+				return [None]
+			return [self._embed([d])[0] for d in docs]
 
 	@component.output_types(documents=List[Document], meta=Dict[str, Any])
 	def run(self, documents: List[Document]) -> Dict[str, Any]:
@@ -101,20 +117,14 @@ class CachedDocumentEmbedder:
 			else:
 				to_embed.append((i, doc))
 
-		if to_embed:
-			indices, docs = zip(*to_embed)
-			try:
-				emb_result = self.embedder.run(documents=list(docs))
-				for i, embedded_doc in zip(indices, emb_result["documents"]):
-					if embedded_doc.embedding and embedded_doc.content:
+		batches = [to_embed[s : s + self.batch_size] for s in range(0, len(to_embed), self.batch_size)]
+		with tqdm(total=len(to_embed), desc="Creating embeddings", unit="doc") as progress:
+			for batch in batches:
+				indices, docs = zip(*batch)
+				for i, embedded_doc in zip(indices, self._embed(list(docs))):
+					if embedded_doc is not None and embedded_doc.embedding and embedded_doc.content:
 						cache.save_embedding(embedded_doc.content, embedded_doc.embedding)
-					result[i] = embedded_doc
-			except Exception as e:
-				logger.error(
-					"Document embedding failed for batch of %d docs: %s",
-					len(to_embed),
-					e,
-					exc_info=True,
-				)
+						result[i] = embedded_doc
+				progress.update(len(batch))
 
 		return {"documents": [d for d in result if d is not None], "meta": {}}
