@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, DeltaToolCalls, FunctionModel
 
@@ -119,6 +119,22 @@ def test_agent_tool_call_maps_to_one_sequence() -> None:
 	assert events[0]["toolCallName"] == "fake_search"
 	assert json.loads(events[3]["content"]) == {"hits": ["otters"]}
 	assert collected == [ToolResult(tool="fake_search", args={"query": "otters"}, result={"hits": ["otters"]})]
+
+
+def test_agent_failed_tool_call_result_is_marked_error() -> None:
+	agent: Agent[None, str] = Agent(FunctionModel(_tool_then_text, stream_function=_stream_tool_then_text))
+
+	@agent.tool_plain
+	def fake_search(query: str) -> dict[str, Any]:
+		raise ModelRetry("catalogue unavailable")
+
+	emitter = Emitter()
+	collected: list[ToolResult] = []
+	asyncio.run(agent.run("q", event_stream_handler=agent_event_handler(emitter, tool_results=collected)))
+	results = [e for e in drain(emitter.queue) if e["type"] == "TOOL_CALL_RESULT"]
+	assert len(results) == 1
+	assert results[0]["content"].startswith("Error: ") and "catalogue unavailable" in results[0]["content"]
+	assert collected == []
 
 
 def test_agent_text_streamed_only_when_requested() -> None:

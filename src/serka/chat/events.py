@@ -157,7 +157,8 @@ def agent_event_handler(
 ) -> Callable[[RunContext[Any], AsyncIterable[AgentStreamEvent]], Awaitable[None]]:
 	"""Maps an inner agent run's events onto the emitter.
 
-	Tool calls become TOOL_CALL_START/ARGS/END/RESULT. Text deltas are forwarded only when
+	Tool calls become TOOL_CALL_START/ARGS/END/RESULT; a result that is not a success is
+	prefixed `Error: `, as in `call_tool`. Text deltas are forwarded only when
 	`stream_text` is set. Successful tool results are appended to `tool_results` when given.
 	"""
 
@@ -170,7 +171,10 @@ def agent_event_handler(
 				emitter.tool_call_start(part.tool_call_id, part.tool_name, part.args_as_json_str())
 			elif isinstance(event, FunctionToolResultEvent):
 				result = event.part
-				emitter.tool_call_result(result.tool_call_id, result.model_response_str())
+				content = result.model_response_str()
+				emitter.tool_call_result(
+					result.tool_call_id, content if result.outcome == "success" else f"Error: {content}"
+				)
 				if tool_results is not None and result.outcome == "success":
 					name, args = calls.get(result.tool_call_id, (result.tool_name, {}))
 					tool_results.append(ToolResult(tool=name, args=args, result=result.content))
