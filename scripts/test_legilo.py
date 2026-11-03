@@ -32,19 +32,17 @@ if __name__ == "__main__":
     parser.add_argument("id", help="EIDC dataset identifier (UUID)")
     args = parser.parse_args()
 
-    username = os.getenv("LEGILO_USERNAME")
-    password = os.getenv("LEGILO_PASSWORD")
+    token = os.getenv("LEGILO_PAT")
     url = LEGILO_URL.format(id=args.id)
 
     logger.info("URL:      %s", url)
-    logger.info("Username: %s", username or "(not set)")
-    logger.info("Password: %s", "***" if password else "(not set)")
+    logger.info("Token:    %s", "***" if token else "(not set)")
 
-    res = requests.get(url, auth=(username, password))
+    res = requests.get(url, headers={"Authorization": f"Bearer {token}"})
     logger.info("Status:   %d", res.status_code)
 
     if res.status_code == 401:
-        logger.error("Authentication failed — check LEGILO_USERNAME and LEGILO_PASSWORD")
+        logger.error("Authentication failed — check LEGILO_PAT")
         raise SystemExit(1)
 
     if res.status_code == 404:

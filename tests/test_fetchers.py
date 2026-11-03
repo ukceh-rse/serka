@@ -1,8 +1,10 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import requests
+
 import serka.fetchers
-from serka.fetchers import EIDCFetcher
+from serka.fetchers import EIDCFetcher, LegiloFetcher
 
 
 class FakeSession:
@@ -72,3 +74,54 @@ def test_concept_hierarchy_fetcher_walks_gemet_broader(monkeypatch):
 	labels = {c["uri"]: c["label"] for c in result["nodes"]["Concept"]}
 	assert labels[f"{gemet}299"] == "animal"
 	assert result["nodes"]["Dataset"] == [{"uri": "d"}]
+
+
+class FakeLegiloSession:
+	"""Records each request's headers and returns one canned Legilo response."""
+
+	def __init__(self, body: dict):
+		self.body = body
+		self.headers = []
+		self.cache = SimpleNamespace(contains=lambda url: False)
+
+	def get(self, url, headers=None):
+		self.headers.append(headers)
+		return Mock(status_code=200, json=Mock(return_value=self.body))
+
+
+def test_legilo_fetcher_sends_token_as_bearer(monkeypatch):
+	session = FakeLegiloSession({"success": {"guide.pdf": "some supporting documentation text"}})
+	monkeypatch.setattr(serka.fetchers, "_session", session)
+
+	result = LegiloFetcher(token="pat-123").run([{"id": "a", "title": "Dataset A", "uri": "https://x/a"}])
+
+	assert session.headers and all(h == {"Authorization": "Bearer pat-123"} for h in session.headers)
+	[doc] = result["documents"]
+	assert doc.meta["filename"] == "guide.pdf"
+	assert doc.meta["uri"] == "https://x/a"
+
+
+def test_legilo_fetcher_without_token_skips_requests(monkeypatch):
+	session = FakeLegiloSession({})
+	monkeypatch.setattr(serka.fetchers, "_session", session)
+
+	assert LegiloFetcher().run([{"id": "a"}]) == {"documents": []}
+	assert session.headers == []
+
+
+def test_legilo_fetcher_survives_timeout_on_credential_check(monkeypatch):
+	session = FakeLegiloSession({"success": {"guide.pdf": "some supporting documentation text"}})
+	real_get = session.get
+
+	def flaky_get(url, headers=None):
+		if not session.headers:
+			session.headers.append(headers)
+			raise requests.exceptions.ReadTimeout("Read timed out")
+		return real_get(url, headers=headers)
+
+	session.get = flaky_get
+	monkeypatch.setattr(serka.fetchers, "_session", session)
+
+	result = LegiloFetcher(token="pat-123").run([{"id": "a", "title": "Dataset A", "uri": "https://x/a"}])
+
+	assert len(result["documents"]) == 1

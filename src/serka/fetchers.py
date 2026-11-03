@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional, Tuple
 import logging
+import requests
 import requests_cache
 from tqdm import tqdm
 from haystack import component, Document
@@ -78,16 +79,17 @@ class LegiloFetcher:
 	Haystack fetcher component for retrieving supporting documentation from the Legilo API.
 	Args:
 		legilo_url (str): Format string for the Legilo API endpoint; {id} is the dataset ID.
+		token (str): Legilo personal access token, sent as a bearer token.
 	"""
 
 	def __init__(
 		self,
 		legilo_url: str = "https://legilo.eds-infra.ceh.ac.uk/{id}/documents",
-		username: str = None,
-		password: str = None,
+		token: str = None,
 	):
 		self.legilo_url = legilo_url
-		self.auth = (username, password)
+		self.token = token
+		self.headers = {"Authorization": f"Bearer {token}"}
 
 	@staticmethod
 	def _is_prose(content: str, min_whitespace_ratio: float = 0.05) -> bool:
@@ -122,29 +124,38 @@ class LegiloFetcher:
 
 	@component.output_types(documents=List[Document])
 	def run(self, datasets: List[Dict[Any, Any]]) -> List[Document]:
+		if not self.token:
+			logger.warning("LEGILO_PAT is not set; skipping Legilo supporting documents.")
+			return {"documents": []}
+
 		cached = [d for d in datasets if _session.cache.contains(url=self.legilo_url.format(id=d.get("id")))]
 		to_fetch = [d for d in datasets if not _session.cache.contains(url=self.legilo_url.format(id=d.get("id")))]
 
 		if to_fetch:
-			test_res = _session.get(self.legilo_url.format(id=to_fetch[0].get("id")), auth=self.auth)
-			if test_res.status_code == 401:
+			try:
+				test_res = _session.get(self.legilo_url.format(id=to_fetch[0].get("id")), headers=self.headers)
+			except requests.exceptions.RequestException as e:
+				logger.warning("Legilo credential check request failed (%s); continuing without it", e)
+				test_res = None
+			if test_res is not None and test_res.status_code == 401:
 				logger.error(
 					"Legilo authentication failed (401 Unauthorized). "
-					"Check LEGILO_USERNAME and LEGILO_PASSWORD environment variables."
+					"Check the LEGILO_PAT environment variable."
 				)
 				return {"documents": []}
-			logger.debug(
-				"Legilo credential check passed (status %d) for dataset %s",
-				test_res.status_code,
-				to_fetch[0].get("id"),
-			)
+			if test_res is not None:
+				logger.debug(
+					"Legilo credential check passed (status %d) for dataset %s",
+					test_res.status_code,
+					to_fetch[0].get("id"),
+				)
 
 		supporting_docs = []
 
 		for dataset in tqdm(cached, desc="Loading cached Legilo data", unit="dataset"):
 			dataset_id = dataset.get("id")
 			try:
-				res = _session.get(self.legilo_url.format(id=dataset_id), auth=self.auth)
+				res = _session.get(self.legilo_url.format(id=dataset_id), headers=self.headers)
 				supporting_docs.extend(self._docs_from_response(dataset, res))
 			except Exception as e:
 				logger.error("Legilo: error for dataset %s: %s", dataset_id, e, exc_info=True)
@@ -152,7 +163,7 @@ class LegiloFetcher:
 		for dataset in tqdm(to_fetch, desc="Fetching Legilo data", unit="dataset"):
 			dataset_id = dataset.get("id")
 			try:
-				res = _session.get(self.legilo_url.format(id=dataset_id), auth=self.auth)
+				res = _session.get(self.legilo_url.format(id=dataset_id), headers=self.headers)
 				if res.status_code != 200:
 					logger.warning("Legilo request failed for dataset %s: HTTP %d", dataset_id, res.status_code)
 					continue
