@@ -97,10 +97,13 @@ export default function ChatPage() {
           setLastThinking(false)
           appendToLast(event.delta)
         }
-        if (event.type === 'RUN_FINISHED') setLoading(false)
+        if (event.type === 'RUN_ERROR') appendToLast(event.message ?? 'Sorry, something went wrong.')
       })
     } catch {
       appendToLast('Sorry, something went wrong.')
+    } finally {
+      // The stream can also end on RUN_ERROR or close early, not only on RUN_FINISHED.
+      setLastThinking(false)
       setLoading(false)
     }
   }

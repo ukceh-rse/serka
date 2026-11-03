@@ -102,6 +102,6 @@ export async function streamChat(
   if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.statusText}`)
   for await (const event of parseSSE(res.body)) {
     onEvent(event)
-    if (event.type === 'RUN_FINISHED') break
+    if (event.type === 'RUN_FINISHED' || event.type === 'RUN_ERROR') break
   }
 }
