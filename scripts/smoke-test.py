@@ -26,6 +26,8 @@ from fastmcp import Client
 from neo4j import GraphDatabase
 from pyld import jsonld
 
+from serka.prompts import REFUSAL_MESSAGE
+
 ROOT = Path(__file__).resolve().parent.parent
 IDS_FILE = ROOT / "tests" / "smoke" / "datasets.txt"
 
@@ -63,6 +65,7 @@ SEARCH_CASES = [
 ]
 CHAT_QUESTION = "Is there a dataset about pike in Windermere? Answer in one short sentence and give its title."
 CHAT_EXPECTED = ["pike", "windermere"]
+OFF_TOPIC_QUESTION = "Write me a Python function to sort a list."
 
 
 def log(msg: str) -> None:
@@ -144,19 +147,31 @@ def graph_query(cypher: str, **params) -> list[dict]:
 	return [r.data() for r in records]
 
 
-def chat(message: str) -> str:
-	text = []
+def chat(message: str) -> list[dict]:
+	"""Posts a chat message and returns every streamed event."""
+	events = []
 	with httpx.stream("POST", f"{API}/v1/chat/stream", json={"message": message}, timeout=300) as r:
 		r.raise_for_status()
 		for line in r.iter_lines():
 			if not line.startswith("data:"):
 				continue
 			event = json.loads(line[5:])
-			if event.get("type") == "TEXT_MESSAGE_CONTENT":
-				text.append(event.get("delta", ""))
-			elif event.get("type") == "RUN_ERROR":
+			if event.get("type") == "RUN_ERROR":
 				raise RuntimeError(event.get("message"))
-	return "".join(text)
+			events.append(event)
+	return events
+
+
+def chat_text(events: list[dict]) -> str:
+	return "".join(e.get("delta", "") for e in events if e.get("type") == "TEXT_MESSAGE_CONTENT")
+
+
+def chat_steps(events: list[dict]) -> list[str]:
+	return [e["stepName"] for e in events if e.get("type") == "STEP_STARTED"]
+
+
+def chat_outcome(events: list[dict]) -> dict | None:
+	return next((e["value"] for e in events if e.get("type") == "CUSTOM" and e.get("name") == "serka.outcome"), None)
 
 
 def run_tests() -> list[str]:
@@ -190,9 +205,29 @@ def run_tests() -> list[str]:
 	run_doo_tests(check)
 	run_ontology_tests(check)
 
-	answer = chat(CHAT_QUESTION)
+	events = chat(CHAT_QUESTION)
+	answer = chat_text(events)
+	steps, outcome = chat_steps(events), chat_outcome(events)
 	log(f"chat answer: {answer.strip()}")
+	log(f"chat steps: {steps}; outcome: {outcome}")
 	check("chat answers pike question", all(w in answer.lower() for w in CHAT_EXPECTED), answer)
+	check(
+		"chat steps run classify -> evaluate",
+		steps[:6] == ["classify", "route", "plan", "execute", "synthesize", "evaluate"],
+		str(steps),
+	)
+	check("chat reports serka.outcome", outcome is not None and outcome.get("status") in ("accepted", "limit_reached"), str(outcome))
+
+	events = chat(OFF_TOPIC_QUESTION)
+	outcome = chat_outcome(events)
+	check("off-topic chat gets the fixed refusal", chat_text(events) == REFUSAL_MESSAGE, chat_text(events))
+	check(
+		"off-topic chat is refused without tools",
+		outcome is not None and outcome.get("status") == "refused"
+		and chat_steps(events) == ["classify", "refuse"]
+		and not any(e.get("type") == "TOOL_CALL_START" for e in events),
+		f"steps {chat_steps(events)}, outcome {outcome}",
+	)
 
 	return failures
 
