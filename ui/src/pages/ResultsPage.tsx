@@ -70,13 +70,11 @@ export default function ResultsPage() {
     setError,
     aiSummaryEnabled,
     aiSummary,
-    aiLoading,
+    aiRun,
     setAiSummaryEnabled,
     appendAiSummary,
-    setAiModel,
-    setAiDate,
-    setAiThinking,
-    setAiLoading,
+    startAiRun,
+    applyAiEvent,
     resetAiSummary,
     addRecentSearch,
   } = useSearchStore();
@@ -96,33 +94,25 @@ export default function ResultsPage() {
     summaryAbortRef.current?.abort();
     const controller = new AbortController();
     summaryAbortRef.current = controller;
-    setAiLoading(true);
+    startAiRun();
+    // Once aborted, this call's run has been superseded or abandoned: leave the store alone.
+    const live = () => !controller.signal.aborted;
     try {
       await streamSummary(
         queryStr,
         (event) => {
-          if (event.type === "RUN_METADATA" && event.model)
-            setAiModel(event.model);
-          if (event.type === "THINKING_START") setAiThinking(true);
-          if (event.type === "THINKING_END") setAiThinking(false);
+          if (!live()) return;
+          applyAiEvent(event);
           if (event.type === "TEXT_MESSAGE_CONTENT" && event.delta)
             appendAiSummary(event.delta);
-          if (event.type === "RUN_FINISHED") {
-            setAiDate(
-              new Date().toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              }),
-            );
-            setAiLoading(false);
-          }
         },
         controller.signal,
       );
     } catch (e) {
-      if ((e as Error).name !== "AbortError") setAiLoading(false);
+      if (live()) applyAiEvent({ type: "RUN_ERROR", message: (e as Error).message });
     }
+    // Turns a run that never reached RUN_FINISHED/RUN_ERROR into an error; no-op otherwise.
+    if (live()) applyAiEvent({ type: "STREAM_CLOSED" });
   };
 
   useEffect(() => {
@@ -141,6 +131,8 @@ export default function ResultsPage() {
     if (aiFromUrl) runSummary(q);
     return () => {
       summaryAbortRef.current?.abort();
+      // An abandoned run would otherwise stay "running" and block the rerun when the page is revisited.
+      if (useSearchStore.getState().aiRun?.status === "running") resetAiSummary();
     };
   }, [q, rt]);
 
@@ -151,7 +143,7 @@ export default function ResultsPage() {
       q === query &&
       results.length > 0 &&
       !aiSummary &&
-      !aiLoading
+      aiRun?.status !== "running"
     ) {
       runSummary(q);
     }
@@ -309,7 +301,7 @@ export default function ResultsPage() {
 
       {!loading && hasResults && (
         <>
-          <AISummary query={q} />
+          {aiFromUrl && <AISummary query={q} />}
 
           {!rt ? (
             <>

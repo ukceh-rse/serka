@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
-  Box, Button, Chip, CircularProgress, Divider, IconButton, Link, Paper,
+  Box, Button, Divider, IconButton, Link, Paper,
   Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography,
 } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
@@ -10,6 +10,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useSearchStore } from '../stores/searchStore'
 import FeedbackWidget from './FeedbackWidget'
+import RunOverview from './RunOverview'
+import { compactOutcome } from '../run/runTrace'
 import { brand } from '../theme'
 import { EXPANDED_MAX } from '../constants'
 
@@ -65,16 +67,6 @@ function ReferenceList({ items }: { items: LinkItem[] }) {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const provenanceChipSx = {
-  height: 22,
-  fontSize: '0.7rem',
-  color: 'text.secondary',
-  borderColor: 'divider',
-  borderRadius: 1,
-  '& .MuiChip-label': { px: 0.875 },
-}
-
 
 const COLLAPSED_HEIGHT = '4.5rem'
 
@@ -195,7 +187,8 @@ interface Props {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function AISummary({ query }: Props) {
-  const { aiSummary, aiLoading, aiModel, aiDate } = useSearchStore()
+  const { aiSummary, aiRun } = useSearchStore()
+  const aiLoading = aiRun?.status === 'running'
   const [expanded, setExpanded] = useState(false)
   const [isOverflowing, setIsOverflowing] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -220,7 +213,7 @@ export default function AISummary({ query }: Props) {
   const links = useMemo(() => extractLinks(aiSummary), [aiSummary])
 
 
-  const visible = aiLoading || !!aiSummary
+  const visible = !!aiSummary || !!aiRun
   if (!visible) return null
 
   return (
@@ -242,7 +235,6 @@ export default function AISummary({ query }: Props) {
         >
           AI Summary
         </Typography>
-        {aiLoading && <CircularProgress size={12} sx={{ ml: 0.5 }} />}
         {aiSummary && isOverflowing && (
           <IconButton size="small" onClick={() => setExpanded((v) => !v)} sx={{ ml: 'auto', p: 0.25 }}>
             {expanded
@@ -251,6 +243,9 @@ export default function AISummary({ query }: Props) {
           </IconButton>
         )}
       </Box>
+
+      {/* Progress line, settling into the run summary row in the same place */}
+      {aiRun && <RunOverview key={aiRun.startedAt} run={aiRun} />}
 
       {aiSummary && (
         <>
@@ -300,18 +295,6 @@ export default function AISummary({ query }: Props) {
             )}
           </Box>
 
-          {/* Provenance chips — visible after stream completes */}
-          {!aiLoading && (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 1.5 }}>
-              {aiModel && (
-                <Chip variant="outlined" size="small" label={`Model: ${aiModel}`} sx={provenanceChipSx} />
-              )}
-              {aiDate && (
-                <Chip variant="outlined" size="small" label={`Date: ${aiDate}`} sx={provenanceChipSx} />
-              )}
-            </Box>
-          )}
-
           {/* Reference list — auto-generated from inline links */}
           {!aiLoading && links.length > 0 && (
             <>
@@ -328,7 +311,7 @@ export default function AISummary({ query }: Props) {
             <>
               <Divider sx={{ mt: links.length > 0 ? 1 : 1.5, mb: 1 }} />
               <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <FeedbackWidget context={{ type: 'ai_summary', query, summary: aiSummary }} />
+                <FeedbackWidget context={{ type: 'ai_summary', query, summary: aiSummary, run: aiRun ? compactOutcome(aiRun) : undefined }} />
               </Box>
             </>
           )}

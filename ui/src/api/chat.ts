@@ -1,17 +1,39 @@
 export type SSEEventType =
-  | 'THINKING_START'
-  | 'THINKING_END'
-  | 'TOOL_CALL_START'
-  | 'TOOL_CALL_END'
-  | 'TEXT_MESSAGE_CONTENT'
+  | 'RUN_STARTED'
   | 'RUN_FINISHED'
+  | 'RUN_ERROR'
   | 'RUN_METADATA'
+  | 'STEP_STARTED'
+  | 'STEP_FINISHED'
+  | 'CUSTOM'
+  | 'TEXT_MESSAGE_START'
+  | 'TEXT_MESSAGE_CONTENT'
+  | 'TEXT_MESSAGE_END'
+  | 'TOOL_CALL_START'
+  | 'TOOL_CALL_ARGS'
+  | 'TOOL_CALL_END'
+  | 'TOOL_CALL_RESULT'
 
+/** The fields of the chat event contract (openspec `chat-agent-events`) that the UI consumes. */
 export interface SSEEvent {
   type: SSEEventType
-  delta?: string
+  /** STEP_STARTED / STEP_FINISHED */
+  stepName?: string
+  /** CUSTOM: event name (e.g. `serka.step`) and its payload */
+  name?: string
+  value?: unknown
+  /** TOOL_CALL_* */
+  toolCallId?: string
   toolCallName?: string
+  /** TEXT_MESSAGE_CONTENT and TOOL_CALL_ARGS */
+  delta?: string
+  /** TOOL_CALL_RESULT: JSON string, or `Error: ...` */
+  content?: string
+  /** RUN_ERROR */
+  message?: string
+  /** RUN_METADATA: answer model and the stage -> model mapping */
   model?: string
+  models?: Record<string, string>
 }
 
 export interface AGUIMessage {
@@ -56,7 +78,7 @@ export async function streamSummary(
   if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.statusText}`)
   for await (const event of parseSSE(res.body)) {
     onEvent(event)
-    if (event.type === 'RUN_FINISHED') break
+    if (event.type === 'RUN_FINISHED' || event.type === 'RUN_ERROR') break
   }
 }
 
