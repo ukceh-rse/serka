@@ -6,9 +6,9 @@ It is built with [FastAPI](https://fastapi.tiangolo.com/), [Neo4j](https://neo4j
 ## AWS Deployment
 For AWS deployment instructions see [`terraform/README.md`](terraform/README.md).
 
-## Running with Podman
+## Running with Docker
 
-Ensure you have [`podman`](https://podman.io/) and `podman-compose` installed.
+Ensure you have [Docker](https://docs.docker.com/get-docker/) with the [Compose plugin](https://docs.docker.com/compose/install/) installed.
 
 Copy `.env.example` to `.env` and fill in the required values (username must be `neo4j` but password can be set to whatever you choose):
 ```
@@ -18,12 +18,12 @@ NEO4J_PASSWORD=<your password>
 
 Start all services:
 ```
-podman-compose up -d
+docker compose up -d
 ```
 
 Stop all services:
 ```
-podman-compose down
+docker compose down
 ```
 
 ## Ingest Data
@@ -81,7 +81,7 @@ stateDiagram-v2
 
 ## Smoke Test
 
-`uv run scripts/smoke-test.py` runs an end-to-end check. It starts a throwaway Neo4j container on port 17687 and ingests the 10 datasets in `tests/smoke/datasets.txt`. It then starts the MCP server (port 8000) and API (port 19000), runs some search and chat queries, and tears everything down. It needs podman or docker and AWS credentials for Bedrock.
+`uv run scripts/smoke-test.py` runs an end-to-end check. It starts a throwaway Neo4j container on port 17687 and ingests the 10 datasets in `tests/smoke/datasets.txt`. It then starts the MCP server (port 8000) and API (port 19000), runs some search and chat queries, and tears everything down. It needs Docker and AWS credentials for Bedrock.
 
 ## Contributing
 

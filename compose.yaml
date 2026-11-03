@@ -2,7 +2,6 @@ services:
   serka:
     build:
       context: .
-      dockerfile: Containerfile
     image: serka-image
     ports:
       - "9000:8000"
@@ -23,7 +22,6 @@ services:
   mcp:
     build:
       context: ./mcp-server
-      dockerfile: Containerfile
     image: serka-mcp-image
     ports:
       - "8000:8000"
@@ -38,7 +36,6 @@ services:
   ui:
     build:
       context: ./ui
-      dockerfile: Containerfile
     image: serka-ui-image
     ports:
       - "8080:80"

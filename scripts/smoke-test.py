@@ -4,7 +4,7 @@ Starts a throwaway Neo4j container, ingests the datasets listed in
 tests/smoke/datasets.txt (EIDC + Legilo, via scripts/ingest-data.py), starts the
 MCP server and the Serka API locally, then runs a few basic queries.
 
-Requires podman (or docker), AWS credentials for Bedrock, and a .env file with
+Requires Docker, AWS credentials for Bedrock, and a .env file with
 Legilo credentials. Your normal Neo4j data is not touched.
 
 	uv run scripts/smoke-test.py
@@ -483,9 +483,9 @@ def run_ontology_tests(check) -> None:
 
 
 def main() -> int:
-	runtime = shutil.which("podman") or shutil.which("docker")
+	runtime = shutil.which("docker")
 	if not runtime:
-		log("podman or docker is required")
+		log("docker is required")
 		return 1
 	for port in (NEO4J_PORT, MCP_PORT, API_PORT):
 		if not port_free(port):

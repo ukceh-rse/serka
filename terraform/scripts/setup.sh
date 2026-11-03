@@ -32,14 +32,12 @@ EOF
 log "Restarting nginx..."
 systemctl restart nginx >> $LOG_FILE 2>&1
 
-# install podman
+# install docker
 log "Updating package lists..."
 apt-get update -y >> $LOG_FILE 2>&1
-log "Installing podman..."
-apt-get install -y podman >> $LOG_FILE 2>&1
-log "Installing podman-compose..."
-apt-get install -y podman-compose >> $LOG_FILE 2>&1
-echo 'unqualified-search-registries = ["docker.io"]' | sudo tee -a /etc/containers/registries.conf >> $LOG_FILE 2>&1
+log "Installing docker..."
+apt-get install -y docker.io docker-compose-v2 >> $LOG_FILE 2>&1
+systemctl enable --now docker >> $LOG_FILE 2>&1
 
 # setup local repo to import data using utility scripts
 log "Switching to ubuntu user"
@@ -74,7 +72,7 @@ git checkout rc-alpha >> $LOG_FILE 2>&1
 EOF_UBUNTU
 
 cd /home/ubuntu/serka
-podman-compose up -d >> $LOG_FILE 2>&1
+docker compose up -d >> $LOG_FILE 2>&1
 
 # Setup uv locally to run the data import script.
 # Note this is just for testing, data should be imported and processed sperately and then made accessible to the instance.
