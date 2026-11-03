@@ -30,8 +30,7 @@ class Settings(BaseSettings):
 	models_evaluate: str = "eu.anthropic.claude-haiku-5-5"
 
 	# External services
-	legilo_username: Optional[str] = None
-	legilo_password: Optional[str] = None
+	legilo_pat: Optional[str] = None
 
 	# App
 	test_mode: bool = False

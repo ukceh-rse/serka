@@ -20,8 +20,7 @@ class PipelineBuilder:
 	neo4j_password: str
 	mcp_host: str
 	mcp_port: int
-	legilo_user: str
-	legilo_password: str
+	legilo_pat: str
 	chunk_length: int
 	chunk_overlap: int
 
@@ -39,7 +38,7 @@ class PipelineBuilder:
 		p.add_component("eidc_fetcher", EIDCFetcher())
 		p.add_component(
 			"legilo_fetcher",
-			LegiloFetcher(username=self.legilo_user, password=self.legilo_password),
+			LegiloFetcher(token=self.legilo_pat),
 		)
 		p.add_component("ent_extractor", EntityExtractor())
 		p.add_component("concept_hierarchy", ConceptHierarchyFetcher())

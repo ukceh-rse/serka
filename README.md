@@ -28,10 +28,9 @@ docker compose down
 
 ## Ingest Data
 
-Data is ingested from the EIDC catalogue and optionally the Legilo API. To connect to Legilo, ensure your `.env` contains your credentials:
+Data is ingested from the EIDC catalogue and optionally the Legilo API. To connect to Legilo, ensure your `.env` contains your Legilo personal access token:
 ```
-LEGILO_USERNAME=yourusername
-LEGILO_PASSWORD=yourpassword
+LEGILO_PAT=yourtoken
 ```
 
 After starting all services run the ingestion pipeline:
