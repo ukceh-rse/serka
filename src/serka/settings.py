@@ -17,9 +17,17 @@ class Settings(BaseSettings):
 	mcp_host: str = "localhost"
 	mcp_port: int = 8000
 
-	# Models (Bedrock)
+	# Models (Bedrock). All chat model calls go to Bedrock in aws_region.
+	aws_region: str = "eu-west-2"
 	models_embedding: str = "amazon.titan-embed-text-v2:0"
-	models_llm: str = "anthropic.claude-sonnet-4-6"
+	# Chat pipeline stage models
+	models_classify: str = "amazon.nova-lite-v1:0"
+	models_plan_keyword: str = "amazon.nova-micro-v1:0"
+	models_plan_insight: str = "eu.anthropic.claude-sonnet-5-5"
+	models_execute_insight: str = "eu.anthropic.claude-haiku-5-5"
+	models_synthesize_keyword: str = "amazon.nova-lite-v1:0"
+	models_synthesize_insight: str = "eu.anthropic.claude-sonnet-5-5"
+	models_evaluate: str = "eu.anthropic.claude-haiku-5-5"
 
 	# External services
 	legilo_username: Optional[str] = None

@@ -20,7 +20,6 @@ def create_pipeline_builder() -> PipelineBuilder:
 		mcp_host=s.mcp_host,
 		mcp_port=s.mcp_port,
 		models_embedding=s.models_embedding,
-		models_llm=s.models_llm,
 		chunk_length=150,
 		chunk_overlap=50,
 	)

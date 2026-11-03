@@ -5,21 +5,15 @@ from serka.graph.embedders import BedrockNodeEmbedder, CachedDocumentEmbedder
 from serka.graph.writers import Neo4jGraphWriter
 from serka.graph.extractors import EntityExtractor, TextExtractor, DocumentTruncator
 from serka.fetchers import ConceptHierarchyFetcher, EIDCFetcher, LegiloFetcher
-from typing import Optional, Callable
 from haystack_integrations.components.embedders.amazon_bedrock import (
 	AmazonBedrockTextEmbedder,
 )
-from haystack_integrations.components.generators.amazon_bedrock import (
-	AmazonBedrockGenerator,
-)
-from haystack.dataclasses import StreamingChunk
 from haystack.components.joiners import DocumentJoiner
 
 
 @dataclass
 class PipelineBuilder:
 	models_embedding: str
-	models_llm: str
 	neo4j_host: str
 	neo4j_port: int
 	neo4j_user: str
@@ -39,15 +33,6 @@ class PipelineBuilder:
 
 	def _create_document_embedder(self):
 		return CachedDocumentEmbedder(model=self.models_embedding)
-
-	def _create_llm_generator(
-		self, streaming_callback: Optional[Callable[[StreamingChunk], None]] = None
-	):
-		return AmazonBedrockGenerator(
-			model=self.models_llm,
-			streaming_callback=streaming_callback,
-			max_length=500,
-		)
 
 	def build_graph_pipeline(self) -> Pipeline:
 		p = Pipeline()

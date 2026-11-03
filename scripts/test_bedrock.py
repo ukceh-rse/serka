@@ -33,3 +33,23 @@ model_response = json.loads(response["body"].read())
 
 response_text = model_response["generation"]
 print(response_text)
+
+
+# One-line Converse call per chat pipeline stage model (eu-west-2).
+STAGE_MODEL_IDS = [
+	"amazon.nova-micro-v1:0",
+	"amazon.nova-lite-v1:0",
+	"eu.anthropic.claude-haiku-5-5",
+	"eu.anthropic.claude-sonnet-5-5",
+]
+for stage_model_id in STAGE_MODEL_IDS:
+	try:
+		reply = client.converse(
+			modelId=stage_model_id,
+			messages=[{"role": "user", "content": [{"text": "Reply with the single word: ok"}]}],
+			inferenceConfig={"maxTokens": 10},
+		)
+	except Exception as e:
+		print(f"ERROR: Can't converse with '{stage_model_id}'. Reason: {e}")
+		exit(1)
+	print(f"{stage_model_id}: {reply['output']['message']['content'][0]['text'].strip()}")

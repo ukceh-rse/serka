@@ -92,7 +92,7 @@ def get_stream_fn(settings: Settings = Depends(get_settings)) -> StreamFn:
 
 	mcp_url = f"http://{settings.mcp_host}:{settings.mcp_port}/mcp"
 	agent = Agent(
-		BedrockConverseModel(settings.models_llm),
+		BedrockConverseModel(settings.models_synthesize_insight),
 		instructions=AGENT_PROMPT,
 		toolsets=[MCPServerStreamableHTTP(mcp_url)],
 	)
@@ -101,7 +101,7 @@ def get_stream_fn(settings: Settings = Depends(get_settings)) -> StreamFn:
 		accept = request.headers.get("accept", SSE_CONTENT_TYPE)
 		adapter = AGUIAdapter(agent=agent, run_input=run_input, accept=accept)
 		encoded = adapter.encode_stream(adapter.run_stream())
-		return StreamingResponse(_prepend_metadata(encoded, settings.models_llm), media_type=accept)
+		return StreamingResponse(_prepend_metadata(encoded, settings.models_synthesize_insight), media_type=accept)
 
 	_stream_fn = stream
 	return _stream_fn
