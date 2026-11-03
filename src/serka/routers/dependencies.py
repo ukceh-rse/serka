@@ -10,7 +10,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from serka.feedback import FeedbackLogger
-from serka.ontology import NODE_TYPES
+from serka.ontology import search_args
 from serka.settings import Settings
 
 StreamFn = Callable[[Any, Request], Response]
@@ -41,13 +41,7 @@ async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable
 		published_after: str | None = None,
 		published_before: str | None = None,
 	) -> list:
-		args: dict[str, Any] = {"query": q, "hops": hops}
-		if return_type:
-			args["return_type"] = NODE_TYPES[return_type]
-		if published_after:
-			args["published_after"] = published_after
-		if published_before:
-			args["published_before"] = published_before
+		args = {**search_args(q, return_type, published_after, published_before), "hops": hops}
 		async with Client(mcp_url) as client:
 			if location:
 				try:
