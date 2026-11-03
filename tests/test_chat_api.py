@@ -93,12 +93,7 @@ def test_split_messages_without_user_message() -> None:
 
 
 def test_mock_stream_follows_contract(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-	from serka.routers import mock
-
-	monkeypatch.setattr("serka.routers.mock.asyncio.sleep", _no_sleep)
-	app.dependency_overrides[get_stream_fn] = mock.mock_stream_fn
-	response = client.post("/v1/chat/stream", json={"message": "soil carbon uplands"})
-	events = decode([response.text])
+	events = _mock_events(client, monkeypatch, "soil carbon uplands")
 	assert "STEP_STARTED" in types(events)
 	assert steps(events) == ["classify", "route", "plan", "execute", "synthesize", "evaluate"]
 	assert events[-2]["name"] == "serka.outcome" and types(events)[-1] == "RUN_FINISHED"
@@ -109,3 +104,37 @@ def test_mock_stream_follows_contract(client: TestClient, monkeypatch: pytest.Mo
 
 async def _no_sleep(_: float) -> None:
 	return None
+
+
+def _mock_events(client: TestClient, monkeypatch: pytest.MonkeyPatch, message: str) -> list[dict[str, Any]]:
+	from serka.routers import mock
+
+	monkeypatch.setattr("serka.routers.mock.asyncio.sleep", _no_sleep)
+	app.dependency_overrides[get_stream_fn] = mock.mock_stream_fn
+	return decode([client.post("/v1/chat/stream", json={"message": message}).text])
+
+
+def test_mock_insight_retry_run(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+	events = _mock_events(client, monkeypatch, "butterfly trend since 2000")
+	assert steps(events) == [
+		"classify", "route", "plan", "execute", "synthesize", "evaluate", "synthesize", "evaluate",
+	]
+	evaluations = customs(events, "serka.evaluation")
+	assert [e["passed"] for e in evaluations] == [False, True]
+	assert evaluations[0]["problem"] == "writing"
+	assert [d["attempt"] for d in customs(events, "serka.draft")] == [1, 2]
+	assert types(events).count("TEXT_MESSAGE_START") == 1
+	assert types(events).index("TEXT_MESSAGE_START") > max(i for i, e in enumerate(events) if e["type"] == "STEP_FINISHED")
+	outcome = customs(events, "serka.outcome")[0]
+	assert outcome["status"] == "accepted" and outcome["path"] == "insight"
+	assert outcome["attemptsUsed"] == 2 and outcome["maxAttempts"] == 3
+	assert types(events)[-1] == "RUN_FINISHED"
+
+
+def test_mock_refused_run(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+	events = _mock_events(client, monkeypatch, "weather tomorrow in Lancaster")
+	assert steps(events) == ["classify", "refuse"]
+	assert customs(events, "serka.classification")[0]["inScope"] is False
+	assert customs(events, "serka.outcome")[0]["status"] == "refused"
+	assert answer_text(events) == prompts.REFUSAL_MESSAGE
+	assert types(events)[-1] == "RUN_FINISHED"
