@@ -306,8 +306,8 @@ export default function AISummary({ query }: Props) {
             </>
           )}
 
-          {/* Feedback — only after stream completes to avoid logging partial summary */}
-          {!aiLoading && (
+          {/* Feedback — only after stream completes to avoid logging partial summary, and never on a limit message */}
+          {!aiLoading && aiRun?.status !== 'usage_limit' && (
             <>
               <Divider sx={{ mt: links.length > 0 ? 1 : 1.5, mb: 1 }} />
               <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>

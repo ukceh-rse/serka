@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Box, Collapse, IconButton, Typography } from '@mui/material'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
-import { capitalize, showsAttempt, type RunStep, type RunTrace, type ToolCall } from '../run/runTrace'
+import { capitalize, showsAttempt, stoppedAtRetrievalLimit, type RunStep, type RunTrace, type ToolCall } from '../run/runTrace'
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
@@ -9,6 +9,7 @@ const OUTCOME_LABELS: Record<string, string> = {
   accepted: 'Accepted',
   limit_reached: 'Attempt limit reached',
   refused: 'Refused',
+  usage_limit: 'Daily limit',
   error: 'Error',
 }
 
@@ -72,6 +73,8 @@ function stepSummary(step: RunStep, trace: RunTrace): ReactNode {
     }
     case 'refuse':
       return 'Refusal returned'
+    case 'limit':
+      return 'Daily limit message returned'
     default:
       return null
   }
@@ -180,6 +183,7 @@ function Row({ label, meta, summary, detail, error }: {
 
 export default function RunTimeline({ run }: { run: RunTrace }) {
   const o = run.outcome
+  const outcomeLabel = stoppedAtRetrievalLimit(run) ? 'Retrieval limit reached' : OUTCOME_LABELS[run.status] ?? run.status
   const outcomeSummary =
     run.status === 'error'
       ? run.error ?? 'The summary stopped unexpectedly.'
@@ -206,7 +210,7 @@ export default function RunTimeline({ run }: { run: RunTrace }) {
           />
         )
       })}
-      <Row label={`Outcome: ${OUTCOME_LABELS[run.status] ?? run.status}`} summary={outcomeSummary} error={run.status === 'error'} />
+      <Row label={`Outcome: ${outcomeLabel}`} summary={outcomeSummary} error={run.status === 'error'} />
     </Box>
   )
 }

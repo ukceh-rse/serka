@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { SSEEvent } from '../api/chat'
 import {
-  compactOutcome, emptyRun, formatDate, progressText, reduceRun, summaryText,
+  compactOutcome, emptyRun, formatDate, progressText, reduceRun, stoppedAtRetrievalLimit,
+  summaryText,
   type RunEvent, type RunTrace,
 } from './runTrace'
 
@@ -56,20 +57,20 @@ const KEYWORD: RunEvent[] = [
 const INSIGHT_RETRY: RunEvent[] = [
   { type: 'RUN_STARTED' },
   ...step('classify', 1, null, 'nova-lite', [custom('serka.classification', { inScope: true, label: 'insight', reason: 'Trends.' })]),
-  ...step('route', 1, 3, null, [{ type: 'RUN_METADATA', model: 'sonnet', models: MODELS }]),
-  ...step('plan', 1, 3, 'sonnet', [custom('serka.plan', { summary: 'Find datasets.', steps: ['a', 'b'] })]),
-  ...step('execute', 1, 3, 'haiku', [
+  ...step('route', 1, 2, null, [{ type: 'RUN_METADATA', model: 'sonnet', models: MODELS }]),
+  ...step('plan', 1, 2, 'sonnet', [custom('serka.plan', { summary: 'Find datasets.', steps: ['a', 'b'] })]),
+  ...step('execute', 1, 2, 'haiku', [
     ...tool('t1', 'search', { query: 'a' }, '{}'),
     ...tool('t2', 'search', { query: 'b' }, '{}'),
     ...tool('t3', 'get_dataset', { id: 'x' }, 'Error: not found'),
     ...tool('t4', 'search', { query: 'c' }, '{}'),
   ]),
-  ...step('synthesize', 1, 3, 'sonnet', [custom('serka.draft', { attempt: 1, text: 'Draft one' })]),
-  ...step('evaluate', 1, 3, 'haiku', [evaluation(1, false, 2, 'writing', 'Missing date ranges.')]),
-  ...step('synthesize', 2, 3, 'sonnet', [custom('serka.draft', { attempt: 2, text: 'Draft two' })]),
-  ...step('evaluate', 2, 3, 'haiku', [evaluation(2, true, 4)]),
+  ...step('synthesize', 1, 2, 'sonnet', [custom('serka.draft', { attempt: 1, text: 'Draft one' })]),
+  ...step('evaluate', 1, 2, 'haiku', [evaluation(1, false, 2, 'writing', 'Missing date ranges.')]),
+  ...step('synthesize', 2, 2, 'sonnet', [custom('serka.draft', { attempt: 2, text: 'Draft two' })]),
+  ...step('evaluate', 2, 2, 'haiku', [evaluation(2, true, 4)]),
   ...text('Draft two'),
-  outcome('accepted', 'insight', 2, 3, 4),
+  outcome('accepted', 'insight', 2, 2, 4),
   { type: 'RUN_FINISHED' },
 ]
 
@@ -79,6 +80,15 @@ const REFUSED: RunEvent[] = [
   { type: 'RUN_METADATA', model: 'nova-lite', models: MODELS },
   ...step('refuse', 1, null, null, text('Sorry.')),
   outcome('refused', null, 0, null, null),
+  { type: 'RUN_FINISHED' },
+]
+
+const INSIGHT_LIMIT: RunEvent[] = [
+  { type: 'RUN_STARTED' },
+  ...step('classify', 1, null, 'nova-lite', [custom('serka.classification', { inScope: true, label: 'insight', reason: 'Trends.' })]),
+  ...step('route', 1, 2, null, [{ type: 'RUN_METADATA', model: 'sonnet', models: MODELS }]),
+  ...step('limit', 1, 2, null, text('Detailed analysis has reached its daily limit.')),
+  outcome('insight_limit_reached', 'insight', 0, 2, null),
   { type: 'RUN_FINISHED' },
 ]
 
@@ -141,10 +151,27 @@ describe('reduceRun', () => {
     expect(t.steps.map((s) => s.name)).toEqual(['classify', 'refuse'])
   })
 
+  it('maps the insight limit outcome to a usage limit', () => {
+    const t = replay(INSIGHT_LIMIT)
+    expect(t.status).toBe('usage_limit')
+    expect(t.path).toBe('insight')
+    expect(t.error).toBeUndefined()
+    expect(t.steps.map((s) => s.name)).toEqual(['classify', 'route', 'limit'])
+    expect(t.steps.every((s) => !s.failed)).toBe(true)
+  })
+
+  it('settles as a usage limit on USAGE_LIMIT, and later events change nothing', () => {
+    const t = reduceRun(emptyRun(T0), { type: 'USAGE_LIMIT', message: 'Try tomorrow.' }, T0 + 100)
+    expect(t.status).toBe('usage_limit')
+    expect(t.limitMessage).toBe('Try tomorrow.')
+    expect(t.finishedAt).toBe(T0 + 100)
+    expect(reduceRun(t, { type: 'STREAM_CLOSED' }, T0 + 200)).toBe(t)
+  })
+
   it('ends in error on RUN_ERROR and closes the open step', () => {
     const events: RunEvent[] = [
       ...INSIGHT_RETRY.slice(0, INSIGHT_RETRY.findIndex((e) => e.type === 'STEP_STARTED' && e.stepName === 'execute')),
-      ...step('execute', 1, 3, 'haiku', [], false),
+      ...step('execute', 1, 2, 'haiku', [], false),
       { type: 'RUN_ERROR', message: 'Sorry, something went wrong.' },
     ]
     const t = replay(events)
@@ -186,12 +213,12 @@ describe('retry notice', () => {
     const nextStage = atStep(INSIGHT_RETRY, 'synthesize', 2)
     expect(progressText(nextStage)).toBe("Attempt 1 didn't pass: Missing date ranges, retrying")
     const oneLater = atStep(INSIGHT_RETRY, 'evaluate', 2)
-    expect(progressText(oneLater)).toBe('Checking the answer (attempt 2 of 3)')
+    expect(progressText(oneLater)).toBe('Checking the answer (attempt 2 of 2)')
   })
 
   it('is not set when no attempts remain', () => {
-    const events = [...step('evaluate', 3, 3, 'haiku', [evaluation(3, false, 2, 'data', 'Still missing.')], false)]
-    expect(progressText(replay(events))).toBe('Checking the answer (attempt 3 of 3)')
+    const events = [...step('evaluate', 2, 2, 'haiku', [evaluation(2, false, 2, 'data', 'Still missing.')], false)]
+    expect(progressText(replay(events))).toBe('Checking the answer (attempt 2 of 2)')
   })
 })
 
@@ -204,9 +231,10 @@ describe('progressText', () => {
     expect(progressText(atStep(INSIGHT_RETRY, 'route'))).toBe('Choosing an approach')
     expect(progressText(atStep(INSIGHT_RETRY, 'plan'))).toBe('Planning the search')
     expect(progressText(atStep(INSIGHT_RETRY, 'execute'))).toBe('Searching the catalogue')
-    expect(progressText(atStep(INSIGHT_RETRY, 'synthesize'))).toBe('Writing the answer (attempt 1 of 3)')
-    expect(progressText(atStep(INSIGHT_RETRY, 'evaluate'))).toBe('Checking the answer (attempt 1 of 3)')
+    expect(progressText(atStep(INSIGHT_RETRY, 'synthesize'))).toBe('Writing the answer (attempt 1 of 2)')
+    expect(progressText(atStep(INSIGHT_RETRY, 'evaluate'))).toBe('Checking the answer (attempt 1 of 2)')
     expect(progressText(atStep(REFUSED, 'refuse'))).toBe('Out of scope')
+    expect(progressText(atStep(INSIGHT_LIMIT, 'limit'))).toBe('Daily limit reached')
   })
 
   it('omits the attempt on single-attempt keyword runs', () => {
@@ -214,7 +242,7 @@ describe('progressText', () => {
   })
 
   it('names the tool during execute', () => {
-    const t = replay([...step('execute', 1, 3, 'haiku', [{ type: 'TOOL_CALL_START', toolCallId: 'x', toolCallName: 'search' }], false)])
+    const t = replay([...step('execute', 1, 2, 'haiku', [{ type: 'TOOL_CALL_START', toolCallId: 'x', toolCallName: 'search' }], false)])
     expect(progressText(t)).toBe('Searching the catalogue (search)')
   })
 })
@@ -226,15 +254,34 @@ describe('summaryText', () => {
     expect(formatDate(t.finishedAt!)).toBe('3 Nov 2026')
   })
 
+  it('names the retrieval limit when a run ends with attempts left', () => {
+    const events = [...INSIGHT_RETRY.slice(0, -2), outcome('limit_reached', 'insight', 1, 2, 2), { type: 'RUN_FINISHED' } as RunEvent]
+    const t = replay(events)
+    expect(stoppedAtRetrievalLimit(t)).toBe(true)
+    expect(summaryText(t)).toContain('Retrieval stopped at its limit')
+    expect(summaryText(t)).not.toContain('Best of')
+  })
+
   it('describes a limit-reached run', () => {
-    const events = [...INSIGHT_RETRY.slice(0, -2), outcome('limit_reached', 'insight', 3, 3, 2), { type: 'RUN_FINISHED' } as RunEvent]
+    const events = [...INSIGHT_RETRY.slice(0, -2), outcome('limit_reached', 'insight', 2, 2, 2), { type: 'RUN_FINISHED' } as RunEvent]
     const t = replay(events)
     expect(t.status).toBe('limit_reached')
-    expect(summaryText(t)).toContain('Best of 3 attempts returned without fully passing')
+    expect(summaryText(t)).toContain('Best of 2 attempts returned without fully passing')
   })
 
   it('describes a refused run with its reason', () => {
     expect(summaryText(replay(REFUSED))).toMatch(/^Out of scope: Not about environmental data · /)
+  })
+
+  it('describes the insight limit without error or out-of-scope wording', () => {
+    const summary = summaryText(replay(INSIGHT_LIMIT))
+    expect(summary).toMatch(/^Detailed analysis has reached its daily limit · /)
+    expect(summary).not.toMatch(/Something went wrong|Out of scope/)
+  })
+
+  it('shows the server message for a rejected request', () => {
+    const t = reduceRun(emptyRun(T0), { type: 'USAGE_LIMIT', message: 'Try tomorrow.' }, T0 + 100)
+    expect(summaryText(t)).toBe(`Try tomorrow. · ${formatDate(T0 + 100)}`)
   })
 
   it('describes an error with and without a message', () => {

@@ -5,7 +5,7 @@ import {
 import SearchIcon from '@mui/icons-material/Search'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import HistoryIcon from '@mui/icons-material/History'
-import { EXAMPLE_SEARCHES } from '../constants'
+import { EXAMPLE_SEARCHES, MAX_QUERY_CHARS } from '../constants'
 import { useSearchStore, type ReturnType } from '../stores/searchStore'
 import mapping from '../doo_mapping.json'
 import { typeMeta } from '../typeMeta'
@@ -109,7 +109,7 @@ export default function SearchBar({
           onKeyDown={(e) => { if (e.key === 'Escape') inputRef.current?.blur() }}
           placeholder="Search environmental datasets…"
           sx={{ flex: 1, fontSize: size === 'large' ? '1.1rem' : undefined }}
-          inputProps={{ 'aria-label': 'search datasets' }}
+          inputProps={{ 'aria-label': 'search datasets', maxLength: MAX_QUERY_CHARS }}
           autoFocus={size === 'large'}
         />
         {showSuggestions && !focused && (

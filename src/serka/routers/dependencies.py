@@ -10,6 +10,7 @@ from starlette.responses import Response
 from serka.feedback import FeedbackLogger
 from serka.ontology import search_args
 from serka.settings import Settings
+from serka.usage import UsageLimiter
 
 StreamFn = Callable[[Any, Request], Response]
 
@@ -17,6 +18,7 @@ StreamFn = Callable[[Any, Request], Response]
 _feedback_logger: FeedbackLogger | None = None
 _stream_fn: StreamFn | None = None
 _mcp_search_fn: Callable | None = None
+_usage_limiter: UsageLimiter | None = None
 
 
 @lru_cache
@@ -65,7 +67,26 @@ def get_feedback_logger(settings: Settings = Depends(get_settings)) -> FeedbackL
 	return _feedback_logger
 
 
-def get_stream_fn(settings: Settings = Depends(get_settings)) -> StreamFn:
+def get_usage_limiter(settings: Settings = Depends(get_settings)) -> UsageLimiter:
+	"""Provides the limiter without using it, so a rejected request counts nothing."""
+	global _usage_limiter
+	if _usage_limiter is None:
+		_usage_limiter = UsageLimiter(
+			client_limit=settings.usage_ip_daily_limit,
+			overall_limit=settings.usage_global_daily_limit,
+			insight_limit=settings.usage_insight_daily_limit,
+		)
+	return _usage_limiter
+
+
+def require_chat_enabled(settings: Settings = Depends(get_settings)) -> None:
+	if not settings.chat_enabled:
+		raise HTTPException(status_code=404, detail="Not Found")
+
+
+def get_stream_fn(
+	settings: Settings = Depends(get_settings), usage_limiter: UsageLimiter = Depends(get_usage_limiter)
+) -> StreamFn:
 	"""Builds and returns the chat pipeline stream handler for the current config.
 	Override this dependency to swap in a mock stream without touching the chat router."""
 	global _stream_fn
@@ -85,5 +106,7 @@ def get_stream_fn(settings: Settings = Depends(get_settings)) -> StreamFn:
 			result = await client.call_tool(name, args)
 		return result.structured_content
 
-	_stream_fn = make_stream_fn(build_stage_models(settings), call_tool, MCPToolset(mcp_url))
+	_stream_fn = make_stream_fn(
+		build_stage_models(settings), call_tool, MCPToolset(mcp_url), usage_limiter.claim_insight
+	)
 	return _stream_fn

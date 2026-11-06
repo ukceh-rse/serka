@@ -45,13 +45,15 @@ def split_messages(messages: Sequence[Message]) -> tuple[str, list[ModelMessage]
 
 
 def make_stream_fn(
-	models: StageModels, call_tool: ToolCaller, toolset: AbstractToolset[Any]
+	models: StageModels, call_tool: ToolCaller, toolset: AbstractToolset[Any], claim_insight: Callable[[], bool]
 ) -> Callable[[RunAgentInput, Request], Response]:
 	graph = build_graph()
 
 	def stream(run_input: RunAgentInput, request: Request) -> Response:
 		query, history = split_messages(run_input.messages)
-		deps = ChatDeps(models=models, call_tool=call_tool, toolset=toolset, emitter=Emitter())
+		deps = ChatDeps(
+			models=models, call_tool=call_tool, toolset=toolset, emitter=Emitter(), claim_insight=claim_insight
+		)
 		state = ChatState(query=query, history=history)
 
 		async def run() -> None:

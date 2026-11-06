@@ -5,10 +5,13 @@
  */
 import type { SSEEvent } from '../api/chat'
 
-/** A contract event, or the synthetic close the client applies when the stream ends. */
-export type RunEvent = SSEEvent | { type: 'STREAM_CLOSED' }
+/**
+ * A contract event, the synthetic close the client applies when the stream ends, or the
+ * synthetic limit it applies when a daily cap rejects the request (HTTP 429).
+ */
+export type RunEvent = SSEEvent | { type: 'STREAM_CLOSED' } | { type: 'USAGE_LIMIT'; message: string }
 
-export type RunStatus = 'running' | 'accepted' | 'limit_reached' | 'refused' | 'error'
+export type RunStatus = 'running' | 'accepted' | 'limit_reached' | 'refused' | 'usage_limit' | 'error'
 
 export interface ToolCall {
   id: string
@@ -40,7 +43,7 @@ export interface Evaluation {
 }
 
 export interface Outcome {
-  status: Exclude<RunStatus, 'running' | 'error'>
+  status: 'accepted' | 'limit_reached' | 'refused' | 'insight_limit_reached'
   path: string | null
   attemptsUsed: number
   maxAttempts: number | null
@@ -68,6 +71,8 @@ export interface RunStep {
 export interface RunTrace {
   status: RunStatus
   error?: string
+  /** The server's message when a daily cap rejected the request. */
+  limitMessage?: string
   path: string | null
   models: Record<string, string>
   startedAt: number
@@ -173,13 +178,14 @@ export function reduceRun(trace: RunTrace, event: RunEvent, now: number): RunTra
       return updateToolCall(trace, event.toolCallId, () => ({ result: content, ok: !content.startsWith('Error:') }))
     }
     case 'RUN_FINISHED':
-      return trace.outcome
-        ? finish(trace, trace.outcome.status, now)
-        : finish(trace, 'error', now, 'The run finished without an outcome.')
+      if (!trace.outcome) return finish(trace, 'error', now, 'The run finished without an outcome.')
+      return finish(trace, trace.outcome.status === 'insight_limit_reached' ? 'usage_limit' : trace.outcome.status, now)
     case 'RUN_ERROR':
       return finish(trace, 'error', now, event.message)
     case 'STREAM_CLOSED':
       return finish(trace, 'error', now)
+    case 'USAGE_LIMIT':
+      return { ...finish(trace, 'usage_limit', now), limitMessage: event.message }
     default:
       return trace
   }
@@ -195,6 +201,7 @@ const STAGE_PHRASES: Record<string, string> = {
   synthesize: 'Writing the answer',
   evaluate: 'Checking the answer',
   refuse: 'Out of scope',
+  limit: 'Daily limit reached',
 }
 
 const PATH_LABELS: Record<string, string> = {
@@ -232,6 +239,12 @@ export function progressText(trace: RunTrace): string {
   return step ? stagePhrase(step) : 'Starting'
 }
 
+/** A limit_reached run with attempts left: a retrieval limit ruled out the data retry it needed. */
+export function stoppedAtRetrievalLimit(trace: RunTrace): boolean {
+  const o = trace.outcome
+  return trace.status === 'limit_reached' && !!o && o.maxAttempts !== null && o.attemptsUsed < o.maxAttempts
+}
+
 function catalogueCalls(trace: RunTrace): number {
   return trace.steps.reduce((n, s) => n + s.toolCalls.length, 0)
 }
@@ -252,10 +265,14 @@ export function summaryText(trace: RunTrace): string {
     const reason = trace.steps.find((s) => s.classification)?.classification?.reason
     return join([reason ? `Out of scope: ${reason}` : 'Out of scope', date])
   }
+  if (trace.status === 'usage_limit') {
+    return join([trace.limitMessage ?? 'Detailed analysis has reached its daily limit', date])
+  }
   const o = trace.outcome
   const calls = catalogueCalls(trace)
-  const result =
-    trace.status === 'limit_reached'
+  const result = stoppedAtRetrievalLimit(trace)
+    ? 'Retrieval stopped at its limit, best answer returned without fully passing'
+    : trace.status === 'limit_reached'
       ? `Best of ${o?.attemptsUsed} attempts returned without fully passing`
       : `Accepted on attempt ${o?.attemptsUsed}`
   return join([

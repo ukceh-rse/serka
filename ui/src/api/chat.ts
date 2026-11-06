@@ -64,6 +64,9 @@ async function* parseSSE(body: ReadableStream<Uint8Array>): AsyncGenerator<SSEEv
   }
 }
 
+/** A daily cap rejected the request; `message` is the server's text for showing to the user. */
+export class UsageLimitError extends Error {}
+
 export async function streamSummary(
   message: string,
   onEvent: (e: SSEEvent) => void,
@@ -75,6 +78,10 @@ export async function streamSummary(
     body: JSON.stringify({ message }),
     signal,
   })
+  if (res.status === 429) {
+    const body = await res.json().catch(() => null)
+    throw new UsageLimitError(body?.detail?.message ?? 'The daily limit for AI summaries has been reached.')
+  }
   if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.statusText}`)
   for await (const event of parseSSE(res.body)) {
     onEvent(event)

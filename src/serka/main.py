@@ -27,9 +27,10 @@ app.include_router(feedback.router, prefix=_API_PREFIX)
 app.include_router(chat.router, prefix=_API_PREFIX)
 
 if _settings.test_mode:
-	from serka.routers.dependencies import get_feedback_logger, get_mcp_search, get_stream_fn
-	from serka.routers.mock import MockFeedbackLogger, get_mock_mcp_search, mock_stream_fn
+	from serka.routers.dependencies import get_feedback_logger, get_mcp_search, get_stream_fn, get_usage_limiter
+	from serka.routers.mock import MockFeedbackLogger, MockUsageLimiter, get_mock_mcp_search, mock_stream_fn
 
 	app.dependency_overrides[get_mcp_search] = get_mock_mcp_search
 	app.dependency_overrides[get_feedback_logger] = lambda: MockFeedbackLogger()
 	app.dependency_overrides[get_stream_fn] = mock_stream_fn
+	app.dependency_overrides[get_usage_limiter] = lambda: MockUsageLimiter()

@@ -32,8 +32,18 @@ class Settings(BaseSettings):
 	# External services
 	legilo_pat: Optional[str] = None
 
+	# Usage limits (per UTC day)
+	usage_ip_daily_limit: int = 30
+	usage_global_daily_limit: int = 500
+	usage_insight_daily_limit: int = 100
+	# Rightmost X-Forwarded-For entries to skip to reach the client: appending proxies minus one.
+	# 0 ignores the header.
+	trusted_proxy_hops: int = 0
+
 	# App
 	test_mode: bool = False
+	# Limits on chat history are required before enabling this in production.
+	chat_enabled: bool = False
 
 	model_config = SettingsConfigDict(
 		env_file=".env", env_file_encoding="utf-8", extra="ignore"

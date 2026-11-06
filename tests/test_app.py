@@ -13,13 +13,6 @@ def client():
 		yield c
 
 
-@pytest.fixture(autouse=True)
-def clear_dependency_overrides():
-	"""Reset dependency overrides after every test to prevent state leaking between tests."""
-	yield
-	app.dependency_overrides.clear()
-
-
 # --- /query/semantic ---
 
 
@@ -54,6 +47,36 @@ def test_semantic_search_returns_results(client):
 def test_semantic_search_missing_query_returns_422(client):
 	response = client.get("/v1/query/semantic")
 	assert response.status_code == 422
+
+
+def _use_search(results: list) -> tuple[MagicMock, MagicMock]:
+	search, logger = MagicMock(return_value=results), MagicMock()
+
+	async def mock_search_fn():
+		async def _search(q: str, **kwargs) -> list:
+			return search(q)
+
+		return _search
+
+	app.dependency_overrides[get_mcp_search] = mock_search_fn
+	app.dependency_overrides[get_feedback_logger] = lambda: logger
+	return search, logger
+
+
+def test_semantic_search_accepts_query_at_the_limit(client):
+	search, logger = _use_search([])
+	response = client.get("/v1/query/semantic", params={"q": "x" * 500})
+	assert response.status_code == 200
+	search.assert_called_once()
+	logger.log_feedback.assert_called_once()
+
+
+def test_semantic_search_rejects_query_over_the_limit(client):
+	search, logger = _use_search([])
+	response = client.get("/v1/query/semantic", params={"q": "x" * 501})
+	assert response.status_code == 422
+	search.assert_not_called()
+	logger.log_feedback.assert_not_called()
 
 
 # --- /feedback ---
@@ -116,3 +139,15 @@ def test_chat_stream_missing_body_returns_422(client):
 
 	response = client.post("/v1/chat/stream")
 	assert response.status_code == 422
+
+
+@pytest.mark.usefixtures("no_mock_delays")
+def test_test_mode_enforces_no_caps(client):
+	for _ in range(35):
+		response = client.post("/v1/chat/stream", json={"message": "soil carbon"})
+		assert response.status_code == 200
+		assert "text/event-stream" in response.headers["content-type"]
+
+
+def test_test_mode_still_limits_query_length(client):
+	assert client.post("/v1/chat/stream", json={"message": "x" * 501}).status_code == 422

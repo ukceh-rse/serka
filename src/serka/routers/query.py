@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from serka.feedback import FeedbackLogger
 from serka.ontology import ReturnType
 from serka.routers.dependencies import get_feedback_logger, get_mcp_search
+from serka.usage import MAX_QUERY_CHARS
 
 router = APIRouter(prefix="/query", tags=["Query"])
 
@@ -10,6 +11,7 @@ router = APIRouter(prefix="/query", tags=["Query"])
 @router.get("/semantic", summary="Perform a semantic search in the graph database")
 async def semantic_graph_search(
 	q: str = Query(
+		max_length=MAX_QUERY_CHARS,
 		description="Query to perform the semantic search with.",
 		examples=["Are there any pike in Windermere lake?"],
 	),
