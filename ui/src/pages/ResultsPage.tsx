@@ -26,7 +26,7 @@ import AISummary from "../components/AISummary";
 import { useSearchStore } from "../stores/searchStore";
 import type { Entity, ReturnType, SearchHit } from "../stores/searchStore";
 import { search } from "../api/search";
-import { streamSummary } from "../api/chat";
+import { streamSummary, UsageLimitError } from "../api/chat";
 import { EXAMPLE_SEARCHES } from "../constants";
 import { TYPE_ORDER, TypeIcon, typeMeta } from "../typeMeta";
 
@@ -109,7 +109,12 @@ export default function ResultsPage() {
         controller.signal,
       );
     } catch (e) {
-      if (live()) applyAiEvent({ type: "RUN_ERROR", message: (e as Error).message });
+      if (live())
+        applyAiEvent(
+          e instanceof UsageLimitError
+            ? { type: "USAGE_LIMIT", message: e.message }
+            : { type: "RUN_ERROR", message: (e as Error).message },
+        );
     }
     // Turns a run that never reached RUN_FINISHED/RUN_ERROR into an error; no-op otherwise.
     if (live()) applyAiEvent({ type: "STREAM_CLOSED" });
@@ -121,33 +126,30 @@ export default function ResultsPage() {
     if (!EXAMPLE_SEARCHES.includes(q)) addRecentSearch(q);
     setQuery(q);
     setReturnType(rt);
-    resetAiSummary();
     setLoading(true);
     setError(null);
     search(q, rt)
       .then(setResults)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-    if (aiFromUrl) runSummary(q);
-    return () => {
+  }, [q, rt]);
+
+  // The summary answers the query alone, so a type filter change leaves it and its run details in place.
+  useEffect(() => {
+    if (!q) return;
+    const newQuery = q !== query;
+    if (newQuery) resetAiSummary();
+    if (aiFromUrl && (newQuery || (!aiSummary && aiRun?.status !== "running"))) runSummary(q);
+  }, [q, aiFromUrl]);
+
+  useEffect(
+    () => () => {
       summaryAbortRef.current?.abort();
       // An abandoned run would otherwise stay "running" and block the rerun when the page is revisited.
       if (useSearchStore.getState().aiRun?.status === "running") resetAiSummary();
-    };
-  }, [q, rt]);
-
-  useEffect(() => {
-    if (
-      aiFromUrl &&
-      q &&
-      q === query &&
-      results.length > 0 &&
-      !aiSummary &&
-      aiRun?.status !== "running"
-    ) {
-      runSummary(q);
-    }
-  }, [aiFromUrl]);
+    },
+    [q],
+  );
 
   // All hits grouped per entity, hits sorted by score, groups sorted by relevance.
   // The dataset and per-type views below are derived from this single pass; the

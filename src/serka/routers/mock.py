@@ -272,10 +272,11 @@ _INSIGHT_ANSWER = (
 def _mock_insight_retry_run(thread_id: str, run_id: str) -> List[str]:
 	"""A scripted insight run whose first draft fails evaluation (writing) and is accepted on attempt 2."""
 	from serka.chat.events import Emitter
+	from serka.chat.pipeline import MAX_ATTEMPTS
 
 	e = Emitter()
 	m = _MOCK_MODELS
-	max_attempts = 3
+	max_attempts = MAX_ATTEMPTS["insight"]
 
 	def step(name: str, model: Optional[str], attempt: int = 1) -> Any:
 		return e.step(name, attempt=attempt, max_attempts=max_attempts, model=model)
@@ -341,9 +342,36 @@ def _mock_refused_run(thread_id: str, run_id: str) -> List[str]:
 	return _drain(e)
 
 
+def _mock_insight_limit_run(thread_id: str, run_id: str) -> List[str]:
+	"""A scripted run stopped by the daily insight cap: classify, route, limit."""
+	from serka import prompts
+	from serka.chat.events import Emitter
+	from serka.chat.pipeline import MAX_ATTEMPTS
+
+	e = Emitter()
+	m = _MOCK_MODELS
+	max_attempts = MAX_ATTEMPTS["insight"]
+	e.run_started(thread_id, run_id)
+	with e.step("classify", attempt=1, max_attempts=None, model=m["classify"]):
+		e.custom("serka.classification", {"inScope": True, "label": "insight", "reason": "Needs reasoning."})
+	with e.step("route", attempt=1, max_attempts=max_attempts, model=None):
+		e.metadata(m["synthesize_insight"], m)
+	with e.step("limit", attempt=1, max_attempts=max_attempts, model=None):
+		e.text(prompts.INSIGHT_LIMIT_MESSAGE)
+	e.custom("serka.outcome", {
+		"status": "insight_limit_reached", "path": "insight", "attemptsUsed": 0, "maxAttempts": max_attempts,
+		"score": None, "feedback": None,
+	})
+	e.run_finished(thread_id, run_id)
+	return _drain(e)
+
+
 def _select_run(query: str) -> Any:
-	"""Test-mode scenario chosen by the query text: "trend" -> insight retry, "weather" -> refused."""
+	"""Test-mode scenario chosen by the query text: "trend" -> insight retry, "weather" -> refused,
+	"quota" -> insight limit."""
 	q = query.lower()
+	if "quota" in q:
+		return _mock_insight_limit_run
 	if "trend" in q:
 		return _mock_insight_retry_run
 	if "weather" in q:
@@ -377,10 +405,18 @@ class MockFeedbackLogger:
 		pass
 
 
+class MockUsageLimiter:
+	"""Admits everything and stores nothing."""
+
+	def admit(self, client: str) -> None:
+		return None
+
+
 def mock_stream_fn() -> Any:
 	"""Drop-in replacement for get_stream_fn. Returns a stream handler that replays a
 	scripted run (following the chat event contract) with realistic delays. The query text
-	picks the run: "trend" plays insight with a retry, "weather" a refusal, anything else keyword."""
+	picks the run: "trend" plays insight with a retry, "weather" a refusal, "quota" the insight limit,
+	anything else keyword."""
 	from serka.chat.service import split_messages
 
 	async def _events(lines: List[str]) -> AsyncIterator[str]:

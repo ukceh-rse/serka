@@ -1,6 +1,6 @@
 """The chat pipeline as a pydantic-graph state machine.
 
-Classify -> Refuse | Route; Route -> Plan -> Execute -> Synthesize -> Evaluate;
+Classify -> Refuse | Route; Route -> InsightLimit | Plan; Plan -> Execute -> Synthesize -> Evaluate;
 Evaluate -> Plan (data retry) | Synthesize (writing retry) | End.
 See openspec specs `chat-agent` and `chat-agent-events`.
 """
@@ -8,6 +8,7 @@ See openspec specs `chat-agent` and `chat-agent-events`.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
@@ -16,9 +17,11 @@ from typing import Any, Literal
 from fastmcp.exceptions import ToolError
 from pydantic import BaseModel, Field, model_validator
 from pydantic_ai import Agent
+from pydantic_ai.exceptions import IncompleteToolCall, UsageLimitExceeded
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models import Model
 from pydantic_ai.toolsets import AbstractToolset
+from pydantic_ai.usage import RunUsage, UsageLimits
 from pydantic_graph import BaseNode, End, Graph, GraphBuilder, GraphRunContext
 
 from serka import prompts
@@ -26,11 +29,25 @@ from serka.chat.events import Emitter, ToolCaller, ToolResult, agent_event_handl
 from serka.chat.models import StageModels
 from serka.ontology import ReturnType, search_args
 
+logger = logging.getLogger(__name__)
+
 Label = Literal["keyword", "insight"]
 Problem = Literal["none", "data", "writing"]
-Status = Literal["accepted", "limit_reached", "refused"]
+Status = Literal["accepted", "limit_reached", "refused", "insight_limit_reached"]
 
-MAX_ATTEMPTS: dict[Label, int] = {"keyword": 1, "insight": 3}
+MAX_ATTEMPTS: dict[Label, int] = {"keyword": 1, "insight": 2}
+MAX_TOKENS = {
+	"classify": 300,
+	"plan_keyword": 300,
+	"plan_insight": 2_000,
+	"execute_insight": 2_000,
+	"synthesize_keyword": 2_000,
+	"synthesize_insight": 3_000,
+	"evaluate": 4_000,
+}
+"""Output limit per model response. Sonnet and Haiku thinking uses the same limit, so these include headroom."""
+EXECUTE_USAGE_LIMITS = UsageLimits(request_limit=10, total_tokens_limit=200_000)
+"""Per run, across attempts. Tokens need a limit too: the execute agent sees uncapped tool results (see MAX_RESULT_CHARS)."""
 MAX_RESULT_CHARS = 8000
 """Cap on each tool result's size in downstream prompts (JSON-LD results can be large)."""
 CLASSIFY_OUTPUT_RETRIES = 2
@@ -106,6 +123,10 @@ class ChatState:
 	plan: SearchParams | RetrievalPlan | None = None
 	tool_results: list[ToolResult] = field(default_factory=list)
 	drafts: list[Draft] = field(default_factory=list)
+	execute_usage: RunUsage = field(default_factory=RunUsage)
+	"""Shared by the run's retrievals, so EXECUTE_USAGE_LIMITS covers all its attempts."""
+	retrieval_stopped: bool = False
+	"""A retrieval limit stopped retrieval, so another attempt is not expected to gather more."""
 
 	@property
 	def label(self) -> Label | None:
@@ -130,6 +151,8 @@ class ChatDeps:
 	toolset: AbstractToolset[Any]
 	"""Catalogue tools offered to the insight execute agent."""
 	emitter: Emitter
+	claim_insight: Callable[[], bool]
+	"""Takes one of today's insight slots; False when none is left."""
 
 
 @dataclass
@@ -182,10 +205,13 @@ async def _run(
 	prompt: str,
 	output_type: Any = str,
 	*,
+	stage: str,
 	history: Sequence[ModelMessage] | None = None,
 	toolsets: Sequence[AbstractToolset[Any]] | None = None,
 	event_stream_handler: Callable[..., Awaitable[None]] | None = None,
 	output_retries: int | None = None,
+	usage_limits: UsageLimits | None = None,
+	usage: RunUsage | None = None,
 ) -> Any:
 	agent: Agent[None, Any] = Agent(
 		model,
@@ -194,8 +220,44 @@ async def _run(
 		toolsets=toolsets,
 		retries={"output": output_retries} if output_retries is not None else None,
 	)
-	result = await agent.run(prompt, message_history=history, event_stream_handler=event_stream_handler)
+	usage = RunUsage() if usage is None else usage
+	max_tokens = MAX_TOKENS[stage]
+	try:
+		result = await agent.run(
+			prompt,
+			message_history=history,
+			event_stream_handler=event_stream_handler,
+			model_settings={"max_tokens": max_tokens},
+			usage_limits=usage_limits,
+			usage=usage,
+		)
+	finally:
+		# In `finally` because reaching a usage limit or failing a call still spends tokens.
+		# With shared usage, as in execute_insight, these are the totals so far.
+		logger.info(
+			"model usage stage=%s model=%s requests=%d input_tokens=%d output_tokens=%d max_tokens=%d",
+			stage, model.model_name, usage.requests, usage.input_tokens, usage.output_tokens, max_tokens,
+		)
 	return result.output
+
+
+def _fixed_answer(ctx: Ctx, step: str, message: str, status: Status, path: Label | None) -> End[Answer]:
+	"""Ends a run with a fixed message and no attempts."""
+	emitter = ctx.deps.emitter
+	with _step(ctx, step, None):
+		emitter.text(message)
+	emitter.custom(
+		"serka.outcome",
+		{
+			"status": status,
+			"path": path,
+			"attemptsUsed": 0,
+			"maxAttempts": ctx.state.max_attempts,
+			"score": None,
+			"feedback": None,
+		},
+	)
+	return End(Answer(text=message, status=status))
 
 
 # Nodes
@@ -211,6 +273,7 @@ class Classify(BaseNode[ChatState, ChatDeps, Answer]):
 				prompts.CLASSIFY_PROMPT,
 				ctx.state.query,
 				Classification,
+				stage="classify",
 				history=ctx.state.history,
 				output_retries=CLASSIFY_OUTPUT_RETRIES,
 			)
@@ -221,26 +284,28 @@ class Classify(BaseNode[ChatState, ChatDeps, Answer]):
 
 @dataclass
 class Route(BaseNode[ChatState, ChatDeps, Answer]):
-	async def run(self, ctx: Ctx) -> Plan:
+	async def run(self, ctx: Ctx) -> InsightLimit | Plan:
 		models = ctx.deps.models
 		with _step(ctx, "route", None):
 			answer_model = models.synthesize_keyword if ctx.state.label == "keyword" else models.synthesize_insight
 			ctx.deps.emitter.metadata(answer_model.model_name, models.ids())
+			# Claimed here so a run takes one slot however many attempts it uses.
+			if ctx.state.label == "insight" and not ctx.deps.claim_insight():
+				return InsightLimit()
 		return Plan()
+
+
+@dataclass
+class InsightLimit(BaseNode[ChatState, ChatDeps, Answer]):
+	async def run(self, ctx: Ctx) -> End[Answer]:
+		return _fixed_answer(ctx, "limit", prompts.INSIGHT_LIMIT_MESSAGE, "insight_limit_reached", "insight")
 
 
 @dataclass
 class Refuse(BaseNode[ChatState, ChatDeps, Answer]):
 	async def run(self, ctx: Ctx) -> End[Answer]:
-		emitter = ctx.deps.emitter
-		emitter.metadata(ctx.deps.models.classify.model_name, ctx.deps.models.ids())
-		with _step(ctx, "refuse", None):
-			emitter.text(prompts.REFUSAL_MESSAGE)
-		emitter.custom(
-			"serka.outcome",
-			{"status": "refused", "path": None, "attemptsUsed": 0, "maxAttempts": None, "score": None, "feedback": None},
-		)
-		return End(Answer(text=prompts.REFUSAL_MESSAGE, status="refused"))
+		ctx.deps.emitter.metadata(ctx.deps.models.classify.model_name, ctx.deps.models.ids())
+		return _fixed_answer(ctx, "refuse", prompts.REFUSAL_MESSAGE, "refused", None)
 
 
 @dataclass
@@ -251,7 +316,12 @@ class Plan(BaseNode[ChatState, ChatDeps, Answer]):
 			model = ctx.deps.models.plan_keyword
 			with _step(ctx, "plan", model):
 				params: SearchParams = await _run(
-					model, prompts.PLAN_KEYWORD_PROMPT, state.query, SearchParams, history=state.history
+					model,
+					prompts.PLAN_KEYWORD_PROMPT,
+					state.query,
+					SearchParams,
+					stage="plan_keyword",
+					history=state.history,
 				)
 				state.plan = params
 				emitter.custom("serka.plan", _keyword_plan_event(params))
@@ -263,7 +333,12 @@ class Plan(BaseNode[ChatState, ChatDeps, Answer]):
 				prompt += f"\n\nPrevious plan: {_plan_text(state.plan)}\n\nEvaluator feedback: {retry.feedback}"
 			with _step(ctx, "plan", model):
 				plan: RetrievalPlan = await _run(
-					model, prompts.PLAN_INSIGHT_PROMPT, prompt, RetrievalPlan, history=state.history
+					model,
+					prompts.PLAN_INSIGHT_PROMPT,
+					prompt,
+					RetrievalPlan,
+					stage="plan_insight",
+					history=state.history,
 				)
 				state.plan = plan
 				emitter.custom("serka.plan", {"summary": plan.summary, "steps": plan.steps})
@@ -291,6 +366,7 @@ def _keyword_plan_event(params: SearchParams) -> dict[str, Any]:
 class Execute(BaseNode[ChatState, ChatDeps, Answer]):
 	async def run(self, ctx: Ctx) -> Synthesize:
 		state, deps = ctx.state, ctx.deps
+		previous_results = state.tool_results
 		state.tool_results = []
 		if state.label == "keyword":
 			assert isinstance(state.plan, SearchParams)
@@ -314,13 +390,22 @@ class Execute(BaseNode[ChatState, ChatDeps, Answer]):
 		else:
 			model = deps.models.execute_insight
 			with _step(ctx, "execute", model):
-				await _run(
-					model,
-					prompts.EXECUTE_INSIGHT_PROMPT,
-					f"Question: {state.query}\n\nPlan: {_plan_text(state.plan)}",
-					toolsets=[deps.toolset],
-					event_stream_handler=agent_event_handler(deps.emitter, tool_results=state.tool_results),
-				)
+				try:
+					await _run(
+						model,
+						prompts.EXECUTE_INSIGHT_PROMPT,
+						f"Question: {state.query}\n\nPlan: {_plan_text(state.plan)}",
+						stage="execute_insight",
+						toolsets=[deps.toolset],
+						event_stream_handler=agent_event_handler(deps.emitter, tool_results=state.tool_results),
+						usage_limits=EXECUTE_USAGE_LIMITS,
+						usage=state.execute_usage,
+					)
+				except (UsageLimitExceeded, IncompleteToolCall):
+					# A partial answer is more useful than an error: compose from what was gathered,
+					# or from the last attempt's data if the limit left this one with nothing.
+					state.retrieval_stopped = True
+					state.tool_results = state.tool_results or previous_results
 		return Synthesize()
 
 
@@ -340,6 +425,7 @@ class Synthesize(BaseNode[ChatState, ChatDeps, Answer]):
 				model,
 				prompts.SYNTHESIZE_PROMPT,
 				prompt,
+				stage="synthesize_keyword" if keyword else "synthesize_insight",
 				history=state.history,
 				event_stream_handler=agent_event_handler(emitter, stream_text=True) if keyword else None,
 			)
@@ -365,7 +451,9 @@ class Evaluate(BaseNode[ChatState, ChatDeps, Answer]):
 			f"\n\nDraft answer:\n{draft.text}"
 		)
 		with _step(ctx, "evaluate", model):
-			ev: Evaluation = await _run(model, prompts.EVALUATE_PROMPT, prompt, Evaluation, history=state.history)
+			ev: Evaluation = await _run(
+				model, prompts.EVALUATE_PROMPT, prompt, Evaluation, stage="evaluate", history=state.history
+			)
 			draft.evaluation = ev
 			emitter.custom(
 				"serka.evaluation",
@@ -373,7 +461,8 @@ class Evaluate(BaseNode[ChatState, ChatDeps, Answer]):
 			)
 
 		assert state.max_attempts is not None
-		if not ev.passed and state.attempt < state.max_attempts:
+		more_data_impossible = ev.problem == "data" and state.retrieval_stopped
+		if not ev.passed and state.attempt < state.max_attempts and not more_data_impossible:
 			state.attempt += 1
 			return Plan() if ev.problem == "data" else Synthesize()
 
@@ -408,6 +497,7 @@ def build_graph() -> Graph:
 		g.edge_from(g.start_node).to(Classify),
 		g.node(Classify),
 		g.node(Route),
+		g.node(InsightLimit),
 		g.node(Refuse),
 		g.node(Plan),
 		g.node(Execute),

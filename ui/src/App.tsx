@@ -6,7 +6,6 @@ import { useAppStore } from './stores/appStore'
 import Layout from './components/Layout'
 import LandingPage from './pages/LandingPage'
 import ResultsPage from './pages/ResultsPage'
-import ChatPage from './pages/ChatPage'
 
 export default function App() {
   const { themeMode } = useAppStore()
@@ -20,7 +19,6 @@ export default function App() {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/search" element={<ResultsPage />} />
-            <Route path="/chat" element={<ChatPage />} />
           </Routes>
         </Layout>
       </BrowserRouter>
