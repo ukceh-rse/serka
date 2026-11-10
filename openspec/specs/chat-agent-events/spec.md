@@ -7,7 +7,7 @@ Defines the event stream the chat endpoints return, so any AG-UI compatible clie
 ## Requirements
 
 ### Requirement: Chat responses are AG-UI event streams
-Both `/v1/chat/stream` and `/v1/chat/stream/agui` SHALL accept their existing request bodies and respond with a server-sent event stream of AG-UI events. The stream SHALL begin with `RUN_STARTED` and end with either `RUN_FINISHED` or `RUN_ERROR`.
+`/v1/chat/stream`, and `/v1/chat/stream/agui` when chat is enabled, SHALL accept their existing request bodies and respond with a server-sent event stream of AG-UI events, unless the request is rejected before a run starts. The stream SHALL begin with `RUN_STARTED` and end with either `RUN_FINISHED` or `RUN_ERROR`. A rejected request SHALL receive a plain HTTP error response with no event stream.
 
 #### Scenario: Stream framing
 - **WHEN** a client posts `{"message": "river flow"}` to `/v1/chat/stream`
@@ -17,6 +17,10 @@ Both `/v1/chat/stream` and `/v1/chat/stream/agui` SHALL accept their existing re
 - **WHEN** a model or tool call fails in a way the pipeline cannot recover from
 - **THEN** the stream ends with `RUN_ERROR` carrying a human-readable message
 
+#### Scenario: Rejected before the stream
+- **WHEN** a request is rejected by a daily cap or the query length limit
+- **THEN** the response is an HTTP error with no `RUN_STARTED` event
+
 ### Requirement: Run metadata reports the models used
 Before any answer text, the stream SHALL include a `RUN_METADATA` event with a `model` field (the model that composes the answer for this query, or the classification model for a refused query) and a `models` field mapping each stage name to its configured model identifier.
 
@@ -25,7 +29,7 @@ Before any answer text, the stream SHALL include a `RUN_METADATA` event with a `
 - **THEN** a `RUN_METADATA` event with `model` and `models` appears before the first `TEXT_MESSAGE_CONTENT` event
 
 ### Requirement: Each pipeline stage is bracketed by step events
-Every stage execution SHALL be wrapped in `STEP_STARTED` and `STEP_FINISHED` events whose `stepName` is one of `classify`, `route`, `plan`, `execute`, `synthesize`, `evaluate` or `refuse`. Each `STEP_STARTED` SHALL be followed by a `CUSTOM` event named `serka.step` with value `{step, attempt, maxAttempts, model}`. `model` is null for stages that use no model, and `maxAttempts` is null before routing.
+Every stage execution SHALL be wrapped in `STEP_STARTED` and `STEP_FINISHED` events whose `stepName` is one of `classify`, `route`, `plan`, `execute`, `synthesize`, `evaluate`, `refuse` or `limit`. Each `STEP_STARTED` SHALL be followed by a `CUSTOM` event named `serka.step` with value `{step, attempt, maxAttempts, model}`. `model` is null for stages that use no model, and `maxAttempts` is null before routing.
 
 #### Scenario: Keyword run steps
 - **WHEN** a `keyword` query passes evaluation on its only attempt
@@ -33,11 +37,15 @@ Every stage execution SHALL be wrapped in `STEP_STARTED` and `STEP_FINISHED` eve
 
 #### Scenario: Retry is visible
 - **WHEN** an `insight` query's first evaluation fails with problem `data`
-- **THEN** a second `plan` step follows with `serka.step` attempt 2 and maxAttempts 3
+- **THEN** a second `plan` step follows with `serka.step` attempt 2 and maxAttempts 2
 
 #### Scenario: Refusal steps
 - **WHEN** a query is classified out of scope
 - **THEN** only the `classify` and `refuse` steps appear
+
+#### Scenario: Insight limit steps
+- **WHEN** a query is stopped by the daily insight cap
+- **THEN** only the `classify`, `route` and `limit` steps appear
 
 ### Requirement: Stage results are published as custom events
 The stream SHALL publish stage results as `CUSTOM` events inside their step: `serka.classification` `{inScope, label, reason}` in classify, `serka.plan` `{summary, steps}` in plan, `serka.draft` `{attempt, text}` in synthesize for `insight` queries, and `serka.evaluation` `{attempt, passed, score, problem, feedback}` in evaluate. `label` is `keyword`, `insight` or null, and `problem` is `none`, `data` or `writing`.
@@ -73,19 +81,24 @@ Each run SHALL emit exactly one assistant text message (`TEXT_MESSAGE_START`, on
 - **THEN** the concatenated `TEXT_MESSAGE_CONTENT` deltas end with the fixed incomplete-answer note
 
 ### Requirement: Every run reports its outcome
-Immediately before `RUN_FINISHED`, the stream SHALL include a `CUSTOM` event named `serka.outcome` with value `{status, path, attemptsUsed, maxAttempts, score, feedback}`. `status` is `accepted`, `limit_reached` or `refused`, and `path` is `keyword`, `insight` or null. For `limit_reached`, `feedback` SHALL carry the evaluation feedback for the returned answer.
+Immediately before `RUN_FINISHED`, the stream SHALL include a `CUSTOM` event named `serka.outcome` with value `{status, path, attemptsUsed, maxAttempts, score, feedback}`. `status` is `accepted`, `limit_reached`, `refused` or `insight_limit_reached`, and `path` is `keyword`, `insight` or null. For `limit_reached`, `feedback` SHALL carry the evaluation feedback for the returned answer.
 
 #### Scenario: Accepted outcome
 - **WHEN** a query passes evaluation on attempt 1
 - **THEN** `serka.outcome` has status `accepted` and attemptsUsed 1
 
 #### Scenario: Limit reached outcome
-- **WHEN** an `insight` query fails all 3 evaluations
-- **THEN** `serka.outcome` has status `limit_reached`, attemptsUsed 3, maxAttempts 3, and the returned answer's score and feedback
+- **WHEN** an `insight` query fails both evaluations
+- **THEN** `serka.outcome` has status `limit_reached`, attemptsUsed 2, maxAttempts 2, and the returned answer's score and feedback
 
 #### Scenario: Refused outcome
 - **WHEN** a query is refused
 - **THEN** `serka.outcome` has status `refused`, path null and attemptsUsed 0
+
+#### Scenario: Insight limit outcome
+- **WHEN** a query is stopped by the daily insight cap
+- **THEN** `serka.outcome` has status `insight_limit_reached`, path `insight`, attemptsUsed 0, maxAttempts 2, and null score and feedback
+- **AND** the stream ends with `RUN_FINISHED`, not `RUN_ERROR`
 
 ### Requirement: Test mode emits the same event contract
 When the service runs in test mode, the mock chat stream SHALL emit events that follow this contract (lifecycle, step, custom, tool call and single text message events), so clients can be developed without Bedrock or the MCP server.
