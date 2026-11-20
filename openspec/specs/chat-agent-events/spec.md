@@ -22,14 +22,18 @@ Defines the event stream the chat endpoints return, so any AG-UI compatible clie
 - **THEN** the response is an HTTP error with no `RUN_STARTED` event
 
 ### Requirement: Run metadata reports the models used
-Before any answer text, the stream SHALL include a `RUN_METADATA` event with a `model` field (the model that composes the answer for this query, or the classification model for a refused query) and a `models` field mapping each stage name to its configured model identifier.
+Before any answer text, the stream SHALL include a `RUN_METADATA` event with a `model` field (the model that composes the answer for this query, the classification model for a refused query, or the model that composed a cached answer) and a `models` field mapping each stage name to its configured model identifier.
 
 #### Scenario: Metadata before text
 - **WHEN** any query is processed
 - **THEN** a `RUN_METADATA` event with `model` and `models` appears before the first `TEXT_MESSAGE_CONTENT` event
 
+#### Scenario: Cached answer model
+- **WHEN** a query is answered from the cache
+- **THEN** `RUN_METADATA.model` is the model recorded with the cached answer
+
 ### Requirement: Each pipeline stage is bracketed by step events
-Every stage execution SHALL be wrapped in `STEP_STARTED` and `STEP_FINISHED` events whose `stepName` is one of `classify`, `route`, `plan`, `execute`, `synthesize`, `evaluate`, `refuse` or `limit`. Each `STEP_STARTED` SHALL be followed by a `CUSTOM` event named `serka.step` with value `{step, attempt, maxAttempts, model}`. `model` is null for stages that use no model, and `maxAttempts` is null before routing.
+Every stage execution SHALL be wrapped in `STEP_STARTED` and `STEP_FINISHED` events whose `stepName` is one of `cache`, `classify`, `route`, `plan`, `execute`, `synthesize`, `evaluate`, `refuse` or `limit`. Each `STEP_STARTED` SHALL be followed by a `CUSTOM` event named `serka.step` with value `{step, attempt, maxAttempts, model}`. `model` is null for stages that use no model, and `maxAttempts` is null before routing.
 
 #### Scenario: Keyword run steps
 - **WHEN** a `keyword` query passes evaluation on its only attempt
@@ -46,6 +50,14 @@ Every stage execution SHALL be wrapped in `STEP_STARTED` and `STEP_FINISHED` eve
 #### Scenario: Insight limit steps
 - **WHEN** a query is stopped by the daily insight cap
 - **THEN** only the `classify`, `route` and `limit` steps appear
+
+#### Scenario: Cached answer steps
+- **WHEN** a query is answered from the cache
+- **THEN** only the `cache` step appears
+
+#### Scenario: Cache miss
+- **WHEN** a first-turn query is looked up in the cache and misses
+- **THEN** a `cache` step appears before `classify`, and the run continues with the usual steps
 
 ### Requirement: Stage results are published as custom events
 The stream SHALL publish stage results as `CUSTOM` events inside their step: `serka.classification` `{inScope, label, reason}` in classify, `serka.plan` `{summary, steps}` in plan, `serka.draft` `{attempt, text}` in synthesize for `insight` queries, and `serka.evaluation` `{attempt, passed, score, problem, feedback}` in evaluate. `label` is `keyword`, `insight` or null, and `problem` is `none`, `data` or `writing`.
@@ -81,7 +93,7 @@ Each run SHALL emit exactly one assistant text message (`TEXT_MESSAGE_START`, on
 - **THEN** the concatenated `TEXT_MESSAGE_CONTENT` deltas end with the fixed incomplete-answer note
 
 ### Requirement: Every run reports its outcome
-Immediately before `RUN_FINISHED`, the stream SHALL include a `CUSTOM` event named `serka.outcome` with value `{status, path, attemptsUsed, maxAttempts, score, feedback}`. `status` is `accepted`, `limit_reached`, `refused` or `insight_limit_reached`, and `path` is `keyword`, `insight` or null. For `limit_reached`, `feedback` SHALL carry the evaluation feedback for the returned answer.
+Immediately before `RUN_FINISHED`, the stream SHALL include a `CUSTOM` event named `serka.outcome` with value `{status, path, attemptsUsed, maxAttempts, score, feedback}`. `status` is `accepted`, `limit_reached`, `refused`, `insight_limit_reached` or `cached`, and `path` is `keyword`, `insight` or null. For `limit_reached`, `feedback` SHALL carry the evaluation feedback for the returned answer.
 
 #### Scenario: Accepted outcome
 - **WHEN** a query passes evaluation on attempt 1
@@ -99,6 +111,10 @@ Immediately before `RUN_FINISHED`, the stream SHALL include a `CUSTOM` event nam
 - **WHEN** a query is stopped by the daily insight cap
 - **THEN** `serka.outcome` has status `insight_limit_reached`, path `insight`, attemptsUsed 0, maxAttempts 2, and null score and feedback
 - **AND** the stream ends with `RUN_FINISHED`, not `RUN_ERROR`
+
+#### Scenario: Cached outcome
+- **WHEN** a query is answered from the cache
+- **THEN** `serka.outcome` has status `cached`, the path and score recorded with the cached answer, attemptsUsed 0, and null maxAttempts and feedback
 
 ### Requirement: Test mode emits the same event contract
 When the service runs in test mode, the mock chat stream SHALL emit events that follow this contract (lifecycle, step, custom, tool call and single text message events), so clients can be developed without Bedrock or the MCP server.

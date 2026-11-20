@@ -40,7 +40,7 @@ When the run ends, the progress line SHALL be replaced, in the same position, by
 - **THEN** no "Model:" or "Date:" chip is rendered in the AI Summary panel
 
 ### Requirement: Summary row distinguishes the run outcome
-The summary row SHALL look different for each outcome: `accepted`, `limit_reached`, `refused`, a daily usage limit, and a run that ended in error. A `limit_reached` row SHALL say that the best of the attempts was returned without fully passing. A `refused` row SHALL show the classification reason. A daily usage limit row SHALL state the limit without presenting it as an error or as out of scope.
+The summary row SHALL look different for each outcome: `accepted`, `limit_reached`, `refused`, `cached`, a daily usage limit, and a run that ended in error. A `limit_reached` row SHALL say that the best of the attempts was returned without fully passing. A `refused` row SHALL show the classification reason. A daily usage limit row SHALL state the limit without presenting it as an error or as out of scope. A `cached` row SHALL say that a saved answer to a similar question was returned.
 
 #### Scenario: Limit reached
 - **WHEN** `serka.outcome` has status `limit_reached` with attemptsUsed 2
@@ -57,6 +57,10 @@ The summary row SHALL look different for each outcome: `accepted`, `limit_reache
 #### Scenario: Insight limit
 - **WHEN** `serka.outcome` has status `insight_limit_reached`
 - **THEN** the row says detailed analysis has reached its daily limit, with no error or out-of-scope wording
+
+#### Scenario: Cached
+- **WHEN** `serka.outcome` has status `cached` with path `keyword` and score 4
+- **THEN** the row says a saved answer to a similar question was returned, with the keyword path and score 4 of 5, and no attempt count or tool call count
 
 ### Requirement: Run errors end the loading state
 If the stream ends with `RUN_ERROR`, or closes or fails without `RUN_FINISHED`, the AI Summary SHALL stop showing as loading. Its summary row SHALL show that something went wrong, using the error message when one is given.
@@ -107,7 +111,7 @@ Feedback submitted from the AI Summary SHALL include, along with the query and s
 - **THEN** the payload contains no tool call results and no draft text
 
 ### Requirement: Test mode can exercise every summary state
-In test mode, the summary stream SHALL also offer scripted runs that follow the chat event contract: an `insight` run that fails one evaluation and is then accepted, a `refused` run, and an `insight_limit_reached` run. Which scripted run plays SHALL be chosen by the query text, with the existing keyword run as the default.
+In test mode, the summary stream SHALL also offer scripted runs that follow the chat event contract: an `insight` run that fails one evaluation and is then accepted, a `refused` run, an `insight_limit_reached` run, and a `cached` run. Which scripted run plays SHALL be chosen by the query text, with the existing keyword run as the default.
 
 #### Scenario: Insight retry run
 - **WHEN** the service is in test mode and the query selects the insight scenario
@@ -120,6 +124,10 @@ In test mode, the summary stream SHALL also offer scripted runs that follow the 
 #### Scenario: Insight limit run
 - **WHEN** the service is in test mode and the query selects the insight limit scenario
 - **THEN** the stream contains only the classify, route and limit steps, the fixed insight limit message and an `insight_limit_reached` outcome
+
+#### Scenario: Cached run
+- **WHEN** the service is in test mode and the query selects the cached scenario
+- **THEN** the stream contains only the cache step, one answer message and a `cached` outcome
 
 ### Requirement: The type filter does not affect the summary
 Changing the result type filter SHALL re-run only the search. It SHALL NOT start, stop or reset the AI Summary, and SHALL NOT use any daily allowance.
