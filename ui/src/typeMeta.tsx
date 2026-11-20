@@ -5,6 +5,7 @@ import LabelOutlinedIcon from "@mui/icons-material/LabelOutlined";
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
+import SchemaOutlinedIcon from "@mui/icons-material/SchemaOutlined";
 import type { SvgIconComponent } from "@mui/icons-material";
 
 export type TypeColor =
@@ -16,35 +17,34 @@ export type TypeColor =
   | "warning"
   | "error";
 
-// Display metadata per DOO type, in results-section order. The icon next to a result's title
+export interface TypeMeta {
+  Icon: SvgIconComponent;
+  color: TypeColor;
+  /** Singular, for a type chip. */
+  name: string;
+  /** Plural, for section headings and the type filter. */
+  label: string;
+}
+
+// Display metadata per OKF concept type, in type-filter order. The icon next to a result's title
 // and the type chip on its right share the same colour so they read as a pair.
-const TYPE_META: Record<
-  string,
-  { Icon: SvgIconComponent; color: TypeColor; label: string }
-> = {
-  "dcat:Dataset": { Icon: StorageOutlinedIcon, color: "primary", label: "Datasets" },
-  "foaf:Person": { Icon: PersonOutlineIcon, color: "info", label: "People" },
-  "foaf:Organization": { Icon: ApartmentIcon, color: "secondary", label: "Organisations" },
-  "frapo:FundingAgency": { Icon: ApartmentIcon, color: "secondary", label: "Funders" },
-  "frapo:Grant": { Icon: PaidOutlinedIcon, color: "error", label: "Grants" },
-  "skos:Concept": { Icon: LabelOutlinedIcon, color: "success", label: "Concepts" },
-  "fabio:Expression": { Icon: ArticleOutlinedIcon, color: "warning", label: "Documents" },
-  "fabio:DigitalManifestation": {
-    Icon: ArticleOutlinedIcon,
-    color: "warning",
-    label: "Supporting documents",
-  },
+const TYPE_META: Record<string, TypeMeta> = {
+  dataset: { Icon: StorageOutlinedIcon, color: "primary", name: "Dataset", label: "Datasets" },
+  document: { Icon: ArticleOutlinedIcon, color: "warning", name: "Supporting document", label: "Supporting documents" },
+  person: { Icon: PersonOutlineIcon, color: "info", name: "Person", label: "People" },
+  organisation: { Icon: ApartmentIcon, color: "secondary", name: "Organisation", label: "Organisations" },
+  grant: { Icon: PaidOutlinedIcon, color: "error", name: "Grant", label: "Grants" },
+  theme: { Icon: LabelOutlinedIcon, color: "success", name: "Theme", label: "Themes" },
+  ontology: { Icon: SchemaOutlinedIcon, color: "default", name: "Ontology term", label: "Ontology terms" },
 };
 
-/** DOO type CURIEs in display order. */
+const UNKNOWN: TypeMeta = { Icon: HelpOutlineIcon, color: "default", name: "Other", label: "Other" };
+
+/** OKF types in display order. */
 export const TYPE_ORDER = Object.keys(TYPE_META);
 
-export const typeMeta = (type: string) =>
-  TYPE_META[type] ?? {
-    Icon: HelpOutlineIcon,
-    color: "default" as TypeColor,
-    label: type,
-  };
+/** Display metadata for an OKF type; an unknown type gets a generic label and icon. */
+export const typeMeta = (type: string): TypeMeta => TYPE_META[type] ?? UNKNOWN;
 
 /** The type's icon, coloured to match its TypeChip. */
 export function TypeIcon({

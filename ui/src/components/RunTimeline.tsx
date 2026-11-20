@@ -9,6 +9,7 @@ const OUTCOME_LABELS: Record<string, string> = {
   accepted: 'Accepted',
   limit_reached: 'Attempt limit reached',
   refused: 'Refused',
+  cached: 'Saved answer',
   usage_limit: 'Daily limit',
   error: 'Error',
 }
@@ -17,7 +18,7 @@ function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`
 }
 
-/** One-line tool arguments, e.g. `query: "soil carbon", return_type: "dcat:Dataset"`. */
+/** One-line tool arguments, e.g. `query: "soil carbon", type: "dataset"`. */
 function shortArgs(raw: string, max = 60): string {
   let s = raw
   try {

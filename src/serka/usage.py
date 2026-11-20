@@ -53,17 +53,29 @@ class UsageLimiter:
 			self.insight_count = 0
 			self._clients.clear()
 
-	def admit(self, client: str) -> LimitCode | None:
-		"""Counts a run for `client`, or returns the cap that rejects it without counting anything."""
+	def check(self, client: str) -> LimitCode | None:
+		"""The cap that rejects a run for `client`, or None. Counts nothing."""
 		self._start_day()
 		# The client goes first, so a client over its own cap uses no overall allowance.
 		if self._clients[client] >= self.client_limit:
 			return "client_daily_limit"
 		if self.overall_count >= self.overall_limit:
 			return "global_daily_limit"
+		return None
+
+	def count(self, client: str) -> None:
+		"""Counts a run for `client`. Called once a run needs the models, i.e. after a cache miss.
+		Concurrent runs checked before any of them counted can overshoot a cap by those in flight."""
+		self._start_day()
 		self._clients[client] += 1
 		self.overall_count += 1
-		return None
+
+	def admit(self, client: str) -> LimitCode | None:
+		"""Counts a run for `client`, or returns the cap that rejects it without counting anything."""
+		rejected = self.check(client)
+		if rejected is None:
+			self.count(client)
+		return rejected
 
 	def claim_insight(self) -> bool:
 		"""Takes one of today's insight slots; False when none is left."""

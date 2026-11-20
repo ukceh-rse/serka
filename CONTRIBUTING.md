@@ -9,19 +9,19 @@ uv sync
 
 ### Running specific services
 
-The Serka application has 3 services which must all be run in order to function (`neo4j`, `mcp` and `serka`). Each of these services can be run through Docker Compose individually.
+The Serka application has 3 services which must all be run in order to function (`redis`, `mcp` and `serka`). Each of these services can be run through Docker Compose individually.
 
-To run just Neo4j (e.g. when running the app outside of a container):
+To run just Redis (e.g. when running the app outside of a container):
 ```bash
-docker compose up neo4j -d
+docker compose up redis -d
 ```
 
-The Neo4j browser UI is available at [localhost:7474](http://localhost:7474) when running locally.
-
-To run Neo4j and the MCP server only:
+To run Redis and the MCP server only:
 ```bash
-docker compose up neo4j mcp -d
+docker compose up redis mcp -d
 ```
+
+Search needs data in Redis: write a bundle with `uv run scripts/ingest-data.py <n>`, or rebuild the index from an existing bundle with `uv run scripts/load-bundle.py`.
 
 To run the app locally for development instance:
 ```bash
@@ -42,7 +42,7 @@ docker compose -f compose.dev.yml up --build
 | `ui`          | Vite dev server with HMR (`./ui` mounted)                           | [localhost:5173](http://localhost:5173)        |
 | `serka` (API) | `fastapi dev` auto-reloads on edits under `./src`                   | [localhost:9000](http://localhost:9000)        |
 | `mcp`         | `watchfiles` restarts the server on edits under `./mcp-server/src` | [localhost:8000](http://localhost:8000)        |
-| `neo4j`       | Same `./.neo4j` data volume as `compose.yaml` — no re-ingest needed | [localhost:7474](http://localhost:7474)        |
+| `redis`       | Same `redis-data` volume as `compose.yaml`, so no reload is needed  | `redis://localhost:6379`                       |
 
 Notes:
 
@@ -51,6 +51,14 @@ Notes:
 - The UI's `node_modules` lives in an isolated volume so host modules don't clash with the
   container; `npm install` runs on first start.
 - The images are still built for their dependency layers, hence `--build` on first run.
+
+### Tests
+
+```bash
+uv run pytest -m "not integration"
+```
+
+Integration tests (`-m integration`) need a separate Redis on port 6380, as search indexes only work in database 0 and the tests flush it: `docker run -d -p 6380:6379 redis:8.10.3` (or set `TEST_REDIS_URL`). The search tests also need AWS credentials for Bedrock, and skip without them.
 
 ## Commits
 

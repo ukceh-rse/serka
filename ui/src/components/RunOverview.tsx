@@ -6,6 +6,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import BlockIcon from '@mui/icons-material/Block'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
+import HistoryIcon from '@mui/icons-material/History'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { progressText, summaryText, type RunStatus, type RunTrace } from '../run/runTrace'
 import RunTimeline from './RunTimeline'
@@ -16,6 +17,7 @@ const STATUS_STYLE: Record<Exclude<RunStatus, 'running'>, { icon: typeof BlockIc
   accepted: { icon: CheckCircleOutlineIcon, color: 'success' },
   limit_reached: { icon: WarningAmberIcon, color: 'warning' },
   refused: { icon: BlockIcon, color: null },
+  cached: { icon: HistoryIcon, color: null },
   usage_limit: { icon: HourglassEmptyIcon, color: null },
   error: { icon: ErrorOutlineIcon, color: 'error' },
 }

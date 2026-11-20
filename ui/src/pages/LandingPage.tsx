@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Box, Container, Typography } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
-import type { ReturnType } from '../stores/searchStore'
 import NaturePeopleOutlinedIcon from '@mui/icons-material/NaturePeopleOutlined'
 import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined'
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined'
@@ -21,13 +20,13 @@ const SEARCH_CARDS = [
 export default function LandingPage() {
   const navigate = useNavigate()
   const { themeMode } = useAppStore()
-  const [returnType, setReturnType] = useState<ReturnType | null>(null)
+  const [conceptType, setConceptType] = useState<string | null>(null)
   const [aiActive, setAiActive] = useState(false)
 
   const go = (q: string, ai?: boolean) => {
     const sp = new URLSearchParams({ q })
     if (ai) sp.set('ai', 'true')
-    if (returnType) sp.set('type', returnType)
+    if (conceptType) sp.set('type', conceptType)
     navigate(`/search?${sp}`)
   }
 
@@ -65,8 +64,8 @@ export default function LandingPage() {
           onSearch={(q) => go(q, aiActive)}
           onAiSummary={() => setAiActive((v) => !v)}
           aiSummaryActive={aiActive}
-          returnType={returnType}
-          onReturnTypeChange={setReturnType}
+          conceptType={conceptType}
+          onConceptTypeChange={setConceptType}
         />
         <Box sx={{ mt: 6, display: 'flex', gap: 2 }}>
           {SEARCH_CARDS.map(({ query, Icon, color, darkColor }) => (

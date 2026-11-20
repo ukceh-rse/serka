@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Iterator
+from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -89,7 +89,7 @@ class Emitter:
 	# Steps and custom events
 
 	@contextmanager
-	def step(self, name: str, *, attempt: int, max_attempts: int | None, model: str | None) -> Iterator[None]:
+	def step(self, name: str, *, attempt: int, max_attempts: int | None, model: str | None) -> Generator[None]:
 		"""Brackets a stage in STEP_STARTED/STEP_FINISHED. A stage that raises gets no STEP_FINISHED."""
 		self._put(StepStartedEvent(step_name=name))
 		self.custom("serka.step", {"step": name, "attempt": attempt, "maxAttempts": max_attempts, "model": model})

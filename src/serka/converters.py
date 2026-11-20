@@ -4,6 +4,7 @@ from haystack import component
 from haystack.dataclasses import ByteStream, Document
 from haystack.components.converters.utils import get_bytestream_from_source
 from trafilatura import bare_extraction
+from trafilatura.settings import Document as ExtractedPage
 import logging
 import json
 from datetime import datetime
@@ -40,6 +41,8 @@ class HTMLConverter:
 				with_metadata=True,
 				output_format="python",
 			)
+			if not isinstance(result, ExtractedPage):
+				continue
 			docs.append(
 				Document(
 					content=result.text,
@@ -62,8 +65,8 @@ class EIDCJSONToNodes:
 	"""
 
 	@component.output_types(documents=Dict[str, List[Dict[Any, Any]]])
-	def run(self, source: List[Dict[Any, Any]]) -> List[Document]:
-		pass
+	def run(self, source: List[Dict[Any, Any]]) -> Dict[str, List[Dict[Any, Any]]]:
+		raise NotImplementedError
 
 
 @component
@@ -97,7 +100,7 @@ class EIDCJSONToDocument:
 		return docs
 
 	@component.output_types(documents=List[Document])
-	def run(self, source: List[Dict[Any, Any]]) -> List[Document]:
+	def run(self, source: List[Dict[Any, Any]]) -> Dict[str, List[Document]]:
 		docs: List[Document] = []
 		for dataset in source:
 			docs.extend(self._extract_fields(dataset))
@@ -140,7 +143,7 @@ class EIDCConverter:
 		docs = []
 		for source in sources:
 			try:
-				data = source.data.decode("utf-8")
+				data = get_bytestream_from_source(source).data.decode("utf-8")
 				data = json.loads(data)
 				for dataset in data["results"]:
 					docs.extend(self._extract_fields(dataset))
@@ -205,7 +208,7 @@ class LegiloConverter:
 		docs = []
 		for source in sources:
 			try:
-				data = source.data.decode("utf-8")
+				data = get_bytestream_from_source(source).data.decode("utf-8")
 				data = json.loads(data)
 				docs += self._extract_supporting_docs(data)
 			except Exception:

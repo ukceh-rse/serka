@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 class _TimeoutSession(requests_cache.CachedSession):
-	def request(self, method, url, **kwargs):
+	def request(self, method, url, *args, **kwargs):
 		kwargs.setdefault("timeout", 5)
-		return super().request(method, url, **kwargs)
+		return super().request(method, url, *args, **kwargs)
 
 
 _session = _TimeoutSession(str(_cache_root / "http"), backend="filesystem")
@@ -61,7 +61,7 @@ class EIDCFetcher:
 		term: str = "state:published AND recordType:Dataset",
 		ids: Optional[List[str]] = None,
 		**kwargs,
-	) -> List[Dict[Any, Any]]:
+	) -> Dict[str, List[Dict[Any, Any]]]:
 		if ids is None:
 			res = _session.get(
 				self.url,
@@ -85,7 +85,7 @@ class LegiloFetcher:
 	def __init__(
 		self,
 		legilo_url: str = "https://legilo.eds-infra.ceh.ac.uk/{id}/documents",
-		token: str = None,
+		token: Optional[str] = None,
 	):
 		self.legilo_url = legilo_url
 		self.token = token
@@ -123,7 +123,7 @@ class LegiloFetcher:
 		)
 
 	@component.output_types(documents=List[Document])
-	def run(self, datasets: List[Dict[Any, Any]]) -> List[Document]:
+	def run(self, datasets: List[Dict[Any, Any]]) -> Dict[str, List[Document]]:
 		if not self.token:
 			logger.warning("LEGILO_PAT is not set; skipping Legilo supporting documents.")
 			return {"documents": []}

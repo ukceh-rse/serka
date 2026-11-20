@@ -4,11 +4,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-	# Neo4j
-	neo4j_host: str = "localhost"
-	neo4j_port: int = 7687
-	neo4j_username: Optional[str] = None
-	neo4j_password: Optional[str] = None
+	# Redis (search index and answer cache)
+	redis_url: str = "redis://localhost:6379"
+
+	# OKF bundle written by ingest and read by the loader
+	okf_bundle_dir: str = "./bundle"
+
+	# Answer cache (forced off in test mode)
+	answer_cache_enabled: bool = True
+	# Cosine distance below which a stored query counts as the same question.
+	answer_cache_distance_threshold: float = 0.05
+	answer_cache_ttl_seconds: int = 7 * 24 * 60 * 60
 
 	# Feedback
 	feedback_log_path: str = "feedback.jsonl"

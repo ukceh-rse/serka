@@ -1,7 +1,7 @@
 """Mock implementations for test mode.
 
 Applied via app.dependency_overrides when TEST_MODE=true, allowing the frontend
-to be developed and tested without Neo4j, Bedrock, or the MCP server.
+to be developed and tested without Redis, Bedrock, or the MCP server.
 """
 
 import asyncio
@@ -12,11 +12,10 @@ from typing import Any, Dict, List, Optional
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 
-from serka.ontology import NODE_TYPES
 from serka.settings import Settings
 
-# Fixture datasets. Each becomes a direct SearchHit (matched via its excerpt) and doubles
-# as the "via" anchor for the Person/Organisation/Concept/Document hits below.
+# Fixture datasets. Each becomes a search hit on the chunk holding its excerpt; the
+# person, organisation, theme and document hits below refer to them.
 _DATASETS: List[Dict[str, Any]] = [
 	dict(
 		uri="https://catalogue.ceh.ac.uk/documents/soil-carbon-upland-1978-2019",
@@ -101,100 +100,99 @@ _DATASETS: List[Dict[str, Any]] = [
 ]
 
 
-def _dataset_entity(d: Dict[str, Any]) -> Dict[str, Any]:
-	"""The JSON-LD dataset entity the MCP server returns (mcp-server/src/serka-mcp/entities.py)."""
-	w, s, e, n = d["west_boundary"], d["south_boundary"], d["east_boundary"], d["north_boundary"]
+def _dataset_id(d: Dict[str, Any]) -> str:
+	return "datasets/" + d["uri"].rsplit("/", 1)[1]
+
+
+def _dataset_concept(d: Dict[str, Any]) -> Dict[str, Any]:
+	"""The concept summary the MCP `search` tool returns for a dataset chunk."""
 	return {
-		"@id": d["uri"],
-		"@type": ["dcat:Dataset"],
-		"label": d["title"],
+		"id": _dataset_id(d),
+		"type": "dataset",
 		"title": d["title"],
-		"publication_date": d["publication_date"],
-		"identifiers": d["identifiers"],
-		"access_rights": d["access_rights"],
-		"licence": d["licence"],
-		"temporal": {"@type": "dcterms:PeriodOfTime", "start_date": d["temporal_start"], "end_date": d["temporal_end"]},
-		"bbox": f"POLYGON(({w} {s}, {e} {s}, {e} {n}, {w} {n}, {w} {s}))",
+		"description": d["description"],
+		"resource": d["uri"],
+		"tags": [],
 		"citations": d["citations"],
+		"published": d["publication_date"],
 	}
 
 
-def _dataset_hit(d: Dict[str, Any]) -> Dict[str, Any]:
-	return {
-		"entity": _dataset_entity(d),
-		"score": d["score"],
-		"matched_on": d["matched_on"],
-		"excerpt": d["excerpt"],
-		"path": [],
-	}
+def _hit(concept: Dict[str, Any], n: int, text: str, score: float) -> Dict[str, Any]:
+	return {"chunk_id": f"{concept['id']}#{n}", "text": text, "score": score, "concept": concept}
 
 
-def _via(d: Dict[str, Any], predicate: str) -> Dict[str, Any]:
-	return {
-		"predicate": predicate,
-		"entity": _dataset_entity(d),
-	}
+def _dataset_hit(d: Dict[str, Any], n: int = 0, text: Optional[str] = None, score: Optional[float] = None) -> Dict[str, Any]:
+	return _hit(_dataset_concept(d), n, text or d["excerpt"], d["score"] if score is None else score)
 
 
-def _related_hit(
-	entity_id: str, type_uri: str, label: str, properties: Dict[str, Any],
-	predicate: str, via_dataset: Dict[str, Any], score: float,
-) -> Dict[str, Any]:
-	return {
-		"entity": {"@id": entity_id, "@type": [type_uri], "label": label, **properties},
-		"score": score,
-		"matched_on": "metadata",
-		"excerpt": None,
-		"path": [_via(via_dataset, predicate)],
-	}
+def _other_hit(concept_id: str, okf_type: str, title: str, text: str, score: float, **extra: Any) -> Dict[str, Any]:
+	concept = {"id": concept_id, "type": okf_type, "title": title, "description": None, "resource": None, "tags": [], **extra}
+	return _hit(concept, 0, text, score)
 
 
-_MOCK_HITS: List[Dict[str, Any]] = [_dataset_hit(d) for d in _DATASETS] + [
-	_related_hit(
-		"https://orcid.org/0000-0002-1111-2222", "foaf:Person", "Dr. Alice Whitfield",
-		{"name": "Dr. Alice Whitfield"}, "pro:author", _DATASETS[0], 0.71,
-	),
-	_related_hit(
-		"https://orcid.org/0000-0003-3333-4444", "foaf:Person", "Dr. Raj Osei",
-		{"name": "Dr. Raj Osei"}, "scoro:principal-investigator", _DATASETS[1], 0.68,
-	),
-	_related_hit(
-		"https://orcid.org/0000-0001-5555-6666", "foaf:Person", "Dr. Emily Carrow",
-		{"name": "Dr. Emily Carrow"}, "pro:author", _DATASETS[6], 0.64,
-	),
-	_related_hit(
-		"https://ror.org/006jxzx88", "foaf:Organization", "UK Centre for Ecology & Hydrology",
-		{"name": "UK Centre for Ecology & Hydrology"}, "pro:publisher", _DATASETS[0], 0.66,
-	),
-	_related_hit(
-		"https://ror.org/02b5d8509", "foaf:Organization", "Environment Agency",
-		{"name": "Environment Agency"}, "scoro:data-curator", _DATASETS[3], 0.61,
-	),
-	_related_hit(
-		"https://vocabs.ceh.ac.uk/concept/biodiversity", "skos:Concept", "Biodiversity",
-		{"scheme": "https://vocabs.ceh.ac.uk/scheme/eidc"}, "dcat:theme", _DATASETS[2], 0.59,
-	),
-	_related_hit(
-		"https://vocabs.ceh.ac.uk/concept/freshwater-ecology", "skos:Concept", "Freshwater ecology",
-		{"scheme": "https://vocabs.ceh.ac.uk/scheme/eidc"}, "dcat:theme", _DATASETS[1], 0.57,
-	),
-	_related_hit(
-		"https://vocabs.ceh.ac.uk/concept/climate-change", "skos:Concept", "Climate change",
-		{"scheme": "https://vocabs.ceh.ac.uk/scheme/eidc"}, "dcat:theme", _DATASETS[4], 0.55,
-	),
-	_related_hit(
-		"https://catalogue.ceh.ac.uk/documents/soil-carbon-upland-1978-2019/supporting-doc",
-		"fabio:DigitalManifestation", "Soil sampling and analysis protocol (supporting document)",
-		{"title": "Soil sampling and analysis protocol", "format": "application/pdf"},
-		"dcterms:references", _DATASETS[0], 0.53,
-	),
-	_related_hit(
-		"https://catalogue.ceh.ac.uk/documents/ukbms-transects-2000-2023/supporting-doc",
-		"fabio:DigitalManifestation", "UKBMS transect walk methodology (supporting document)",
-		{"title": "UKBMS transect walk methodology", "format": "application/pdf"},
-		"dcterms:references", _DATASETS[2], 0.51,
-	),
-]
+_SOIL = _DATASETS[0]
+_SOIL_DOC = f"{_dataset_id(_SOIL)}/docs/soil-sampling-protocol"
+
+_MOCK_HITS: List[Dict[str, Any]] = sorted(
+	[_dataset_hit(d) for d in _DATASETS]
+	+ [
+		# A second and a third passage of the top dataset, ranked below other datasets
+		_dataset_hit(
+			_SOIL, 1,
+			"Cores were dried at 105 °C and analysed for total carbon by dry combustion; bulk density was measured on separate cores.",
+			0.902,
+		),
+		_dataset_hit(
+			_SOIL, 2,
+			"Peatland sites were resampled in 2019 at the same grid points used in 1978, allowing paired comparisons of carbon change.",
+			0.701,
+		),
+		_hit(
+			{
+				"id": _SOIL_DOC,
+				"type": "document",
+				"title": "soil-sampling-protocol.pdf",
+				"description": None,
+				"resource": None,
+				"tags": [],
+				"citations": _SOIL["citations"],
+				"published": _SOIL["publication_date"],
+			},
+			0,
+			f"Supporting document of [{_SOIL['title']}](/{_dataset_id(_SOIL)}). Each core was split into 10 cm sections "
+			"and stored at 4 °C before analysis.",
+			0.86,
+		),
+		_other_hit(
+			"people/0000-0002-1111-2222", "person", "Dr. Alice Whitfield",
+			f"Dr. Alice Whitfield, author of [{_SOIL['title']}](/{_dataset_id(_SOIL)}).", 0.71,
+			resource="https://orcid.org/0000-0002-1111-2222",
+		),
+		_other_hit(
+			"people/0000-0003-3333-4444", "person", "Dr. Raj Osei",
+			"## Affiliations\n\n- [member of](/ontology/predicates/memberOf): [UK Centre for Ecology & Hydrology](/organisations/006jxzx88)",
+			0.68,
+			resource="https://orcid.org/0000-0003-3333-4444",
+		),
+		_other_hit(
+			"organisations/006jxzx88", "organisation", "UK Centre for Ecology & Hydrology",
+			"UK Centre for Ecology & Hydrology", 0.66, resource="https://ror.org/006jxzx88",
+		),
+		_other_hit(
+			"themes/5f1d2c3b4a59", "theme", "Freshwater ecology",
+			"## Broader themes\n\n- [broader](/ontology/predicates/broader): [Biodiversity](/themes/9a8b7c6d5e4f)",
+			0.57,
+			tags=["eidc"],
+		),
+	],
+	key=lambda h: -h["score"],
+)
+
+
+def _search_result(hits: List[Dict[str, Any]]) -> str:
+	return json.dumps({"hits": hits, "total": len(hits), "warnings": []})
+
 
 _MOCK_ANSWER_CHUNKS = [
 	"Soil carbon measurements for UK uplands are available in the ",
@@ -228,11 +226,11 @@ def _mock_keyword_run(thread_id: str, run_id: str) -> List[str]:
 	with step("plan", m["plan_keyword"]):
 		e.custom("serka.plan", {
 			"summary": "Search the catalogue for datasets matching 'soil carbon uplands'.",
-			"steps": ['search {"query": "soil carbon uplands", "return_type": "dcat:Dataset"}'],
+			"steps": ['search {"query": "soil carbon uplands", "type": "dataset"}'],
 		})
 	with step("execute", None):
-		e.tool_call_start("mock-search", "search", json.dumps({"query": "soil carbon uplands", "return_type": "dcat:Dataset"}))
-		e.tool_call_result("mock-search", json.dumps({"@graph": _MOCK_HITS[:3]}))
+		e.tool_call_start("mock-search", "search", json.dumps({"query": "soil carbon uplands", "type": "dataset"}))
+		e.tool_call_result("mock-search", _search_result(_MOCK_HITS[:3]))
 	with step("synthesize", m["synthesize_keyword"]):
 		for chunk in _MOCK_ANSWER_CHUNKS:
 			e.text_delta(chunk)
@@ -290,16 +288,16 @@ def _mock_insight_retry_run(thread_id: str, run_id: str) -> List[str]:
 		e.custom("serka.plan", {
 			"summary": "Find long-term butterfly and pollinator monitoring datasets and compare their coverage.",
 			"steps": [
-				'search {"query": "butterfly monitoring", "return_type": "dcat:Dataset"}',
-				'search {"query": "pollinator monitoring", "return_type": "dcat:Dataset"}',
+				'search {"query": "butterfly monitoring", "type": "dataset"}',
+				'search {"query": "pollinator monitoring", "type": "dataset"}',
 			],
 		})
 	with step("execute", m["execute_insight"]):
 		for i, query in enumerate(["butterfly monitoring", "pollinator monitoring"]):
 			call_id = f"mock-insight-search-{i + 1}"
-			e.tool_call_start(call_id, "search", json.dumps({"query": query, "return_type": "dcat:Dataset"}))
+			e.tool_call_start(call_id, "search", json.dumps({"query": query, "type": "dataset"}))
 			hits = [_dataset_hit(_DATASETS[2 + 3 * i])] + _MOCK_HITS[:2]
-			e.tool_call_result(call_id, json.dumps({"@graph": hits}))
+			e.tool_call_result(call_id, _search_result(hits))
 	with step("synthesize", m["synthesize_insight"], attempt=1):
 		e.custom("serka.draft", {"attempt": 1, "text": _INSIGHT_DRAFT_1})
 	with step("evaluate", m["evaluate"], attempt=1):
@@ -366,10 +364,29 @@ def _mock_insight_limit_run(thread_id: str, run_id: str) -> List[str]:
 	return _drain(e)
 
 
+def _mock_cached_run(thread_id: str, run_id: str) -> List[str]:
+	"""A scripted run answered from the answer cache: only the cache step."""
+	from serka.chat.events import Emitter
+
+	e = Emitter()
+	m = _MOCK_MODELS
+	e.run_started(thread_id, run_id)
+	with e.step("cache", attempt=1, max_attempts=None, model=None):
+		e.metadata(m["synthesize_keyword"], m)
+		e.text("".join(_MOCK_ANSWER_CHUNKS))
+	e.custom("serka.outcome", {
+		"status": "cached", "path": "keyword", "attemptsUsed": 0, "maxAttempts": None, "score": 5, "feedback": None,
+	})
+	e.run_finished(thread_id, run_id)
+	return _drain(e)
+
+
 def _select_run(query: str) -> Any:
 	"""Test-mode scenario chosen by the query text: "trend" -> insight retry, "weather" -> refused,
-	"quota" -> insight limit."""
+	"quota" -> insight limit, "cached" -> answered from the answer cache."""
 	q = query.lower()
+	if "cached" in q:
+		return _mock_cached_run
 	if "quota" in q:
 		return _mock_insight_limit_run
 	if "trend" in q:
@@ -379,23 +396,15 @@ def _select_run(query: str) -> Any:
 	return _mock_keyword_run
 
 
-def _matches_return_type(hit: Dict[str, Any], return_type: Optional[str]) -> bool:
-	if not return_type:
-		return True
-	target = NODE_TYPES.get(str(return_type), str(return_type))
-	return target in hit["entity"]["@type"]
-
-
 async def get_mock_mcp_search():
 	async def _search(
 		q: str,
-		return_type: Optional[str] = None,
-		hops: int = 1,
+		type: Optional[str] = None,
 		location: Optional[str] = None,
 		published_after: Optional[str] = None,
 		published_before: Optional[str] = None,
 	) -> list:
-		return [h for h in _MOCK_HITS if _matches_return_type(h, return_type)]
+		return [h for h in _MOCK_HITS if not type or h["concept"]["type"] == type]
 
 	return _search
 
@@ -408,6 +417,12 @@ class MockFeedbackLogger:
 class MockUsageLimiter:
 	"""Admits everything and stores nothing."""
 
+	def check(self, client: str) -> None:
+		return None
+
+	def count(self, client: str) -> None:
+		return None
+
 	def admit(self, client: str) -> None:
 		return None
 
@@ -416,7 +431,7 @@ def mock_stream_fn() -> Any:
 	"""Drop-in replacement for get_stream_fn. Returns a stream handler that replays a
 	scripted run (following the chat event contract) with realistic delays. The query text
 	picks the run: "trend" plays insight with a retry, "weather" a refusal, "quota" the insight limit,
-	anything else keyword."""
+	"cached" a cached answer, anything else keyword."""
 	from serka.chat.service import split_messages
 
 	async def _events(lines: List[str]) -> AsyncIterator[str]:
@@ -424,7 +439,7 @@ def mock_stream_fn() -> Any:
 			yield line
 			await asyncio.sleep(0.15)
 
-	def stream(run_input: Any, request: Request) -> Response:
+	def stream(run_input: Any, request: Request, count_run: Any = None) -> Response:
 		query, _ = split_messages(run_input.messages)
 		lines = _select_run(query)(run_input.thread_id, run_input.run_id)
 		return StreamingResponse(_events(lines), media_type="text/event-stream")

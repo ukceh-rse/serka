@@ -6,15 +6,13 @@ import SearchIcon from '@mui/icons-material/Search'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import HistoryIcon from '@mui/icons-material/History'
 import { EXAMPLE_SEARCHES, MAX_QUERY_CHARS } from '../constants'
-import { useSearchStore, type ReturnType } from '../stores/searchStore'
-import mapping from '../doo_mapping.json'
-import { typeMeta } from '../typeMeta'
+import { useSearchStore } from '../stores/searchStore'
+import { TYPE_ORDER, typeMeta } from '../typeMeta'
 
-const NODE_TYPES: Record<ReturnType, string> = mapping.node_types
-
-const RETURN_TYPES: { value: string; label: string }[] = [
+/** Type filter options: "All", then each OKF type, sent to the search as `type`. */
+export const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'Any', label: 'All' },
-  ...(Object.keys(NODE_TYPES) as ReturnType[]).map((value) => ({ value, label: typeMeta(NODE_TYPES[value]).label })),
+  ...TYPE_ORDER.map((value) => ({ value, label: typeMeta(value).label })),
 ]
 
 interface Props {
@@ -27,8 +25,8 @@ interface Props {
   showSuggestions?: boolean
   onFocusChange?: (focused: boolean) => void
   onExampleSearch?: (q: string) => void
-  returnType?: ReturnType | null
-  onReturnTypeChange?: (rt: ReturnType | null) => void
+  conceptType?: string | null
+  onConceptTypeChange?: (type: string | null) => void
 }
 
 const isMac = navigator.platform.toUpperCase().includes('MAC') || navigator.userAgent.includes('Mac')
@@ -42,8 +40,8 @@ export default function SearchBar({
   showSuggestions,
   onFocusChange,
   onExampleSearch,
-  returnType = null,
-  onReturnTypeChange,
+  conceptType = null,
+  onConceptTypeChange,
 }: Props) {
   const [value, setValue] = useState(initialValue)
   const [focused, setFocused] = useState(false)
@@ -157,12 +155,12 @@ export default function SearchBar({
             </Tooltip>
           </>
         )}
-        {onReturnTypeChange && (
+        {onConceptTypeChange && (
           <>
             <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 0.75 }} />
             <Select
-              value={returnType ?? 'Any'}
-              onChange={(e) => onReturnTypeChange(e.target.value === 'Any' ? null : (e.target.value as ReturnType))}
+              value={conceptType ?? 'Any'}
+              onChange={(e) => onConceptTypeChange(e.target.value === 'Any' ? null : e.target.value)}
               variant="standard"
               disableUnderline
               aria-label="result type"
@@ -171,7 +169,7 @@ export default function SearchBar({
               <ListSubheader sx={{ fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', lineHeight: 2 }}>
                 Show:
               </ListSubheader>
-              {RETURN_TYPES.map((t) => (
+              {TYPE_OPTIONS.map((t) => (
                 <MenuItem key={t.value} value={t.value} sx={{ fontSize: '0.875rem' }}>{t.label}</MenuItem>
               ))}
             </Select>

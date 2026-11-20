@@ -11,8 +11,6 @@ dependencies = [
     "amazon-bedrock-haystack>=3.9.1",
     "fastmcp>=2.11.3",
     "geopy>=2.4.1",
-    "neo4j>=5.28.1",
     "requests>=2.32.3",
-    "sentence-transformers>=3.0.0",
-    "optimum[onnxruntime]>=1.23.0",
+    "redis>=8.1.0",
 ]

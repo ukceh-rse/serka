@@ -9,6 +9,7 @@ from pydantic_ai.toolsets import AbstractToolset
 from starlette.requests import Request
 from starlette.responses import Response
 
+from serka.answer_cache import AnswerCache
 from serka.chat.events import Emitter, ToolCaller, streaming_response
 from serka.chat.models import StageModels
 from serka.chat.pipeline import ChatDeps, ChatState, build_graph, run_chat
@@ -45,14 +46,25 @@ def split_messages(messages: Sequence[Message]) -> tuple[str, list[ModelMessage]
 
 
 def make_stream_fn(
-	models: StageModels, call_tool: ToolCaller, toolset: AbstractToolset[Any], claim_insight: Callable[[], bool]
-) -> Callable[[RunAgentInput, Request], Response]:
+	models: StageModels,
+	call_tool: ToolCaller,
+	toolset: AbstractToolset[Any],
+	claim_insight: Callable[[], bool],
+	answer_cache: AnswerCache | None = None,
+) -> Callable[[RunAgentInput, Request, Callable[[], None]], Response]:
 	graph = build_graph()
+	cache = answer_cache or AnswerCache(None)
 
-	def stream(run_input: RunAgentInput, request: Request) -> Response:
+	def stream(run_input: RunAgentInput, request: Request, count_run: Callable[[], None]) -> Response:
 		query, history = split_messages(run_input.messages)
 		deps = ChatDeps(
-			models=models, call_tool=call_tool, toolset=toolset, emitter=Emitter(), claim_insight=claim_insight
+			models=models,
+			call_tool=call_tool,
+			toolset=toolset,
+			emitter=Emitter(),
+			claim_insight=claim_insight,
+			answer_cache=cache,
+			count_run=count_run,
 		)
 		state = ChatState(query=query, history=history)
 

@@ -1,39 +1,17 @@
 from dataclasses import dataclass
 from haystack import Pipeline
-from haystack.components.preprocessors import DocumentSplitter
-from serka.graph.embedders import BedrockNodeEmbedder, CachedDocumentEmbedder
-from serka.graph.writers import Neo4jGraphWriter
-from serka.graph.extractors import EntityExtractor, TextExtractor, DocumentTruncator
+from serka.graph.extractors import EntityExtractor, DocumentTruncator
 from serka.fetchers import ConceptHierarchyFetcher, EIDCFetcher, LegiloFetcher
-from haystack_integrations.components.embedders.amazon_bedrock import (
-	AmazonBedrockTextEmbedder,
-)
-from haystack.components.joiners import DocumentJoiner
+from serka.okf.writer import OKFBundleWriter
 
 
 @dataclass
 class PipelineBuilder:
-	models_embedding: str
-	neo4j_host: str
-	neo4j_port: int
-	neo4j_user: str
-	neo4j_password: str
-	mcp_host: str
-	mcp_port: int
+	okf_bundle_dir: str
 	legilo_pat: str
-	chunk_length: int
-	chunk_overlap: int
-
-	def _create_text_embedder(self):
-		return AmazonBedrockTextEmbedder(model=self.models_embedding)
-
-	def _create_node_embedder(self):
-		return BedrockNodeEmbedder(model=self.models_embedding)
-
-	def _create_document_embedder(self):
-		return CachedDocumentEmbedder(model=self.models_embedding)
 
 	def build_graph_pipeline(self) -> Pipeline:
+		"""Fetches EIDC records and Legilo supporting files and writes them as an OKF bundle."""
 		p = Pipeline()
 		p.add_component("eidc_fetcher", EIDCFetcher())
 		p.add_component(
@@ -42,41 +20,18 @@ class PipelineBuilder:
 		)
 		p.add_component("ent_extractor", EntityExtractor())
 		p.add_component("concept_hierarchy", ConceptHierarchyFetcher())
-		p.add_component("text_extractor", TextExtractor(["description", "lineage"]))
-		p.add_component("joiner", DocumentJoiner())
-		p.add_component(
-			"splitter",
-			DocumentSplitter(split_by="word", split_length=150, split_overlap=50),
-		)
 		p.add_component("truncator", DocumentTruncator())
-		p.add_component("doc_emb", self._create_document_embedder())
-		p.add_component("node_emb", self._create_node_embedder())
-		p.add_component(
-			"graph_writer",
-			Neo4jGraphWriter(
-				host=self.neo4j_host,
-				port=self.neo4j_port,
-				username=self.neo4j_user,
-				password=self.neo4j_password,
-			),
-		)
+		p.add_component("okf_writer", OKFBundleWriter(bundle_dir=self.okf_bundle_dir))
 
 		p.connect("eidc_fetcher", "ent_extractor")
-		p.connect("eidc_fetcher", "text_extractor")
 		p.connect("eidc_fetcher", "legilo_fetcher")
+		p.connect("eidc_fetcher", "okf_writer.records")
 
-		p.connect("text_extractor.documents", "joiner.documents")
-		p.connect("legilo_fetcher.documents", "joiner.documents")
-
-		p.connect("joiner", "splitter")
-		p.connect("splitter", "truncator")
-		p.connect("truncator", "doc_emb")
-		p.connect("doc_emb", "graph_writer.docs")
+		p.connect("legilo_fetcher.documents", "truncator.documents")
+		p.connect("truncator.documents", "okf_writer.documents")
 
 		p.connect("ent_extractor.nodes", "concept_hierarchy.nodes")
 		p.connect("ent_extractor.relationships", "concept_hierarchy.relationships")
-		p.connect("concept_hierarchy.nodes", "node_emb")
-		p.connect("node_emb", "graph_writer.nodes")
-		p.connect("concept_hierarchy.relationships", "graph_writer.relations")
+		p.connect("concept_hierarchy.nodes", "okf_writer.nodes")
+		p.connect("concept_hierarchy.relationships", "okf_writer.relationships")
 		return p
-

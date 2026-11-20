@@ -3,7 +3,6 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
-import pytest
 from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, DeltaToolCalls, FunctionModel
@@ -73,16 +72,16 @@ def test_call_tool_emits_sequence_with_shared_id() -> None:
 	emitter = Emitter()
 
 	async def caller(name: str, args: dict[str, Any]) -> Any:
-		return {"@graph": [name, args["query"]]}
+		return {"hits": [name, args["query"]]}
 
 	result = asyncio.run(call_tool(emitter, caller, "search", {"query": "bats"}))
-	assert result == ToolResult(tool="search", args={"query": "bats"}, result={"@graph": ["search", "bats"]})
+	assert result == ToolResult(tool="search", args={"query": "bats"}, result={"hits": ["search", "bats"]})
 	events = drain(emitter.queue)
 	assert types(events) == ["TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END", "TOOL_CALL_RESULT"]
 	assert len({e["toolCallId"] for e in events}) == 1
 	assert events[0]["toolCallName"] == "search"
 	assert json.loads(events[1]["delta"]) == {"query": "bats"}
-	assert json.loads(events[3]["content"]) == {"@graph": ["search", "bats"]}
+	assert json.loads(events[3]["content"]) == {"hits": ["search", "bats"]}
 
 
 def _tool_then_text(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:

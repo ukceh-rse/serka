@@ -9,12 +9,14 @@ from pydantic_ai.messages import ModelRequest, ModelResponse
 from starlette.responses import PlainTextResponse
 
 from serka import prompts
+from serka.answer_cache import AnswerCache, CachedAnswer
 from serka.chat.service import make_stream_fn, split_messages
 from serka.main import app
 from serka.routers.dependencies import get_feedback_logger, get_mcp_search, get_settings, get_stream_fn, get_usage_limiter
 from serka.settings import Settings
 from serka.usage import LIMIT_MESSAGES, UsageLimiter
 from tests.sse import answer_text, customs, decode, steps, types
+from tests.test_answer_cache import FakeBackend
 from tests.test_chat_pipeline import (
 	ANSWER,
 	OUT_OF_SCOPE,
@@ -33,9 +35,9 @@ def client() -> Iterator[TestClient]:
 		yield c
 
 
-def _use_pipeline(models: Any) -> FakeTools:
+def _use_pipeline(models: Any, cache: AnswerCache | None = None) -> FakeTools:
 	tools = FakeTools()
-	stream_fn = make_stream_fn(models, tools, insight_toolset(), lambda: True)
+	stream_fn = make_stream_fn(models, tools, insight_toolset(), lambda: True, cache)
 	app.dependency_overrides[get_stream_fn] = lambda: stream_fn
 	return tools
 
@@ -59,8 +61,14 @@ def _use_limiter(*, client_limit: int = 30, overall_limit: int = 500) -> UsageLi
 
 
 def _use_stream_spy() -> MagicMock:
-	"""A stream handler that records whether a run started; an unstarted one calls no model."""
-	spy = MagicMock(return_value=PlainTextResponse("started"))
+	"""A stream handler that records whether a run started and counts it, as a run that misses
+	the answer cache does; an unstarted one calls no model."""
+
+	def started(run_input: Any, request: Any, count_run: Any) -> PlainTextResponse:
+		count_run()
+		return PlainTextResponse("started")
+
+	spy = MagicMock(side_effect=started)
 	app.dependency_overrides[get_stream_fn] = lambda: spy
 	return spy
 
@@ -151,6 +159,53 @@ def test_clients_are_counted_by_the_trusted_proxy_address(client: TestClient) ->
 	assert post("203.0.113.7, 10.0.0.5") == 200
 	assert post("9.9.9.9, 203.0.113.7, 10.0.0.5") == 429  # spoofed left entry changes nothing
 	assert post("203.0.113.8, 10.0.0.5") == 200
+
+
+class SpyCache(AnswerCache):
+	"""A cache holding one answer, recording lookups."""
+
+	def __init__(self, query: str = "river flow") -> None:
+		backend = FakeBackend()
+		super().__init__(lambda: backend)
+		self.lookups: list[str] = []
+		self.store(query, CachedAnswer(text=ANSWER, path="keyword", score=5, model="amazon.nova-lite-v1:0"))
+
+	def lookup(self, query: str) -> CachedAnswer | None:
+		self.lookups.append(query)
+		return super().lookup(query)
+
+
+def test_over_cap_client_with_a_cached_query_gets_429_and_no_lookup(client: TestClient) -> None:
+	limiter = _use_limiter(client_limit=0)
+	cache = SpyCache()
+	_use_pipeline(stage_models(), cache)
+	assert _post(client, "river flow").status_code == 429
+	assert cache.lookups == []
+	assert limiter.overall_count == 0
+
+
+def test_cached_answer_under_the_cap_leaves_counts_unchanged(client: TestClient) -> None:
+	limiter = _use_limiter(client_limit=1)
+	cache = SpyCache()
+	_use_pipeline(stage_models(), cache)  # any model call would fail the run
+	for _ in range(3):
+		response = _post(client, "river flow")
+		assert response.status_code == 200
+		events = decode([response.text])
+		assert steps(events) == ["cache"]
+		assert answer_text(events) == ANSWER
+	assert cache.lookups == ["river flow"] * 3
+	assert limiter.overall_count == 0
+	assert limiter._clients["testclient"] == 0
+
+
+def test_cache_miss_is_counted(client: TestClient) -> None:
+	limiter = _use_limiter()
+	cache = SpyCache(query="something else")
+	_use_pipeline(keyword_models(ev(True, 5)), cache)
+	events = decode([_post(client, "river flow").text])
+	assert steps(events) == ["cache", "classify", "route", "plan", "execute", "synthesize", "evaluate"]
+	assert limiter.overall_count == 1
 
 
 def test_plain_search_ignores_daily_caps(client: TestClient) -> None:

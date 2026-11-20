@@ -1,17 +1,16 @@
-"""The DOO mapping is shared across components and must conform to DOO itself."""
+"""The DOO mapping is ingest's vocabulary for the bundle's ontology concepts, and must conform to DOO itself."""
 
 import json
 from pathlib import Path
 
 import pytest
 import rdflib
-from pyld import jsonld
 from rdflib.namespace import OWL, RDF
 
 from serka.ontology import compact_iri
 
 ROOT = Path(__file__).resolve().parent.parent
-CANONICAL = ROOT / "mcp-server" / "src" / "serka-mcp" / "doo_mapping.json"
+CANONICAL = ROOT / "src" / "serka" / "doo_mapping.json"
 MAPPING = json.loads(CANONICAL.read_text())
 PREFIXES = MAPPING["prefixes"]
 
@@ -24,11 +23,6 @@ def _iri(curie: str) -> rdflib.URIRef:
 @pytest.fixture(scope="module")
 def doo() -> rdflib.Graph:
 	return rdflib.Graph().parse(ROOT / "tests" / "data" / "doo-0.3.3.ttl")
-
-
-@pytest.mark.parametrize("copy", ["src/serka/doo_mapping.json", "ui/src/doo_mapping.json"])
-def test_mapping_copies_match_canonical(copy):
-	assert (ROOT / copy).read_text() == CANONICAL.read_text(), "run: uv run scripts/sync-doo-mapping.py"
 
 
 def test_mapping_targets_vendored_doo_version(doo):
@@ -65,27 +59,6 @@ def test_terms_are_declared_in_doo_or_listed_as_extensions(doo, kind):
 def test_extensions_really_are_missing_from_doo(doo):
 	declared = [t for t in MAPPING["not_in_doo"] if set(doo.objects(_iri(t), RDF.type))]
 	assert declared == [], "now declared in DOO; remove from not_in_doo"
-
-
-def test_context_expands_terms_to_ontology_iris():
-	context = {**PREFIXES, **MAPPING["terms"]}
-	doc = {
-		"@context": context,
-		"@id": "https://catalogue.ceh.ac.uk/id/x",
-		"@type": "dcat:Dataset",
-		"title": "T",
-		"publication_date": "2020-01-01",
-		"temporal": {"@type": "dcterms:PeriodOfTime", "start_date": "2001-01-01"},
-		"citations": 3,
-	}
-	[node] = jsonld.expand(doc)
-	assert node["@type"] == ["http://www.w3.org/ns/dcat#Dataset"]
-	assert node["http://purl.org/dc/terms/title"] == [{"@value": "T"}]
-	assert node["http://purl.org/dc/terms/issued"] == [
-		{"@value": "2020-01-01", "@type": "http://www.w3.org/2001/XMLSchema#date"}
-	]
-	period = node["http://purl.org/dc/terms/temporal"][0]
-	assert "http://www.w3.org/ns/dcat#startDate" in period
 
 
 def test_compact_iri():

@@ -2,14 +2,16 @@ import logging
 import os
 from logging import Logger
 
+import redis
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from geopy.geocoders.nominatim import Nominatim
 from haystack_integrations.components.embedders.amazon_bedrock import (
 	AmazonBedrockTextEmbedder,
 )
-from neo4j import Driver, GraphDatabase
-from sentence_transformers import CrossEncoder
+
+from catalogue import Catalogue
+from instructions import INSTRUCTIONS
 
 load_dotenv()
 
@@ -23,26 +25,15 @@ logging.basicConfig(
 )
 logger: Logger = logging.getLogger("serka_mcp")
 
-from ontology import INSTRUCTIONS
-
 mcp: FastMCP = FastMCP("Serka", instructions=INSTRUCTIONS)
 geolocator: Nominatim = Nominatim(user_agent="serka_geocoder")
 
-
-def create_neo4j_driver(
-	uri: str,
-	user: str,
-	password: str,
-) -> Driver:
-	return GraphDatabase.driver(uri, auth=(user, password))
+redis_client: redis.Redis = redis.Redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+embedder = AmazonBedrockTextEmbedder(model=os.getenv("MODELS_EMBEDDING", "amazon.titan-embed-text-v2:0"))
 
 
-neo4j_driver: Driver = create_neo4j_driver(
-	f"bolt://{os.getenv('NEO4J_HOST')}:{os.getenv('NEO4J_PORT')}",
-	f"{os.getenv('NEO4J_USERNAME')}",
-	f"{os.getenv('NEO4J_PASSWORD')}",
-)
+def embed(text: str) -> list[float]:
+	return list(embedder.run(text=text)["embedding"])
 
-embedder = AmazonBedrockTextEmbedder(model=f"{os.getenv('MODELS_EMBEDDING')}")
-reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", backend="onnx")
-reranking_enabled = os.getenv("RERANKING_ENABLED", "true").lower() == "true"
+
+catalogue = Catalogue(redis_client, embed)

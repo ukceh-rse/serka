@@ -8,22 +8,6 @@ from serka.settings import Settings
 logger = logging.getLogger(__name__)
 
 
-def create_pipeline_builder() -> PipelineBuilder:
-	s = Settings()
-	return PipelineBuilder(
-		neo4j_host=s.neo4j_host,
-		neo4j_port=s.neo4j_port,
-		neo4j_user=s.neo4j_username,
-		neo4j_password=s.neo4j_password,
-		legilo_pat=s.legilo_pat,
-		mcp_host=s.mcp_host,
-		mcp_port=s.mcp_port,
-		models_embedding=s.models_embedding,
-		chunk_length=150,
-		chunk_overlap=50,
-	)
-
-
 def greater_than_zero(value) -> int:
 	int_value = int(value)
 	if int_value <= 0:
@@ -32,7 +16,14 @@ def greater_than_zero(value) -> int:
 
 
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description="Run ingest-data script")
+	parser = argparse.ArgumentParser(
+		description=(
+			"Fetch EIDC records and Legilo supporting files, write them as an OKF bundle "
+			"(OKF_BUNDLE_DIR, default ./bundle), then load the bundle into Redis. "
+			"Each run REPLACES the whole bundle: ingesting a subset (a small n or --ids-file) "
+			"leaves only that subset in the bundle and the search index."
+		)
+	)
 	parser.add_argument(
 		"n",
 		help="Number of rows to process",
@@ -43,6 +34,11 @@ if __name__ == "__main__":
 	parser.add_argument(
 		"--ids-file",
 		help="File of EIDC dataset IDs to ingest (one per line, '#' comments allowed); overrides n",
+	)
+	parser.add_argument(
+		"--no-load",
+		action="store_true",
+		help="Only write the bundle; do not load it into Redis (see scripts/load-bundle.py)",
 	)
 	parser.add_argument("--debug", action="store_true", help="Enable DEBUG logging")
 	args = parser.parse_args()
@@ -62,8 +58,14 @@ if __name__ == "__main__":
 	file_handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
 	logging.getLogger().addHandler(file_handler)
 
-	pb = create_pipeline_builder()
-	p = pb.build_graph_pipeline()
+	s = Settings()
+	p = PipelineBuilder(okf_bundle_dir=s.okf_bundle_dir, legilo_pat=s.legilo_pat).build_graph_pipeline()
 	with logging_redirect_tqdm():
 		result = p.run(data={"eidc_fetcher": fetcher_args})
-	logger.info(f"{result['graph_writer']}")
+	logger.info(f"{result['okf_writer']}")
+
+	if not args.no_load:
+		from serka.okf.loader import load_from_settings
+
+		with logging_redirect_tqdm():
+			logger.info(f"{load_from_settings(s)}")

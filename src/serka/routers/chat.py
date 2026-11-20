@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 
 from ag_ui.core import RunAgentInput, UserMessage
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,19 +20,22 @@ class QueryRequest(BaseModel):
 	message: str = Field(max_length=MAX_QUERY_CHARS, pattern=r"\S")
 
 
-def _admit(limiter: UsageLimiter, request: Request, settings: Settings) -> None:
-	"""Counts this run, or raises 429 over a daily cap.
+def _admit(limiter: UsageLimiter, request: Request, settings: Settings) -> Callable[[], None]:
+	"""Raises 429 over a daily cap, before any cache lookup. Otherwise returns the callback that
+	counts the run, which the stream calls once the run needs the models (not for a cached answer).
 
 	Called from handler bodies, not as a dependency: FastAPI resolves dependencies before it
-	reports validation errors, so a dependency would count queries that are then rejected.
+	reports validation errors, so a dependency would check queries that are then rejected.
 	"""
-	rejected = limiter.admit(client_address(request, settings.trusted_proxy_hops))
+	client = client_address(request, settings.trusted_proxy_hops)
+	rejected = limiter.check(client)
 	if rejected:
 		raise HTTPException(
 			status_code=429,
 			detail={"code": rejected, "message": LIMIT_MESSAGES[rejected]},
 			headers={"Retry-After": str(limiter.seconds_until_reset())},
 		)
+	return lambda: limiter.count(client)
 
 
 @router.post(
@@ -46,17 +50,17 @@ async def chat_stream(
 	limiter: UsageLimiter = Depends(get_usage_limiter),
 	settings: Settings = Depends(get_settings),
 ) -> Response:
-	_admit(limiter, request, settings)
+	count_run = _admit(limiter, request, settings)
 	run_input = RunAgentInput(
-		threadId=str(uuid.uuid4()),
-		runId=str(uuid.uuid4()),
+		thread_id=str(uuid.uuid4()),
+		run_id=str(uuid.uuid4()),
 		state=None,
 		messages=[UserMessage(id=str(uuid.uuid4()), content=body.message)],
 		tools=[],
 		context=[],
-		forwardedProps=None,
+		forwarded_props=None,
 	)
-	return stream_fn(run_input, request)
+	return stream_fn(run_input, request, count_run)
 
 
 @router.post(
@@ -83,5 +87,5 @@ async def chat_stream_agui(
 		raise HTTPException(status_code=422, detail="The request has no user message to answer.")
 	if len(query) > MAX_QUERY_CHARS:
 		raise HTTPException(status_code=422, detail=f"The latest message is longer than {MAX_QUERY_CHARS} characters.")
-	_admit(limiter, request, settings)
-	return stream_fn(body, request)
+	count_run = _admit(limiter, request, settings)
+	return stream_fn(body, request, count_run)

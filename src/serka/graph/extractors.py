@@ -59,7 +59,7 @@ class EntityExtractor:
 				"west_boundary": bb["westBoundLongitude"],
 				"east_boundary": bb["eastBoundLongitude"],
 			}
-			# Drop any keys whose value is None — Neo4j forbids MERGE on null properties
+			# Drop any keys whose value is None, so a box with a missing side is no box at all
 			return {k: v for k, v in boundary.items() if v is not None}
 		except Exception as e:
 			logger.error(f"Error extracting boundary: {e}")
@@ -296,28 +296,3 @@ class DocumentTruncator:
 				doc = Document(content=doc.content[: self.max_chars], meta=doc.meta)
 			truncated.append(doc)
 		return {"documents": truncated}
-
-
-@component
-class TextExtractor:
-	def __init__(self, fields: str):
-		self.fields = fields
-
-	def extract_text_fields(self, record: dict) -> List[Document]:
-		uri = record.get("uri", "")
-		title = record.get("title", "")
-		docs = [
-			Document(
-				content=record[field], meta={"uri": uri, "title": title, "field": field}
-			)
-			for field in self.fields
-			if field in record
-		]
-		return docs
-
-	@component.output_types(documents=List[Document])
-	def run(self, records: List[Dict[Any, Any]]) -> Dict[str, List[Document]]:
-		docs = []
-		for record in records:
-			docs.extend(self.extract_text_fields(record))
-		return {"documents": docs}

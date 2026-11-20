@@ -1,41 +1,53 @@
 import { create } from 'zustand'
-import type mapping from '../doo_mapping.json'
 import { emptyRun, reduceRun, type RunEvent, type RunTrace } from '../run/runTrace'
 
-/** A JSON-LD entity from the MCP server: @id/@type plus DOO-mapped properties (title, name, temporal, ...). */
-export interface Entity {
-  /** Absent for unanchored text matches. */
-  '@id'?: string
-  /** DOO class CURIEs, e.g. ["dcat:Dataset"]. */
-  '@type': string[]
-  label?: string | null
-  [property: string]: unknown
+/** The OKF concept a search hit belongs to, as the MCP `search` tool summarises it. */
+export interface Concept {
+  /** Bundle path without `.md`, e.g. "datasets/<eidc-id>" or "datasets/<eidc-id>/docs/<file-id>". */
+  id: string
+  /** OKF type: "dataset", "document", "person", "organisation", "grant", "theme", "ontology", ... */
+  type: string
+  title: string
+  description?: string | null
+  /** Canonical URI, e.g. the dataset's EIDC catalogue page. */
+  resource?: string | null
+  tags: string[]
+  citations?: number
+  /** ISO date. */
+  published?: string
 }
 
-/** One hop connecting the returned entity to the node bearing the matched text. */
-export interface PathStep {
-  /** DOO predicate or role CURIE (e.g. "pro:author", "dcat:theme"). */
-  predicate: string
-  entity: Entity
-}
-
+/** One matching chunk (passage) of a concept file. */
 export interface SearchHit {
-  entity: Entity
+  chunk_id: string
+  text: string
   score: number
-  /** Field name for text matches ("description", "lineage", "SUPPORTING_DOC"), "metadata" for node-level matches. */
-  matched_on: string
-  excerpt?: string | null
-  /** Ordered hops FROM `entity` TO the node bearing the matched text. Empty when the entity itself matched. */
-  path: PathStep[]
+  concept: Concept
 }
 
-/** Return-type filter values: DOO node labels, as the FastAPI ReturnType enum (omit for "Any"). */
-export type ReturnType = keyof typeof mapping.node_types
+/** All hits for one concept, best first. */
+export interface ConceptGroup {
+  concept: Concept
+  hits: SearchHit[]
+}
 
+/** Buckets hits by concept ID, orders groups by their best hit's score and hits by score, highest first. */
+export function groupHits(hits: SearchHit[]): ConceptGroup[] {
+  const byId = new Map<string, ConceptGroup>()
+  for (const hit of hits) {
+    const group = byId.get(hit.concept.id) ?? { concept: hit.concept, hits: [] }
+    group.hits.push(hit)
+    byId.set(hit.concept.id, group)
+  }
+  return Array.from(byId.values())
+    .map((g) => ({ ...g, hits: [...g.hits].sort((a, b) => b.score - a.score) }))
+    .sort((a, b) => b.hits[0].score - a.hits[0].score)
+}
 
 interface SearchState {
   query: string
-  returnType: ReturnType | null
+  /** OKF type filter; null for any type. */
+  conceptType: string | null
   results: SearchHit[]
   loading: boolean
   error: string | null
@@ -45,7 +57,7 @@ interface SearchState {
   aiRun: RunTrace | null
   recentSearches: string[]
   setQuery: (q: string) => void
-  setReturnType: (rt: ReturnType | null) => void
+  setConceptType: (type: string | null) => void
   setResults: (r: SearchHit[]) => void
   setLoading: (v: boolean) => void
   setError: (e: string | null) => void
@@ -61,7 +73,7 @@ interface SearchState {
 
 export const useSearchStore = create<SearchState>()((set) => ({
   query: '',
-  returnType: null,
+  conceptType: null,
   results: [],
   loading: false,
   error: null,
@@ -70,7 +82,7 @@ export const useSearchStore = create<SearchState>()((set) => ({
   aiRun: null,
   recentSearches: JSON.parse(localStorage.getItem('serka_recent') ?? '[]') as string[],
   setQuery: (q) => set({ query: q }),
-  setReturnType: (rt) => set({ returnType: rt }),
+  setConceptType: (type) => set({ conceptType: type }),
   setResults: (r) => set({ results: r }),
   setLoading: (v) => set({ loading: v }),
   setError: (e) => set({ error: e }),

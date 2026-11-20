@@ -20,7 +20,7 @@ class FakeBedrockEmbedder:
 def test_one_bad_document_does_not_drop_the_rest(monkeypatch, tmp_path):
 	monkeypatch.setattr(serka.cache, "root", tmp_path)
 	embedder = CachedDocumentEmbedder(batch_size=2)
-	embedder.embedder = FakeBedrockEmbedder()
+	embedder.embedder = FakeBedrockEmbedder()  # ty: ignore[invalid-assignment]
 	docs = [Document(content=c) for c in ["a", "b", "too long", "c", "d"]]
 
 	result = embedder.run(documents=docs)

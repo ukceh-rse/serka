@@ -175,6 +175,8 @@ cython_debug/
 .mongodb/
 .vscode/
 .neo4j/
+/bundle/
+/bundle.*/
 .neo4j.bak/
 
 # Terraform files

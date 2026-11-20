@@ -46,7 +46,7 @@ const KEYWORD: RunEvent[] = [
   ...step('classify', 1, null, 'nova-lite', [custom('serka.classification', { inScope: true, label: 'keyword', reason: 'Dataset search.' })]),
   ...step('route', 1, 1, null, [{ type: 'RUN_METADATA', model: 'nova-lite', models: MODELS }]),
   ...step('plan', 1, 1, 'nova-micro', [custom('serka.plan', { summary: 'Search soil carbon.', steps: ['search {}'] })]),
-  ...step('execute', 1, 1, null, tool('t1', 'search', { query: 'soil carbon' }, '{"@graph": []}')),
+  ...step('execute', 1, 1, null, tool('t1', 'search', { query: 'soil carbon' }, '{"hits": [], "total": 0, "warnings": []}')),
   ...step('synthesize', 1, 1, 'nova-lite', [{ type: 'TEXT_MESSAGE_START' }, { type: 'TEXT_MESSAGE_CONTENT', delta: 'Answer' }]),
   ...step('evaluate', 1, 1, 'haiku', [evaluation(1, true, 5)]),
   { type: 'TEXT_MESSAGE_END' },
@@ -62,7 +62,7 @@ const INSIGHT_RETRY: RunEvent[] = [
   ...step('execute', 1, 2, 'haiku', [
     ...tool('t1', 'search', { query: 'a' }, '{}'),
     ...tool('t2', 'search', { query: 'b' }, '{}'),
-    ...tool('t3', 'get_dataset', { id: 'x' }, 'Error: not found'),
+    ...tool('t3', 'read', { id: 'x' }, 'Error: not found'),
     ...tool('t4', 'search', { query: 'c' }, '{}'),
   ]),
   ...step('synthesize', 1, 2, 'sonnet', [custom('serka.draft', { attempt: 1, text: 'Draft one' })]),
@@ -89,6 +89,13 @@ const INSIGHT_LIMIT: RunEvent[] = [
   ...step('route', 1, 2, null, [{ type: 'RUN_METADATA', model: 'sonnet', models: MODELS }]),
   ...step('limit', 1, 2, null, text('Detailed analysis has reached its daily limit.')),
   outcome('insight_limit_reached', 'insight', 0, 2, null),
+  { type: 'RUN_FINISHED' },
+]
+
+const CACHED: RunEvent[] = [
+  { type: 'RUN_STARTED' },
+  ...step('cache', 1, null, null, [{ type: 'RUN_METADATA', model: 'nova-lite', models: MODELS }, ...text('Saved answer.')]),
+  outcome('cached', 'keyword', 0, null, 4),
   { type: 'RUN_FINISHED' },
 ]
 
@@ -122,7 +129,7 @@ describe('reduceRun', () => {
     expect(t.steps.map((s) => s.name)).toEqual(['classify', 'route', 'plan', 'execute', 'synthesize', 'evaluate'])
     expect(t.steps.every((s) => s.finishedAt !== undefined && !s.failed)).toBe(true)
     const execute = t.steps[3]
-    expect(execute.toolCalls).toEqual([{ id: 't1', name: 'search', args: '{"query":"soil carbon"}', result: '{"@graph": []}', ok: true }])
+    expect(execute.toolCalls).toEqual([{ id: 't1', name: 'search', args: '{"query":"soil carbon"}', result: '{"hits": [], "total": 0, "warnings": []}', ok: true }])
     expect(t.steps[0].classification?.label).toBe('keyword')
     expect(t.steps[0].model).toBe('nova-lite')
     expect(t.steps[0].maxAttempts).toBeNull()
@@ -292,10 +299,34 @@ describe('summaryText', () => {
   })
 })
 
+describe('cached runs', () => {
+  it('settles as cached with its path, only the cache step and no tool calls', () => {
+    const t = replay(CACHED)
+    expect(t.status).toBe('cached')
+    expect(t.path).toBe('keyword')
+    expect(t.steps.map((s) => s.name)).toEqual(['cache'])
+    expect(t.models).toEqual(MODELS)
+  })
+
+  it('names the cache stage while it runs', () => {
+    expect(progressText(atStep(CACHED, 'cache'))).toBe('Checking for a saved answer')
+  })
+
+  it('says a saved answer was returned, with the path and score but no attempts or calls', () => {
+    const summary = summaryText(replay(CACHED))
+    expect(summary).toMatch(/^Saved answer to a similar question returned · Keyword search · score 4 of 5 · /)
+    expect(summary).not.toMatch(/attempt|catalogue call/i)
+  })
+
+  it('includes status cached in feedback', () => {
+    expect(compactOutcome(replay(CACHED))).toEqual({ status: 'cached', path: 'keyword', attemptsUsed: 0, score: 4, models: MODELS })
+  })
+})
+
 describe('compactOutcome', () => {
   it('returns only status, path, attempts, score and models', () => {
     const c = compactOutcome(replay(INSIGHT_RETRY))
     expect(c).toEqual({ status: 'accepted', path: 'insight', attemptsUsed: 2, score: 4, models: MODELS })
-    expect(JSON.stringify(c)).not.toMatch(/Draft|@graph|search/)
+    expect(JSON.stringify(c)).not.toMatch(/Draft|hits|search/)
   })
 })

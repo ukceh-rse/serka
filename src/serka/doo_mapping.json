@@ -134,7 +134,7 @@
 		"frapo:Grant": "A sum of money awarded by a funding agency for a piece of research; identified by funder + award number.",
 		"skos:Concept": "A keyword or theme from a controlled vocabulary (GEMET, INSPIRE topic categories, NERC/CEH topics, GeoNames, ...).",
 		"fabio:Expression": "A citable published work, e.g. a paper that cites a dataset.",
-		"fabio:DigitalManifestation": "A supporting file attached to a dataset (e.g. a PDF of methods); its text is available via get_content.",
+		"fabio:DigitalManifestation": "A supporting file attached to a dataset (e.g. a PDF of methods); its extracted text is the body of its document concept.",
 		"pro:RoleInTime": "A role an agent holds with respect to a dataset (DOO's reified role pattern).",
 		"dcat:theme": "Dataset -> Concept: a theme or keyword of the dataset.",
 		"org:memberOf": "Person -> Organisation: affiliation.",

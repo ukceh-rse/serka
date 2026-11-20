@@ -7,7 +7,6 @@ import {
   CardContent,
   Collapse,
   Container,
-  Divider,
   IconButton,
   Skeleton,
   Stack,
@@ -20,17 +19,16 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import Masonry from "@mui/lab/Masonry";
 import SearchBar from "../components/SearchBar";
-import DatasetResultCard from "../components/DatasetResultCard";
-import EntityResultCard from "../components/EntityResultCard";
+import ConceptResultCard from "../components/ConceptResultCard";
 import AISummary from "../components/AISummary";
-import { useSearchStore } from "../stores/searchStore";
-import type { Entity, ReturnType, SearchHit } from "../stores/searchStore";
+import { groupHits, useSearchStore } from "../stores/searchStore";
+import type { ConceptGroup } from "../stores/searchStore";
 import { search } from "../api/search";
 import { streamSummary, UsageLimitError } from "../api/chat";
 import { EXAMPLE_SEARCHES } from "../constants";
-import { TYPE_ORDER, TypeIcon, typeMeta } from "../typeMeta";
+import { TypeIcon, typeMeta } from "../typeMeta";
 
-// Results within a type box are always sorted by score (inherited from unifiedGroups), so the
+// Results within a type box are always sorted by score (inherited from the concept groups), so the
 // first group's top hit is that type's best score. Boxes whose best score trails the overall
 // best by a wide margin start collapsed to 1-2 items instead of the full 3 — a big relevance
 // gap is a signal the type is a weaker match, not worth as much initial screen space.
@@ -44,27 +42,20 @@ function initialCountFor(topScore: number, bestOverallScore: number): number {
   return 1;
 }
 
-const ENTITY_TYPE_ORDER = TYPE_ORDER.filter((t) => t !== "dcat:Dataset");
-
-type EntityGroup = { entity: Entity; hits: SearchHit[] };
-
-const isDataset = (g: EntityGroup) => g.entity["@type"].includes("dcat:Dataset");
-const entityKey = (e: Entity) => e["@id"] ?? "";
-
 export default function ResultsPage() {
   const [params, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const q = params.get("q") ?? "";
   const aiFromUrl = params.get("ai") === "true";
-  const rt = (params.get("type") as ReturnType) || null;
+  const rt = params.get("type") || null;
   const {
     query,
-    returnType,
+    conceptType,
     results,
     loading,
     error,
     setQuery,
-    setReturnType,
+    setConceptType,
     setResults,
     setLoading,
     setError,
@@ -122,10 +113,10 @@ export default function ResultsPage() {
 
   useEffect(() => {
     if (!q) return;
-    if (q === query && rt === returnType && results.length > 0) return;
+    if (q === query && rt === conceptType && results.length > 0) return;
     if (!EXAMPLE_SEARCHES.includes(q)) addRecentSearch(q);
     setQuery(q);
-    setReturnType(rt);
+    setConceptType(rt);
     setLoading(true);
     setError(null);
     search(q, rt)
@@ -151,67 +142,34 @@ export default function ResultsPage() {
     [q],
   );
 
-  // All hits grouped per entity, hits sorted by score, groups sorted by relevance.
-  // The dataset and per-type views below are derived from this single pass; the
-  // unified list ("Any" search) uses it directly.
-  const unifiedGroups = useMemo<EntityGroup[]>(() => {
-    const byId = new Map<string, EntityGroup>();
-    for (const r of results) {
-      const key = r.entity["@id"] ?? r.excerpt ?? "";
-      const g = byId.get(key) ?? { entity: r.entity, hits: [] };
-      g.hits.push(r);
-      byId.set(key, g);
-    }
-    return Array.from(byId.values())
-      .map((g) => ({
-        ...g,
-        hits: [...g.hits].sort((a, b) => b.score - a.score),
-      }))
-      .sort((a, b) => b.hits[0].score - a.hits[0].score);
-  }, [results]);
+  // Hits grouped per concept (one card each), groups and their hits sorted by score.
+  const groups = useMemo<ConceptGroup[]>(() => groupHits(results), [results]);
 
-  const datasetGroups = useMemo(
-    () => unifiedGroups.filter(isDataset),
-    [unifiedGroups],
-  );
-
-  // Non-dataset groups bucketed by DOO type; relevance order is preserved from unifiedGroups.
-  const entityByType = useMemo<Map<string, EntityGroup[]>>(() => {
-    const byType = new Map<string, EntityGroup[]>();
-    for (const g of unifiedGroups) {
-      if (isDataset(g)) continue;
-      const type = g.entity["@type"][0] ?? "unknown";
-      if (!byType.has(type)) byType.set(type, []);
-      byType.get(type)!.push(g);
-    }
-    return byType;
-  }, [unifiedGroups]);
-
-  // Type boxes for the unfiltered ("Any") view: one box per DOO type, each internally sorted
-  // by score (inherited from unifiedGroups), boxes ordered by their own best score descending.
+  // Type boxes for the unfiltered ("All") view: one box per OKF type, each internally sorted
+  // by score (inherited from groups), boxes ordered by their own best score descending.
   const typeSections = useMemo(() => {
-    const byType = new Map<string, EntityGroup[]>();
-    for (const g of unifiedGroups) {
-      const type = isDataset(g) ? "dcat:Dataset" : (g.entity["@type"][0] ?? "unknown");
+    const byType = new Map<string, ConceptGroup[]>();
+    for (const g of groups) {
+      const type = g.concept.type;
       if (!byType.has(type)) byType.set(type, []);
       byType.get(type)!.push(g);
     }
     return Array.from(byType.entries())
-      .map(([type, groups]) => ({
+      .map(([type, typeGroups]) => ({
         type,
         label: typeMeta(type).label,
-        groups,
-        topScore: groups[0].hits[0].score,
+        groups: typeGroups,
+        topScore: typeGroups[0].hits[0].score,
       }))
       .sort((a, b) => b.topScore - a.topScore);
-  }, [unifiedGroups]);
+  }, [groups]);
 
   const [expandedTypes, setExpandedTypes] = useState<Record<string, boolean>>({});
   useEffect(() => {
     setExpandedTypes({});
   }, [q, rt]);
 
-  const hasResults = unifiedGroups.length > 0;
+  const hasResults = groups.length > 0;
 
   const [viewMode, setViewMode] = useState<"masonry" | "list">("list");
 
@@ -228,7 +186,7 @@ export default function ResultsPage() {
     navigate(`/search?${sp}`);
   };
 
-  const handleReturnType = (next: ReturnType | null) => {
+  const handleConceptType = (next: string | null) => {
     setSearchParams((prev) => {
       const sp = new URLSearchParams(prev);
       if (next) sp.set("type", next);
@@ -275,8 +233,8 @@ export default function ResultsPage() {
           showSuggestions
           onFocusChange={setSearchFocused}
           onExampleSearch={handleExampleSearch}
-          returnType={rt}
-          onReturnTypeChange={handleReturnType}
+          conceptType={rt}
+          onConceptTypeChange={handleConceptType}
         />
       </Box>
 
@@ -312,8 +270,8 @@ export default function ResultsPage() {
                 color="text.secondary"
                 sx={{ mb: 2 }}
               >
-                {unifiedGroups.length} result
-                {unifiedGroups.length !== 1 ? "s" : ""} for "
+                {groups.length} result
+                {groups.length !== 1 ? "s" : ""} for "
                 <strong>{q}</strong>"
               </Typography>
               <Stack spacing={2}>
@@ -326,7 +284,6 @@ export default function ResultsPage() {
                   const expanded = expandedTypes[section.type] ?? false;
                   const initial = section.groups.slice(0, initialCount);
                   const extra = section.groups.slice(initialCount);
-                  const isDatasetType = section.type === "dcat:Dataset";
                   const canCollapse = extra.length > 0;
 
                   return (
@@ -362,39 +319,15 @@ export default function ResultsPage() {
                         </Typography>
                       </Box>
                       <Stack spacing={1.5}>
-                        {initial.map((g, i) =>
-                          isDatasetType ? (
-                            <DatasetResultCard
-                              key={entityKey(g.entity)}
-                              hits={g.hits}
-                              index={i}
-                            />
-                          ) : (
-                            <EntityResultCard
-                              key={entityKey(g.entity)}
-                              hits={g.hits}
-                              index={i}
-                            />
-                          ),
-                        )}
+                        {initial.map((g, i) => (
+                          <ConceptResultCard key={g.concept.id} group={g} index={i} />
+                        ))}
                       </Stack>
                       <Collapse in={expanded} unmountOnExit>
                         <Stack spacing={1.5} sx={{ mt: extra.length > 0 ? 1.5 : 0 }}>
-                          {extra.map((g, i) =>
-                            isDatasetType ? (
-                              <DatasetResultCard
-                                key={entityKey(g.entity)}
-                                hits={g.hits}
-                                index={initialCount + i}
-                              />
-                            ) : (
-                              <EntityResultCard
-                                key={entityKey(g.entity)}
-                                hits={g.hits}
-                                index={initialCount + i}
-                              />
-                            ),
-                          )}
+                          {extra.map((g, i) => (
+                            <ConceptResultCard key={g.concept.id} group={g} index={initialCount + i} />
+                          ))}
                         </Stack>
                       </Collapse>
                       {canCollapse && (
@@ -429,99 +362,53 @@ export default function ResultsPage() {
             </>
           ) : (
             <>
-              {datasetGroups.length > 0 && (
-                <>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      mb: 2,
-                    }}
-                  >
-                    <Typography variant="subtitle2" color="text.secondary">
-                      {datasetGroups.length} dataset
-                      {datasetGroups.length !== 1 ? "s" : ""} for "
-                      <strong>{q}</strong>"
-                    </Typography>
-                    <Box>
-                      <Tooltip title="Grid view">
-                        <IconButton
-                          size="small"
-                          onClick={() => setViewMode("masonry")}
-                          color={viewMode === "masonry" ? "primary" : "default"}
-                        >
-                          <ViewModuleIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="List view">
-                        <IconButton
-                          size="small"
-                          onClick={() => setViewMode("list")}
-                          color={viewMode === "list" ? "primary" : "default"}
-                        >
-                          <ViewListIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </Box>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  mb: 2,
+                }}
+              >
+                <Typography variant="subtitle2" color="text.secondary">
+                  {groups.length} {(groups.length === 1 ? typeMeta(rt).name : typeMeta(rt).label).toLowerCase()} for "
+                  <strong>{q}</strong>"
+                </Typography>
+                <Box>
+                  <Tooltip title="Grid view">
+                    <IconButton
+                      size="small"
+                      onClick={() => setViewMode("masonry")}
+                      color={viewMode === "masonry" ? "primary" : "default"}
+                    >
+                      <ViewModuleIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="List view">
+                    <IconButton
+                      size="small"
+                      onClick={() => setViewMode("list")}
+                      color={viewMode === "list" ? "primary" : "default"}
+                    >
+                      <ViewListIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Box>
 
-                  {viewMode === "masonry" ? (
-                    <Masonry columns={{ xs: 1, sm: 2, md: 3 }} spacing={2}>
-                      {datasetGroups.map((g, i) => (
-                        <DatasetResultCard
-                          key={entityKey(g.entity)}
-                          hits={g.hits}
-                          index={i}
-                        />
-                      ))}
-                    </Masonry>
-                  ) : (
-                    <Stack spacing={2}>
-                      {datasetGroups.map((g, i) => (
-                        <DatasetResultCard
-                          key={entityKey(g.entity)}
-                          hits={g.hits}
-                          index={i}
-                        />
-                      ))}
-                    </Stack>
-                  )}
-                </>
+              {viewMode === "masonry" ? (
+                <Masonry columns={{ xs: 1, sm: 2, md: 3 }} spacing={2}>
+                  {groups.map((g, i) => (
+                    <ConceptResultCard key={g.concept.id} group={g} index={i} />
+                  ))}
+                </Masonry>
+              ) : (
+                <Stack spacing={2}>
+                  {groups.map((g, i) => (
+                    <ConceptResultCard key={g.concept.id} group={g} index={i} />
+                  ))}
+                </Stack>
               )}
-
-              {entityByType.size > 0 &&
-                ENTITY_TYPE_ORDER.filter((t) => entityByType.has(t)).map(
-                  (type) => {
-                    const groups = entityByType.get(type)!;
-                    const label = typeMeta(type).label;
-                    return (
-                      <Box
-                        key={type}
-                        sx={{ mt: datasetGroups.length > 0 ? 4 : 0 }}
-                      >
-                        {datasetGroups.length > 0 && <Divider sx={{ mb: 3 }} />}
-                        <Typography
-                          variant="subtitle2"
-                          color="text.secondary"
-                          sx={{ mb: 2 }}
-                        >
-                          {groups.length} {label.toLowerCase()} for "
-                          <strong>{q}</strong>"
-                        </Typography>
-                        <Stack spacing={1.5}>
-                          {groups.map((g, i) => (
-                            <EntityResultCard
-                              key={entityKey(g.entity)}
-                              hits={g.hits}
-                              index={i}
-                            />
-                          ))}
-                        </Stack>
-                      </Box>
-                    );
-                  },
-                )}
             </>
           )}
         </>

@@ -3,42 +3,7 @@ from pathlib import Path
 
 from haystack import Document
 
-from serka.graph.extractors import DocumentTruncator, EntityExtractor, TextExtractor
-
-
-# ---------------------------------------------------------------------------
-# TextExtractor
-# ---------------------------------------------------------------------------
-
-
-def test_text_extractor_returns_documents_for_each_field():
-	records = [
-		{
-			"uri": "https://catalogue.ceh.ac.uk/id/test-uuid-abc",
-			"title": "Test Title",
-			"description": "test_description",
-			"lineage": "test_lineage",
-		}
-	]
-	result = TextExtractor(["description", "lineage"]).run(records=records)
-	docs = result["documents"]
-	assert len(docs) == 2
-	assert docs[0].content == "test_description"
-	assert docs[0].meta["uri"] == "https://catalogue.ceh.ac.uk/id/test-uuid-abc"
-	assert docs[0].meta["title"] == "Test Title"
-	assert docs[1].content == "test_lineage"
-
-
-def test_text_extractor_skips_missing_fields():
-	records = [
-		{
-			"uri": "https://catalogue.ceh.ac.uk/id/test-uuid-xyz",
-			"title": "T",
-			"description": "only this field present",
-		}
-	]
-	result = TextExtractor(["description", "lineage"]).run(records=records)
-	assert len(result["documents"]) == 1
+from serka.graph.extractors import DocumentTruncator, EntityExtractor
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +148,7 @@ def test_missing_bounding_box_is_not_an_error(caplog):
 def test_document_truncator_truncates_long_docs():
 	doc = Document(content="x" * 50_000, meta={"uri": "http://example.com"})
 	result = DocumentTruncator(max_chars=45_000).run(documents=[doc])
-	assert len(result["documents"][0].content) == 45_000
+	assert len(result["documents"][0].content or "") == 45_000
 
 
 def test_document_truncator_passes_short_docs_unchanged():

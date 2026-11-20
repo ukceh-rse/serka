@@ -8,11 +8,12 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from serka.feedback import FeedbackLogger
-from serka.ontology import search_args
+from serka.catalogue import search_args
 from serka.settings import Settings
 from serka.usage import UsageLimiter
 
-StreamFn = Callable[[Any, Request], Response]
+StreamFn = Callable[[Any, Request, Callable[[], None]], Response]
+"""(run input, request, count_run): count_run counts the run towards the daily caps."""
 
 
 _feedback_logger: FeedbackLogger | None = None
@@ -35,13 +36,12 @@ async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable
 
 	async def _search(
 		q: str,
-		return_type: str | None = None,
-		hops: int = 1,
+		type: str | None = None,
 		location: str | None = None,
 		published_after: str | None = None,
 		published_before: str | None = None,
 	) -> list:
-		args = {**search_args(q, return_type, published_after, published_before), "hops": hops}
+		args = search_args(q, type, published_after, published_before)
 		async with Client(mcp_url) as client:
 			if location:
 				try:
@@ -53,8 +53,8 @@ async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable
 				result = await client.call_tool("search", args)
 			except ToolError as e:
 				raise HTTPException(status_code=422, detail=str(e)) from e
-		# The search result is a JSON-LD document; the UI consumes the hits in its @graph.
-		return result.structured_content["@graph"]
+		# The UI consumes the hits unchanged; warnings are not passed on.
+		return result.structured_content["hits"]
 
 	_mcp_search_fn = _search
 	return _mcp_search_fn
@@ -106,7 +106,13 @@ def get_stream_fn(
 			result = await client.call_tool(name, args)
 		return result.structured_content
 
+	from serka import answer_cache
+
 	_stream_fn = make_stream_fn(
-		build_stage_models(settings), call_tool, MCPToolset(mcp_url), usage_limiter.claim_insight
+		build_stage_models(settings),
+		call_tool,
+		MCPToolset(mcp_url),
+		usage_limiter.claim_insight,
+		answer_cache.from_settings(settings),
 	)
 	return _stream_fn

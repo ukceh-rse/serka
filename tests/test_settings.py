@@ -48,3 +48,14 @@ def test_env_example_loads(monkeypatch: pytest.MonkeyPatch) -> None:
 	assert settings.aws_region == "eu-west-2"
 	assert settings.models_classify == "amazon.nova-lite-v1:0"
 	assert not hasattr(settings, "models_llm")
+
+
+def test_redis_bundle_and_cache_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+	for field in Settings.model_fields:
+		monkeypatch.delenv(field.upper(), raising=False)
+	settings = Settings(_env_file=None)  # type: ignore[call-arg]
+	assert settings.redis_url == "redis://localhost:6379"
+	assert settings.okf_bundle_dir == "./bundle"
+	assert settings.answer_cache_enabled is True
+	assert settings.answer_cache_distance_threshold == 0.05
+	assert settings.answer_cache_ttl_seconds == 604800

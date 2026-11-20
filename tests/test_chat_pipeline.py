@@ -109,10 +109,27 @@ def stage_models(**overrides: Model | Scripted) -> StageModels:
 
 
 SEARCH_RESULT = {
-	"@context": {"dcat": "http://www.w3.org/ns/dcat#"},
-	"@graph": [{"entity": {"@id": "https://catalogue.ceh.ac.uk/id/1", "title": "River flow data"}, "score": 0.9}],
-	"meta": {"took_ms": 3},
+	"hits": [
+		{
+			"chunk_id": "datasets/1#0",
+			"text": "Daily mean river flow from the national gauging network.",
+			"score": 0.033,
+			"concept": {
+				"id": "datasets/1",
+				"type": "dataset",
+				"title": "River flow data",
+				"description": "Daily flows.",
+				"resource": "https://catalogue.ceh.ac.uk/id/1",
+				"tags": [],
+				"citations": 9,
+				"published": "2024-06-15",
+			},
+		}
+	],
+	"total": 240,
+	"warnings": [],
 }
+DATASET_FILE = "---\ntype: dataset\ntitle: River flow data\n---\n\n- [Dr. Alice Whitfield](/people/x) — [author](/ontology/roles/author)\n"
 BBOX = {"north": 53.4, "south": 51.4, "east": -2.6, "west": -5.3}
 
 
@@ -138,14 +155,44 @@ def insight_toolset() -> FunctionToolset[Any]:
 		return SEARCH_RESULT
 
 	@toolset.tool_plain
-	def get_contributors(id: str) -> dict[str, Any]:
-		return {"@graph": [{"name": "Dr. Alice Whitfield", "role": "author"}]}
+	def read(id: str) -> str:
+		return DATASET_FILE
+
+	@toolset.tool_plain
+	def aggregate(group_by: str | None = None, role: str | None = None) -> dict[str, Any]:
+		return AGGREGATE_RESULT
 
 	return toolset
 
 
+AGGREGATE_RESULT = {
+	"total": 87,
+	"groups": [
+		{"id": "people/0000-0003-3947-6463", "title": "Morton, R.D.", "datasets": 20, "citations": 234},
+		{"id": "people/0000-0003-3591-1034", "title": "O'Neil, A.W.", "datasets": 16, "citations": 210},
+	],
+	"total_groups": 145,
+	"warnings": [],
+}
+
+
+def aggregating_model() -> FunctionModel:
+	"""Calls aggregate grouped by person with the author role, then replies 'done'."""
+
+	async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+		if not any(isinstance(p, ToolReturnPart) for m in messages for p in m.parts):
+			yield {0: DeltaToolCall(name="aggregate", json_args='{"group_by": "person", "role": "author"}')}
+		else:
+			yield "done"
+
+	def fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+		raise AssertionError("execute agent should be streamed")
+
+	return FunctionModel(fn, stream_function=stream, model_name="haiku")
+
+
 def tool_calling_model(name: str = "haiku") -> FunctionModel:
-	"""Calls search, then get_contributors with the id it found, then replies 'done'."""
+	"""Calls search, then read with the concept id it found, then replies 'done'."""
 
 	def step(messages: list[ModelMessage]) -> list[str]:
 		return [p.tool_name for m in messages for p in m.parts if isinstance(p, ToolReturnPart)]
@@ -155,7 +202,7 @@ def tool_calling_model(name: str = "haiku") -> FunctionModel:
 		if not done:
 			yield {0: DeltaToolCall(name="search", json_args='{"query": "river wye invertebrates"}')}
 		elif done == ["search"]:
-			yield {0: DeltaToolCall(name="get_contributors", json_args='{"id": "https://catalogue.ceh.ac.uk/id/1"}')}
+			yield {0: DeltaToolCall(name="read", json_args='{"id": "datasets/1"}')}
 		else:
 			yield "done"
 
@@ -184,8 +231,8 @@ IN_SCOPE_INSIGHT = {"category": "insight", "reason": "needs reasoning"}
 OUT_OF_SCOPE = {"category": "out_of_scope", "reason": "coding request"}
 KEYWORD = Classification.model_validate(IN_SCOPE_KEYWORD)
 INSIGHT = Classification.model_validate(IN_SCOPE_INSIGHT)
-PARAMS = {"query": "river flow", "return_type": "Dataset", "location": None}
-PLAN = {"summary": "Find datasets then contributors.", "steps": ["search", "get_contributors"]}
+PARAMS = {"query": "river flow", "type": "dataset", "location": None}
+PLAN = {"summary": "Find datasets then contributors.", "steps": ["search", "read"]}
 ANSWER = "Daily flows are in [River flow data](https://catalogue.ceh.ac.uk/id/1)."
 
 
@@ -238,7 +285,7 @@ def test_classify_uses_history_for_follow_up() -> None:
 def test_route_emits_attempts_and_metadata(label: str, max_attempts: int, answer_model: str) -> None:
 	models = stage_models(synthesize_keyword=TestModel(model_name="nova-lite"), synthesize_insight=TestModel(model_name="sonnet"))
 	deps = make_deps(models)
-	state = ChatState(query="q", classification=Classification(category=label, reason="r"))  # type: ignore[arg-type]
+	state = ChatState(query="q", classification=Classification(category=label, reason="r"))  # ty: ignore[invalid-argument-type]
 	assert isinstance(run_node(Route(), state, deps), Plan)
 	assert (state.label, state.max_attempts, state.attempt) == (label, max_attempts, 1)
 	events = drain(deps.emitter.queue)
@@ -302,7 +349,7 @@ def test_execute_keyword_geocodes_then_searches_without_a_model() -> None:
 	state = ChatState(query="river flow Wales", classification=KEYWORD, plan=SearchParams(query="river flow", location="Wales"))
 	assert isinstance(run_node(Execute(), state, deps), Synthesize)
 	assert [name for name, _ in tools.calls] == ["geocode_location", "search"]
-	assert tools.calls[1][1] == {"query": "river flow", "return_type": "dcat:Dataset", "bounding_box": BBOX}
+	assert tools.calls[1][1] == {"query": "river flow", "type": "dataset", "bounding_box": BBOX}
 	events = drain(deps.emitter.queue)
 	tool_events = [e for e in events if e["type"].startswith("TOOL_CALL")]
 	assert [e["type"] for e in tool_events] == ["TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END", "TOOL_CALL_RESULT"] * 2
@@ -311,10 +358,57 @@ def test_execute_keyword_geocodes_then_searches_without_a_model() -> None:
 	assert state.tool_results == [ToolResult(tool="search", args=tools.calls[1][1], result=SEARCH_RESULT)]
 
 
-def test_render_tool_results_keeps_only_graph_hits() -> None:
+def test_render_tool_results_renders_hits_as_title_resource_and_text() -> None:
 	rendered = render_tool_results([ToolResult("search", {"query": "q"}, SEARCH_RESULT)])
-	assert "River flow data" in rendered
-	assert "@context" not in rendered and "took_ms" not in rendered
+	assert (
+		"- River flow data (https://catalogue.ceh.ac.uk/id/1) [dataset datasets/1, 9 citations, published 2024-06-15]: "
+		"Daily mean river flow from the national gauging network."
+	) in rendered
+	assert "(240 matches in total)" in rendered
+	assert "chunk_id" not in rendered and '"score"' not in rendered
+
+
+def test_render_tool_results_shows_read_files_and_empty_searches() -> None:
+	rendered = render_tool_results([
+		ToolResult("read", {"id": "datasets/1"}, DATASET_FILE),
+		ToolResult("search", {"query": "x"}, {"hits": [], "total": 0, "warnings": ["bounding_box only matches datasets"]}),
+	])
+	assert DATASET_FILE in rendered
+	assert "(no matches)" in rendered and "Warning: bounding_box only matches datasets" in rendered
+
+
+def test_keyword_ranking_query_makes_one_sorted_search_without_terms() -> None:
+	planner = Scripted({"query": "", "sort_by": "citations", "order": "descending"})
+	tools = FakeTools()
+	deps = make_deps(stage_models(plan_keyword=planner), tools)
+	state = ChatState(query="most cited datasets", classification=KEYWORD)
+	run_node(Plan(), state, deps)
+	run_node(Execute(), state, deps)
+	assert tools.calls == [("search", {"type": "dataset", "sort_by": "citations", "order": "descending"})]
+	plan_event = customs(drain(deps.emitter.queue), "serka.plan")[0]
+	assert plan_event["summary"] == "Find the most cited datasets in the catalogue."
+
+
+def test_keyword_plan_with_no_terms_and_no_sort_searches_the_users_text() -> None:
+	tools = FakeTools()
+	deps = make_deps(stage_models(), tools)
+	state = ChatState(query="hedgehog road deaths", classification=KEYWORD, plan=SearchParams(query=""))
+	run_node(Execute(), state, deps)
+	assert tools.calls == [("search", {"query": "hedgehog road deaths", "type": "dataset"})]
+
+
+def test_plan_keyword_prompt_has_ranking_examples() -> None:
+	assert '"most cited datasets": query "", sort_by "citations"' in prompts.PLAN_KEYWORD_PROMPT
+	assert '"latest datasets on river flow"' in prompts.PLAN_KEYWORD_PROMPT
+
+
+def test_insight_prompts_describe_the_catalogue_tools() -> None:
+	text = prompts.PLAN_INSIGHT_PROMPT + prompts.EXECUTE_INSIGHT_PROMPT
+	assert "- search:" in text and "- read:" in text and "- aggregate:" in text and 'read("ontology/index")' in text
+	assert "never count search results" in text and "call aggregate" in text
+	assert "Search several times" in text and "follow the /... links" in text
+	for removed in ("get_entity", "get_relations", "get_contributors", "list_datasets", "get_content", "describe_ontology"):
+		assert removed not in text
 
 
 def test_execute_keyword_without_location_searches_once() -> None:
@@ -353,7 +447,7 @@ def test_plan_keyword_rejects_non_iso_dates() -> None:
 	state = ChatState(query="soil datasets since 2020", classification=KEYWORD)
 	run_node(Plan(), state, deps)
 	assert isinstance(state.plan, SearchParams)
-	assert search_args_of(state.plan)["published_after"] == "2020-01-01"
+	assert search_args_of(state.plan, state.query)["published_after"] == "2020-01-01"
 
 
 def test_execute_insight_collects_model_chosen_tool_results() -> None:
@@ -362,12 +456,57 @@ def test_execute_insight_collects_model_chosen_tool_results() -> None:
 	state = ChatState(query="q", classification=INSIGHT, plan=RetrievalPlan.model_validate(PLAN), tool_results=[ToolResult("old", {}, 1)])
 	run_node(Execute(), state, deps)
 	assert tools.calls == []
-	assert [r.tool for r in state.tool_results] == ["search", "get_contributors"]
+	assert [r.tool for r in state.tool_results] == ["search", "read"]
 	assert state.tool_results[0].result == SEARCH_RESULT
-	assert state.tool_results[1].args == {"id": "https://catalogue.ceh.ac.uk/id/1"}
+	assert state.tool_results[1].args == {"id": "datasets/1"}
+	assert state.tool_results[1].result == DATASET_FILE
 	events = drain(deps.emitter.queue)
-	assert [e["toolCallName"] for e in events if e["type"] == "TOOL_CALL_START"] == ["search", "get_contributors"]
+	assert [e["toolCallName"] for e in events if e["type"] == "TOOL_CALL_START"] == ["search", "read"]
 	assert "TEXT_MESSAGE_CONTENT" not in types(events)
+
+
+def test_aggregate_question_is_insight_and_calls_aggregate() -> None:
+	query = "which author contributed to the most datasets?"
+	assert f'"{query}"' in prompts.CLASSIFY_PROMPT
+	deps = make_deps(stage_models(classify=Scripted(IN_SCOPE_INSIGHT), execute_insight=aggregating_model()))
+	state = ChatState(query=query)
+	assert isinstance(run_node(Classify(), state, deps), Route)
+	assert state.classification is not None and state.classification.category == "insight"
+	state.plan = RetrievalPlan.model_validate({"summary": "Rank authors by datasets.", "steps": ["aggregate"]})
+	run_node(Execute(), state, deps)
+	[result] = state.tool_results
+	assert (result.tool, result.args) == ("aggregate", {"group_by": "person", "role": "author"})
+	rendered = render_tool_results(state.tool_results)
+	assert "Persons with the role author, ranked by number of datasets" in rendered
+	assert "- Morton, R.D. (people/0000-0003-3947-6463): 20 datasets, 234 citations" in rendered
+	assert "(145 groups in total, covering 87 matching datasets)" in rendered
+
+
+def test_render_aggregate_totals_years_and_types() -> None:
+	rendered = render_tool_results([
+		ToolResult("aggregate", {}, {"total": 100, "citations": 666, "warnings": []}),
+		ToolResult("aggregate", {"query": "ozone", "theme": "themes/air"}, {"total": 4, "citations": 9, "warnings": []}),
+		ToolResult(
+			"aggregate",
+			{"group_by": "year"},
+			{"total": 3, "groups": [{"id": "2020", "title": "2020", "datasets": 3, "citations": 5}], "total_groups": 1, "warnings": []},
+		),
+		ToolResult(
+			"aggregate",
+			{"group_by": "type"},
+			{"total": 9, "groups": [{"id": "dataset", "title": "dataset", "concepts": 9}], "total_groups": 1, "warnings": []},
+		),
+	])
+	assert "Number of datasets:\n100 (cited 666 times in total)" in rendered
+	assert "Number of datasets that mention any of: ozone matching the filters:\n4" in rendered
+	assert "Number of datasets per publication year:\n- 2020: 3 datasets, 5 citations" in rendered
+	assert "Number of catalogue concepts of each type:\n- dataset: 9\n(1 groups in total, covering 9 concepts)" in rendered
+
+
+def test_answer_prompts_allow_only_aggregate_counts() -> None:
+	assert "Do not claim specific counts" not in prompts.SYNTHESIZE_PROMPT
+	assert "only when an aggregate result in the retrieved data gives it" in prompts.SYNTHESIZE_PROMPT
+	assert "every count in the answer is one an aggregate result in the data gives" in prompts.EVALUATE_PROMPT
 
 
 # --- 4.6 Synthesize ---
@@ -375,7 +514,7 @@ def test_execute_insight_collects_model_chosen_tool_results() -> None:
 
 def test_synthesize_keyword_streams_live_and_leaves_message_open() -> None:
 	deps = make_deps(stage_models(synthesize_keyword=Scripted(ANSWER)))
-	state = ChatState(query="q", classification=KEYWORD, tool_results=[ToolResult("search", {}, SEARCH_RESULT["@graph"])])
+	state = ChatState(query="q", classification=KEYWORD, tool_results=[ToolResult("search", {}, SEARCH_RESULT)])
 	assert isinstance(run_node(Synthesize(), state, deps), Evaluate)
 	events = drain(deps.emitter.queue)
 	assert answer_text(events) == ANSWER
@@ -794,7 +933,10 @@ def test_answer_and_evaluate_prompts_share_the_word_limit_and_citation_rules() -
 	assert "Never drop a citation to save words." in prompts.SYNTHESIZE_PROMPT
 	assert "concise" not in prompts.SYNTHESIZE_PROMPT and "concise" not in prompts.EVALUATE_PROMPT
 	assert "no citations fails" in prompts.EVALUATE_PROMPT
-	assert "Only the exact no-results message may have none." in prompts.EVALUATE_PROMPT
+	assert (
+		"Only the exact no-results message, and an answer that only states aggregate counts or names people, "
+		"organisations, grants or themes from an aggregate ranking, may have none."
+	) in prompts.EVALUATE_PROMPT
 	assert "over the word limit, missing citations" in prompts.EVALUATE_PROMPT
 
 
@@ -839,3 +981,96 @@ def test_refusal_event_sequence() -> None:
 	assert answer_text(events) == prompts.REFUSAL_MESSAGE
 	assert "TOOL_CALL_START" not in types(events)
 	assert customs(events, "serka.outcome")[0]["status"] == "refused"
+
+
+# --- answer cache ---
+
+
+def _cache(*entries: tuple[str, str]) -> Any:
+	from serka.answer_cache import AnswerCache, CachedAnswer
+	from tests.test_answer_cache import FakeBackend
+
+	backend = FakeBackend()
+	cache = AnswerCache(lambda: backend)
+	for query, text in entries:
+		cache.store(query, CachedAnswer(text=text, path="keyword", score=4, model="amazon.nova-lite-v1:0"))
+	return cache, backend
+
+
+async def _stream_cached(query: str, models: StageModels, cache: Any, history: list[ModelMessage] | None = None) -> tuple[list[dict[str, Any]], int]:
+	counted = []
+	deps = make_deps(models)
+	deps.answer_cache = cache
+	deps.count_run = lambda: counted.append(1)
+	graph = build_graph()
+
+	async def run() -> None:
+		await run_chat(graph, ChatState(query=query, history=history or []), deps)
+
+	events = decode([c async for c in stream_run(deps.emitter, run, thread_id="t", run_id="r")])
+	return events, len(counted)
+
+
+def test_cache_hit_returns_the_stored_answer_with_only_the_cache_step() -> None:
+	cache, _ = _cache(("pike in windermere", "Stored answer."))
+	events, counted = asyncio.run(_stream_cached("pike in windermere", stage_models(), cache))
+	_assert_framing(events)
+	assert steps(events) == ["cache"]
+	assert customs(events, "serka.step")[0] == {"step": "cache", "attempt": 1, "maxAttempts": None, "model": None}
+	assert answer_text(events) == "Stored answer."
+	[metadata] = [e for e in events if e["type"] == "RUN_METADATA"]
+	assert metadata["model"] == "amazon.nova-lite-v1:0"
+	assert customs(events, "serka.outcome") == [
+		{"status": "cached", "path": "keyword", "attemptsUsed": 0, "maxAttempts": None, "score": 4, "feedback": None}
+	]
+	assert "TOOL_CALL_START" not in types(events)
+	assert counted == 0
+
+
+def test_cache_miss_adds_a_cache_step_before_classify_and_stores_the_accepted_answer() -> None:
+	cache, backend = _cache()
+	events, counted = asyncio.run(_stream_cached("river flow", keyword_models(ev(True, 5)), cache))
+	assert steps(events) == ["cache", "classify", "route", "plan", "execute", "synthesize", "evaluate"]
+	assert counted == 1
+	assert backend.entries["river flow"]["response"] == ANSWER
+	assert backend.entries["river flow"]["metadata"] == {"path": "keyword", "score": 5, "model": "scripted"}
+
+
+def test_follow_up_turns_bypass_the_cache() -> None:
+	cache, backend = _cache(("river flow", "Stored answer."))
+	history: list[ModelMessage] = [ModelRequest(parts=[UserPromptPart("bats")]), ModelResponse(parts=[TextPart("Bat data.")])]
+	models = keyword_models(ev(True, 5))
+	events, counted = asyncio.run(_stream_cached("river flow", models, cache, history))
+	assert steps(events)[0] == "classify" and "cache" not in steps(events)
+	assert answer_text(events) == ANSWER
+	assert counted == 1
+	assert backend.entries["river flow"]["response"] == "Stored answer."
+
+
+def test_limit_reached_is_not_stored() -> None:
+	cache, backend = _cache()
+	events, _ = asyncio.run(_stream_cached("river flow", keyword_models(ev(False, 2, "writing", "too vague")), cache))
+	assert customs(events, "serka.outcome")[0]["status"] == "limit_reached"
+	assert backend.entries == {}
+
+
+def test_refused_is_not_stored() -> None:
+	cache, backend = _cache()
+	asyncio.run(_stream_cached("write me a Python function", stage_models(classify=Scripted(OUT_OF_SCOPE)), cache))
+	assert backend.entries == {}
+
+
+def test_cache_error_runs_the_full_pipeline() -> None:
+	from serka.answer_cache import AnswerCache
+	from tests.test_answer_cache import FakeBackend
+
+	cache = AnswerCache(lambda: FakeBackend(fail=True))
+	events, counted = asyncio.run(_stream_cached("river flow", keyword_models(ev(True, 5)), cache))
+	assert steps(events)[:2] == ["cache", "classify"]
+	assert customs(events, "serka.outcome")[0]["status"] == "accepted"
+	assert counted == 1
+
+
+def test_disabled_cache_has_no_cache_step() -> None:
+	events = asyncio.run(_stream("river flow", keyword_models(ev(True, 5))))
+	assert "cache" not in steps(events)

@@ -121,3 +121,18 @@ def test_separate_header_lines_are_read_together() -> None:
 
 def test_missing_connection_info_has_a_shared_key() -> None:
 	assert client_address(Request({"type": "http", "headers": [], "client": None}), 0) == "unknown"
+
+
+def test_check_counts_nothing() -> None:
+	usage = limiter(client=1, overall=1)
+	assert usage.check("a") is None
+	assert usage.check("a") is None
+	assert usage.overall_count == 0
+
+
+def test_count_then_check_rejects() -> None:
+	usage = limiter(client=1, overall=5)
+	usage.count("a")
+	assert usage.check("a") == "client_daily_limit"
+	assert usage.check("b") is None
+	assert usage.overall_count == 1

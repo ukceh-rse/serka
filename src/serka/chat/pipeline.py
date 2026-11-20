@@ -1,12 +1,13 @@
 """The chat pipeline as a pydantic-graph state machine.
 
-Classify -> Refuse | Route; Route -> InsightLimit | Plan; Plan -> Execute -> Synthesize -> Evaluate;
-Evaluate -> Plan (data retry) | Synthesize (writing retry) | End.
+Cache -> End (cached answer) | Classify; Classify -> Refuse | Route; Route -> InsightLimit | Plan;
+Plan -> Execute -> Synthesize -> Evaluate; Evaluate -> Plan (data retry) | Synthesize (writing retry) | End.
 See openspec specs `chat-agent` and `chat-agent-events`.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable, Sequence
@@ -25,15 +26,16 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 from pydantic_graph import BaseNode, End, Graph, GraphBuilder, GraphRunContext
 
 from serka import prompts
+from serka.answer_cache import AnswerCache, CachedAnswer
 from serka.chat.events import Emitter, ToolCaller, ToolResult, agent_event_handler, call_tool
 from serka.chat.models import StageModels
-from serka.ontology import ReturnType, search_args
+from serka.catalogue import Order, SortBy, search_args
 
 logger = logging.getLogger(__name__)
 
 Label = Literal["keyword", "insight"]
 Problem = Literal["none", "data", "writing"]
-Status = Literal["accepted", "limit_reached", "refused", "insight_limit_reached"]
+Status = Literal["accepted", "limit_reached", "refused", "insight_limit_reached", "cached"]
 
 MAX_ATTEMPTS: dict[Label, int] = {"keyword": 1, "insight": 2}
 MAX_TOKENS = {
@@ -49,7 +51,7 @@ MAX_TOKENS = {
 EXECUTE_USAGE_LIMITS = UsageLimits(request_limit=10, total_tokens_limit=200_000)
 """Per run, across attempts. Tokens need a limit too: the execute agent sees uncapped tool results (see MAX_RESULT_CHARS)."""
 MAX_RESULT_CHARS = 8000
-"""Cap on each tool result's size in downstream prompts (JSON-LD results can be large)."""
+"""Cap on each tool result's size in downstream prompts (search hits and read files can be large)."""
 CLASSIFY_OUTPUT_RETRIES = 2
 """Nova models occasionally return invalid structured output; a failed classify ends the run."""
 
@@ -74,13 +76,19 @@ class Classification(BaseModel):
 		return None if self.category == "out_of_scope" else self.category
 
 
+OKFType = Literal["dataset", "document", "person", "organisation", "grant", "theme"]
+
+
 class SearchParams(BaseModel):
-	query: str = Field(description="Subject search terms.")
-	return_type: ReturnType = ReturnType("Dataset")
+	# A string rather than nullable: small models often omit nullable fields from structured output.
+	query: str = Field(default="", description="Subject search terms; empty for a pure ranking request.")
+	type: OKFType = "dataset"
 	location: str | None = Field(default=None, description="UK place name to restrict results to.")
 	# Real dates, so an unusable value ("last year") is caught as an output retry, not a search failure.
 	published_after: date | None = Field(default=None, description="ISO date YYYY-MM-DD.")
 	published_before: date | None = Field(default=None, description="ISO date YYYY-MM-DD.")
+	sort_by: SortBy | None = Field(default=None, description="Rank results by citations or publication date.")
+	order: Order | None = Field(default=None, description="Sort order; descending when omitted.")
 
 
 class RetrievalPlan(BaseModel):
@@ -153,6 +161,10 @@ class ChatDeps:
 	emitter: Emitter
 	claim_insight: Callable[[], bool]
 	"""Takes one of today's insight slots; False when none is left."""
+	answer_cache: AnswerCache = field(default_factory=lambda: AnswerCache(None))
+	"""Accepted first-turn answers; disabled by default."""
+	count_run: Callable[[], None] = lambda: None
+	"""Counts the run towards the daily caps; called once the run needs the models."""
 
 
 @dataclass
@@ -176,11 +188,72 @@ def _step(ctx: Ctx, name: str, model: Model | None) -> Any:
 	)
 
 
-def _compact(result: Any) -> Any:
-	"""Keeps only the hits of a JSON-LD result, dropping @context and search meta."""
-	if isinstance(result, dict) and "@graph" in result:
-		return result["@graph"]
-	return result
+def _render_hit(hit: dict[str, Any]) -> str:
+	"""`title (resource): text`, with the concept's type and ID, and citations and date when known."""
+	c = hit.get("concept") or {}
+	details = [f"{c.get('type')} {c.get('id')}"]
+	if c.get("citations") is not None:
+		details.append(f"{c['citations']} citations")
+	if c.get("published"):
+		details.append(f"published {c['published']}")
+	resource = f" ({c['resource']})" if c.get("resource") else ""
+	text = " ".join(str(hit.get("text") or "").split())
+	return f"- {c.get('title')}{resource} [{', '.join(details)}]: {text}"
+
+
+def _render_result(result: Any) -> str:
+	if isinstance(result, dict) and "hits" in result:
+		lines = [_render_hit(h) for h in result["hits"]]
+		lines.append(f"({result.get('total', len(result['hits']))} matches in total)")
+		lines += [f"Warning: {w}" for w in result.get("warnings") or []]
+		return "\n".join(lines) if result["hits"] else "(no matches)\n" + "\n".join(lines[1:])
+	if isinstance(result, str):
+		return result
+	return json.dumps(result, default=str, ensure_ascii=False)
+
+
+_FILTER_ARGS = ("theme", "linked", "bounding_box", "published_after", "published_before", "min_citations")
+
+
+def _counted(args: dict[str, Any]) -> str:
+	"""What an aggregate call counted, in words, so answers can say it."""
+	group_by = args.get("group_by")
+	noun = f"{args.get('type') or 'dataset'}s"
+	if group_by in (None, "year") and args.get("query"):
+		noun += f" that mention any of: {args['query']}"
+	if any(args.get(k) is not None for k in _FILTER_ARGS):
+		noun += " matching the filters"
+	if group_by is None:
+		return f"Number of {noun}"
+	if group_by == "year":
+		return f"Number of {noun} per publication year"
+	if group_by == "type":
+		return "Number of catalogue concepts of each type"
+	role = f" with the role {args['role']}" if args.get("role") else ""
+	order = "summed citations" if args.get("sort_by") == "citations" else "number of datasets"
+	return f"{group_by.capitalize()}s{role}, ranked by {order}, with the datasets they are related to and those datasets' summed citations"
+
+
+def _render_aggregate(result: dict[str, Any], args: dict[str, Any]) -> str:
+	lines = [f"{_counted(args)}:"]
+	if "groups" not in result:
+		total = f"{result.get('total', 0)}"
+		if result.get("citations") is not None:
+			total += f" (cited {result['citations']} times in total)"
+		lines.append(total)
+	else:
+		for g in result["groups"]:
+			if "concepts" in g:
+				lines.append(f"- {g['title']}: {g['concepts']}")
+			else:
+				ident = "" if g["id"] == g["title"] else f" ({g['id']})"
+				lines.append(f"- {g['title']}{ident}: {g['datasets']} datasets, {g['citations']} citations")
+		if not result["groups"]:
+			lines.append("(no groups)")
+		covered = "concepts" if args.get("group_by") == "type" else "matching datasets"
+		lines.append(f"({result.get('total_groups', len(result['groups']))} groups in total, covering {result.get('total', 0)} {covered})")
+	lines += [f"Warning: {w}" for w in result.get("warnings") or []]
+	return "\n".join(lines)
 
 
 def render_tool_results(tool_results: Sequence[ToolResult]) -> str:
@@ -188,7 +261,10 @@ def render_tool_results(tool_results: Sequence[ToolResult]) -> str:
 		return "(no data was retrieved)"
 	parts = []
 	for r in tool_results:
-		body = json.dumps(_compact(r.result), default=str, ensure_ascii=False)
+		if r.tool == "aggregate" and isinstance(r.result, dict):
+			body = _render_aggregate(r.result, r.args)
+		else:
+			body = _render_result(r.result)
 		if len(body) > MAX_RESULT_CHARS:
 			body = body[:MAX_RESULT_CHARS] + " ...[truncated]"
 		parts.append(f"## {r.tool}({json.dumps(r.args, default=str)})\n{body}")
@@ -264,6 +340,29 @@ def _fixed_answer(ctx: Ctx, step: str, message: str, status: Status, path: Label
 
 
 @dataclass
+class Cache(BaseNode[ChatState, ChatDeps, Answer]):
+	"""Answers a first-turn query from the answer cache, or counts the run and classifies it."""
+
+	async def run(self, ctx: Ctx) -> Classify | End[Answer]:
+		state, deps = ctx.state, ctx.deps
+		if not state.history and deps.answer_cache.enabled:
+			emitter = deps.emitter
+			with _step(ctx, "cache", None):
+				hit = await asyncio.to_thread(deps.answer_cache.lookup, state.query)
+				if hit is not None:
+					emitter.metadata(hit.model, deps.models.ids())
+					emitter.text(hit.text)
+			if hit is not None:
+				emitter.custom(
+					"serka.outcome",
+					{"status": "cached", "path": hit.path, "attemptsUsed": 0, "maxAttempts": None, "score": hit.score, "feedback": None},
+				)
+				return End(Answer(text=hit.text, status="cached"))
+		deps.count_run()
+		return Classify()
+
+
+@dataclass
 class Classify(BaseNode[ChatState, ChatDeps, Answer]):
 	async def run(self, ctx: Ctx) -> Refuse | Route:
 		model = ctx.deps.models.classify
@@ -324,7 +423,7 @@ class Plan(BaseNode[ChatState, ChatDeps, Answer]):
 					history=state.history,
 				)
 				state.plan = params
-				emitter.custom("serka.plan", _keyword_plan_event(params))
+				emitter.custom("serka.plan", _keyword_plan_event(params, state.query))
 		else:
 			model = ctx.deps.models.plan_insight
 			prompt = f"Question: {state.query}"
@@ -345,21 +444,34 @@ class Plan(BaseNode[ChatState, ChatDeps, Answer]):
 		return Execute()
 
 
-def _search_args(params: SearchParams) -> dict[str, Any]:
+def _search_args(params: SearchParams, fallback_query: str) -> dict[str, Any]:
+	"""The direct search call. With neither terms nor a sort, the user's own text is the query."""
+	query = params.query.strip() or (None if params.sort_by else fallback_query)
 	return search_args(
-		params.query,
-		params.return_type,
+		query,
+		params.type,
 		params.published_after.isoformat() if params.published_after else None,
 		params.published_before.isoformat() if params.published_before else None,
+		params.sort_by,
+		params.order,
 	)
 
 
-def _keyword_plan_event(params: SearchParams) -> dict[str, Any]:
+def _keyword_plan_event(params: SearchParams, fallback_query: str) -> dict[str, Any]:
 	steps = []
 	if params.location:
 		steps.append(f"geocode_location {json.dumps({'location': params.location})}")
-	steps.append(f"search {json.dumps(_search_args(params))}" + (" within the location's bounding box" if params.location else ""))
-	return {"summary": f"Search the catalogue for {params.return_type.lower()}s matching '{params.query}'.", "steps": steps}
+	args = _search_args(params, fallback_query)
+	steps.append(f"search {json.dumps(args)}" + (" within the location's bounding box" if params.location else ""))
+	if params.sort_by:
+		ranking = "most cited" if params.sort_by == "citations" else "most recently published"
+		if params.order == "ascending":
+			ranking = "least cited" if params.sort_by == "citations" else "earliest published"
+		about = f" matching '{args['query']}'" if args.get("query") else ""
+		summary = f"Find the {ranking} {params.type}s{about} in the catalogue."
+	else:
+		summary = f"Search the catalogue for {params.type}s matching '{args['query']}'."
+	return {"summary": summary, "steps": steps}
 
 
 @dataclass
@@ -371,7 +483,7 @@ class Execute(BaseNode[ChatState, ChatDeps, Answer]):
 		if state.label == "keyword":
 			assert isinstance(state.plan, SearchParams)
 			with _step(ctx, "execute", None):
-				args = _search_args(state.plan)
+				args = _search_args(state.plan, state.query)
 				if state.plan.location:
 					try:
 						geo = await call_tool(deps.emitter, deps.call_tool, "geocode_location", {"location": state.plan.location})
@@ -488,13 +600,19 @@ class Evaluate(BaseNode[ChatState, ChatDeps, Answer]):
 				"feedback": chosen.evaluation.feedback,
 			},
 		)
+		if status == "accepted" and not state.history and ctx.deps.answer_cache.enabled:
+			models = ctx.deps.models
+			answer_model = models.synthesize_keyword if state.label == "keyword" else models.synthesize_insight
+			cached = CachedAnswer(text=final, path=state.label, score=chosen.evaluation.score, model=answer_model.model_name)
+			await asyncio.to_thread(ctx.deps.answer_cache.store, state.query, cached)
 		return End(Answer(text=final, status=status))
 
 
 def build_graph() -> Graph:
-	g = GraphBuilder(name="chat", state_type=ChatState, deps_type=ChatDeps, input_type=Classify, output_type=Answer)
+	g = GraphBuilder(name="chat", state_type=ChatState, deps_type=ChatDeps, input_type=Cache, output_type=Answer)
 	g.add(
-		g.edge_from(g.start_node).to(Classify),
+		g.edge_from(g.start_node).to(Cache),
+		g.node(Cache),
 		g.node(Classify),
 		g.node(Route),
 		g.node(InsightLimit),
@@ -508,6 +626,6 @@ def build_graph() -> Graph:
 
 
 async def run_chat(graph: Graph, state: ChatState, deps: ChatDeps) -> Answer:
-	answer = await graph.run(inputs=Classify(), state=state, deps=deps)
+	answer = await graph.run(inputs=Cache(), state=state, deps=deps)
 	assert isinstance(answer, Answer)
 	return answer

@@ -1,71 +1,13 @@
 import logging
 from haystack import component, Document
-from typing import Dict, List, Any, Literal
+from typing import Dict, List, Any
 from tqdm import tqdm
 from haystack_integrations.components.embedders.amazon_bedrock import (
 	AmazonBedrockDocumentEmbedder,
-	AmazonBedrockTextEmbedder,
 )
 import serka.cache as cache
 
 logger = logging.getLogger(__name__)
-
-
-@component
-class BedrockNodeEmbedder:
-	def __init__(
-		self,
-		model: Literal["amazon.titan-embed-text-v2:0"] = "amazon.titan-embed-text-v2:0",
-	):
-		self.embedder = AmazonBedrockTextEmbedder(model=model)
-
-	def _prepare_nodes_to_embed(
-		self, node_type: str, nodes: List[Dict[str, Any]]
-	) -> List[str]:
-		return [f"{node_type}: {repr(node)}" for node in nodes]
-
-	def _embed_node(self, content: str) -> List[float]:
-		cached = cache.get_embedding(content)
-		if cached is not None:
-			return cached
-		embedding = self.embedder.run(text=content)["embedding"]
-		cache.save_embedding(content, embedding)
-		return embedding
-
-	def _embed_nodes(
-		self, node_type: str, nodes: List[Dict[str, Any]]
-	) -> List[Dict[str, Any]]:
-		result = []
-		contents = self._prepare_nodes_to_embed(node_type, nodes)
-		for node, content in tqdm(
-			zip(nodes, contents),
-			desc=f"Embedding {node_type} nodes",
-			unit="node",
-			total=len(nodes),
-		):
-			try:
-				result.append({**node, "embedding": self._embed_node(content)})
-			except Exception as e:
-				logger.error(
-					"Embedding failed for %s node %s: %s",
-					node_type,
-					node.get("uri", node.get("name", "?")),
-					e,
-					exc_info=True,
-				)
-		return result
-
-	@component.output_types(node_embeddings=Dict[str, List[Dict[str, str]]])
-	def run(
-		self, nodes: Dict[str, List[Dict[str, Any]]]
-	) -> Dict[str, Dict[str, List[Dict[str, str]]]]:
-		embedded_nodes = {}
-		for node_type, node_list in nodes.items():
-			if node_type == "Document":
-				embedded_nodes[node_type] = node_list
-			else:
-				embedded_nodes[node_type] = self._embed_nodes(node_type, node_list)
-		return {"node_embeddings": embedded_nodes}
 
 
 @component
@@ -78,7 +20,7 @@ class CachedDocumentEmbedder:
 	def _embed(self, docs: List[Document]) -> List[Document | None]:
 		"""Embed a batch; if it fails, retry one by one so a single bad document only drops itself."""
 		try:
-			return self.embedder.run(documents=docs)["documents"]
+			return list(self.embedder.run(documents=docs)["documents"])
 		except Exception as e:
 			if len(docs) == 1:
 				logger.error(

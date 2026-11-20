@@ -51,22 +51,16 @@ git clone https://github.com/ukceh-rse/serka.git /home/ubuntu/serka >> $LOG_FILE
 
 cd /home/ubuntu/serka
 
-# Generate random password for neo4j (username must be default "neo4j")
-RANDOM_PASSWORD="$(head /dev/urandom | tr -dc 'a-z0-9' | head -c 8)"
-
 touch .env
 cat > .env << ENV_CONTENT
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=$RANDOM_PASSWORD
-NEO4J_HOST=localhost
-NEO4J_PORT=7687
+REDIS_URL=redis://localhost:6379
 AWS_DEFAULT_REGION=eu-west-2
 MODELS_EMBEDDING=amazon.titan-embed-text-v2:0
-NEO4J_DATA_DIR=/opt/serka/neo4j
+REDIS_DATA_DIR=/opt/serka/redis
 FEEDBACK_DATA_DIR=/opt/serka/feedback
 ENV_CONTENT
 
-mkdir -p /opt/serka/neo4j/data /opt/serka/neo4j/logs /opt/serka/feedback
+mkdir -p /opt/serka/redis /opt/serka/feedback
 
 git checkout rc-alpha >> $LOG_FILE 2>&1
 EOF_UBUNTU

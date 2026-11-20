@@ -11,7 +11,7 @@ import type { SSEEvent } from '../api/chat'
  */
 export type RunEvent = SSEEvent | { type: 'STREAM_CLOSED' } | { type: 'USAGE_LIMIT'; message: string }
 
-export type RunStatus = 'running' | 'accepted' | 'limit_reached' | 'refused' | 'usage_limit' | 'error'
+export type RunStatus = 'running' | 'accepted' | 'limit_reached' | 'refused' | 'cached' | 'usage_limit' | 'error'
 
 export interface ToolCall {
   id: string
@@ -43,7 +43,7 @@ export interface Evaluation {
 }
 
 export interface Outcome {
-  status: 'accepted' | 'limit_reached' | 'refused' | 'insight_limit_reached'
+  status: 'accepted' | 'limit_reached' | 'refused' | 'insight_limit_reached' | 'cached'
   path: string | null
   attemptsUsed: number
   maxAttempts: number | null
@@ -194,6 +194,7 @@ export function reduceRun(trace: RunTrace, event: RunEvent, now: number): RunTra
 // ─── Wording ──────────────────────────────────────────────────────────────────
 
 const STAGE_PHRASES: Record<string, string> = {
+  cache: 'Checking for a saved answer',
   classify: 'Understanding your question',
   route: 'Choosing an approach',
   plan: 'Planning the search',
@@ -269,6 +270,14 @@ export function summaryText(trace: RunTrace): string {
     return join([trace.limitMessage ?? 'Detailed analysis has reached its daily limit', date])
   }
   const o = trace.outcome
+  if (trace.status === 'cached') {
+    return join([
+      'Saved answer to a similar question returned',
+      trace.path && (PATH_LABELS[trace.path] ?? trace.path),
+      o?.score != null && `score ${o.score} of 5`,
+      date,
+    ])
+  }
   const calls = catalogueCalls(trace)
   const result = stoppedAtRetrievalLimit(trace)
     ? 'Retrieval stopped at its limit, best answer returned without fully passing'
