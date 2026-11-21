@@ -8,6 +8,7 @@ Keys:
 """
 
 import logging
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -34,6 +35,10 @@ CONCEPT_PREFIX = "concept:"
 THEME_LABEL_PREFIX = "theme-label:"
 TAG_SEPARATOR = "|"
 _BATCH = 500
+# Chunks embedded at a time: holding every embedding of a full bundle at once needs about 7 GB
+_EMBED_BATCH = 2_000
+# Dropping a full index and writing 500-chunk pipelines can each take far longer than redis-py's 5 s default
+LOAD_SOCKET_TIMEOUT = timedelta(minutes=10)
 
 
 class DocumentEmbedder(Protocol):
@@ -122,9 +127,12 @@ def load_bundle(
 	if not (root / "index.md").is_file():
 		raise FileNotFoundError(f"{root} is not an OKF bundle (no index.md)")
 	files = read_bundle(root)
-	chunks = _embed(chunk_concepts(files), embedder)
+	chunks = chunk_concepts(files)
 	relations = relation_records(files)
-	dim = len(chunks[0]["embedding"]) if chunks else default_dim
+	batches = (chunks[i : i + _EMBED_BATCH] for i in range(0, len(chunks), _EMBED_BATCH))
+	# The first batch is embedded before anything is dropped, and gives the vector dimension
+	first = _embed(next(batches, []), embedder)
+	dim = len(first[0]["embedding"]) if first else default_dim
 
 	for index in (INDEX, RELATIONS_INDEX):
 		try:
@@ -150,11 +158,21 @@ def load_bundle(
 			pipe = client.pipeline(transaction=False)
 			pending = 0
 
-	for chunk in tqdm(chunks, desc="Writing chunks", unit="chunk"):
-		record = {k: v for k, v in chunk.items() if k != "id"}
-		pipe.json().set(f"{CHUNK_PREFIX}{chunk['id']}", "$", record)
-		pending += 1
-		flush()
+	stored = 0
+	with tqdm(total=len(chunks), desc="Embedding and writing chunks", unit="chunk") as progress:
+		embedded = first
+		while True:
+			for chunk in embedded:
+				record = {k: v for k, v in chunk.items() if k != "id"}
+				pipe.json().set(f"{CHUNK_PREFIX}{chunk['id']}", "$", record)
+				pending += 1
+				flush()
+			stored += len(embedded)
+			progress.update(_EMBED_BATCH)
+			batch = next(batches, None)
+			if batch is None:
+				break
+			embedded = _embed(batch, embedder)
 	for rel in relations:
 		pipe.json().set(f"{RELATION_PREFIX}{rel['id']}", "$", {k: v for k, v in rel.items() if k != "id"})
 		pending += 1
@@ -178,7 +196,7 @@ def load_bundle(
 	counts = {
 		"files": len(files),
 		"concepts": sum(1 for f in files if f.is_concept),
-		"chunks": len(chunks),
+		"chunks": stored,
 		"relations": len(relations),
 		"theme_labels": len(labels),
 	}
@@ -190,7 +208,7 @@ def load_from_settings(settings: Settings, bundle_dir: Path | None = None) -> di
 	"""Loads `bundle_dir` (default: the configured OKF bundle directory) into the configured Redis."""
 	from serka.graph.embedders import CachedDocumentEmbedder
 
-	client = redis.Redis.from_url(settings.redis_url)
+	client = redis.Redis.from_url(settings.redis_url, socket_timeout=LOAD_SOCKET_TIMEOUT.total_seconds())
 	# Cleared whether or not lookups are enabled, so re-enabling never serves answers from an old index
 	cache = AnswerCache(lambda: answer_cache._semantic_cache(settings))
 	return load_bundle(

@@ -8,6 +8,7 @@ import pytest
 from haystack import Document
 
 from serka.answer_cache import AnswerCache
+from serka.okf import loader
 from serka.okf.bundle import read_bundle
 from serka.okf.chunks import chunk_concepts
 from serka.okf.loader import (
@@ -85,6 +86,19 @@ def test_loading_twice_gives_identical_keys(tmp_path: Path, test_redis) -> None:
 	assert _counts(test_redis) == {CHUNK_PREFIX: n_chunks, RELATION_PREFIX: 4, CONCEPT_PREFIX: 8, THEME_LABEL_PREFIX: 1}
 	assert int(test_redis.ft(INDEX).info()["num_docs"]) == n_chunks
 	assert int(test_redis.ft(RELATIONS_INDEX).info()["num_docs"]) == n_relations
+
+
+def test_loading_in_small_embedding_batches_stores_every_chunk(
+	tmp_path: Path, test_redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+	bundle = _bundle(tmp_path / "bundle", ["a", "b"])
+	whole = load_bundle(bundle, test_redis, FakeEmbedder())
+	keys_whole = sorted(test_redis.keys("*"))
+	monkeypatch.setattr(loader, "_EMBED_BATCH", 2)
+	batched = load_bundle(bundle, test_redis, FakeEmbedder())
+	assert batched == whole
+	assert sorted(test_redis.keys("*")) == keys_whole
+	assert int(test_redis.ft(INDEX).info()["num_docs"]) == whole["chunks"] > 2
 
 
 def test_stored_concepts_chunks_and_labels(tmp_path: Path, test_redis) -> None:
