@@ -35,7 +35,7 @@ Original supporting files are published at `https://data-package.ceh.ac.uk/sd/<i
 
 ```
 raw/                                  (RAW_DIR, default ./raw)
-  order.json                          {"seed": 1234, "ids_file": [...], "ids": [...]}
+  order.json                          {"seed": 20261120, "head": [...], "ids": [...]}
   metadata/<id>.json                  EIDC ?format=json, as returned
   supporting-docs/<id>/<path>         unzipped supporting-documents/ entries; mounted into Legilo
   status/<id>.json                    {"downloaded": iso8601, "has_supporting_docs": bool}
@@ -73,12 +73,13 @@ scripts/ingest-data.py  [N|all] [--ids-file F] [--no-load]   = download + build 
 ```yaml
 legilo:
   profiles: ["ingest"]
-  build: { context: "${LEGILO_SRC:?set LEGILO_SRC to a legilo checkout}" }
+  build: { context: "${LEGILO_SRC:-../legilo}", dockerfile_inline: "<legilo's build steps, current uv>" }
   ports: ["${LEGILO_PORT:-8100}:8000"]
   environment: { SUPPORTING_DOCS_DIR: /docs, DATA_DIR: /tmp }
   volumes: ["${RAW_DIR:-./raw}/supporting-docs:/docs:ro"]
 ```
 
+- Legilo's own Dockerfile pins uv 0.4.2, which cannot parse the `supporting-docs-md` branch's `uv.lock`, so the service builds from an inline copy of Legilo's build steps with a current uv. Drop it once Legilo's Dockerfile is fixed. `LEGILO_SRC` defaults to `../legilo` rather than being required, because a required variable would make every compose command fail without it.
 - The `ingest` profile means `docker compose up` for the app doesn't build Legilo. You start it with `docker compose --profile ingest up -d legilo`. The host port is 8100 because `mcp` already publishes 8000.
 - Serka calls `LEGILO_URL` (default `http://localhost:8100`) with a plain `requests` session: no auth header, no cache, and a long per-request timeout (`LEGILO_TIMEOUT`, default 600 s), because anydoc on a large PDF takes far longer than 5 s.
 - Before a build converts anything, it checks that Legilo answers. If not, it stops with an error naming `LEGILO_URL`, which keeps the raw store and the existing bundle unchanged.
