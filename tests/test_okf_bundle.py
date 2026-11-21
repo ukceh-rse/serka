@@ -5,13 +5,12 @@ from typing import Any
 
 import pytest
 import yaml
-from haystack import Document, Pipeline
+from haystack import Document
 
 from serka.graph.extractors import EntityExtractor
 from serka.okf import concepts as okf_concepts
 from serka.okf.concepts import Concept, build_concepts
-from serka.okf.writer import OKFBundleWriter, write_bundle
-from serka.pipelines import PipelineBuilder
+from serka.okf.writer import write_bundle
 
 DATA = Path(__file__).parent / "data"
 PLASTICS = "https://catalogue.ceh.ac.uk/id/1c2fe14e-0aa4-4f4a-b827-57b96deeda0d"
@@ -266,16 +265,12 @@ def test_root_and_ontology_indexes(tmp_path: Path) -> None:
 			assert f"(/{concept_id}) — {concept.meta['description']}" in ontology_index
 
 
-# --- 2.6 writer and pipeline ------------------------------------------------------------
+# --- 2.6 writer ----------------------------------------------------------------------
 
 
 def _run_writer(bundle: Path, records: list[dict[str, Any]]) -> None:
-	p = Pipeline()
-	p.add_component("ent_extractor", EntityExtractor())
-	p.add_component("okf_writer", OKFBundleWriter(bundle_dir=str(bundle)))
-	p.connect("ent_extractor.nodes", "okf_writer.nodes")
-	p.connect("ent_extractor.relationships", "okf_writer.relationships")
-	p.run({"ent_extractor": {"data": records}, "okf_writer": {"records": records, "documents": []}})
+	extracted = EntityExtractor().run(data=records)
+	write_bundle(bundle, build_concepts(records, extracted["nodes"], extracted["relationships"], []))
 
 
 def test_smaller_second_run_leaves_only_its_concepts(tmp_path: Path) -> None:
@@ -305,9 +300,3 @@ def test_failed_run_leaves_previous_bundle(tmp_path: Path, monkeypatch: pytest.M
 		_run_writer(bundle, _records()[:1])
 	assert sorted(p.relative_to(bundle).as_posix() for p in bundle.rglob("*")) == before
 	assert sorted(p.name for p in tmp_path.iterdir()) == ["bundle"]
-
-
-def test_ingest_pipeline_writes_a_bundle_and_no_embeddings() -> None:
-	p = PipelineBuilder(okf_bundle_dir="bundle", legilo_pat="").build_graph_pipeline()
-	names = set(dict(p.graph.nodes(data=True)))
-	assert names == {"eidc_fetcher", "legilo_fetcher", "ent_extractor", "concept_hierarchy", "truncator", "okf_writer"}

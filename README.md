@@ -10,7 +10,7 @@ For AWS deployment instructions see [`terraform/README.md`](terraform/README.md)
 
 Ensure you have [Docker](https://docs.docker.com/get-docker/) with the [Compose plugin](https://docs.docker.com/compose/install/) installed.
 
-Copy `.env.example` to `.env` and fill in the required values, such as `LEGILO_PAT`. `REDIS_URL` defaults to `redis://localhost:6379`, the Redis that `compose.yaml` publishes; the `serka` and `mcp` containers are pointed at the `redis` service. Redis data lives in the `redis-data` volume, or in `REDIS_DATA_DIR` when set. It can always be rebuilt from the bundle with `scripts/load-bundle.py`.
+Copy `.env.example` to `.env` and fill in the required values, such as `LEGILO_SRC` (see [Ingest Data](#ingest-data)). `REDIS_URL` defaults to `redis://localhost:6379`, the Redis that `compose.yaml` publishes; the `serka` and `mcp` containers are pointed at the `redis` service. Redis data lives in the `redis-data` volume, or in `REDIS_DATA_DIR` when set. It can always be rebuilt from the bundle with `scripts/load-bundle.py`.
 
 Start all services:
 ```
@@ -24,38 +24,63 @@ docker compose down
 
 ## Ingest Data
 
-Data is ingested from the EIDC catalogue and optionally the Legilo API. To connect to Legilo, ensure your `.env` contains your Legilo personal access token:
+Ingest runs in three stages, each of which can be run and rerun on its own:
+
 ```
-LEGILO_PAT=yourtoken
+EIDC + data-package --download--> raw/ --build--> bundles/<n>/ --load--> Redis
+                                   ^ local Legilo converts supporting files to Markdown
 ```
 
-Ingest writes the catalogue as an Open Knowledge Format (OKF) v0.2 bundle: plain markdown files, one per dataset, person, organisation, grant, theme and supporting document, linked to each other, plus `ontology/` files that explain the types, contributor roles and relations used. The bundle is written to `OKF_BUNDLE_DIR` (default `./bundle`, git-ignored). By default the bundle is then loaded into Redis for search.
+1. **Download** (`scripts/download.py <n>|all`) fetches each dataset's EIDC metadata JSON, its original supporting files (`https://data-package.ceh.ac.uk/sd/<id>.zip`) and the GEMET lookups its themes need into the raw store at `RAW_DIR` (default `./raw`, git-ignored). Datasets already stored are skipped, so you can grow the store (20, then 100, then `all`) or resume after an interruption; `--refresh` fetches them again.
+2. **Build** (`scripts/build-bundle.py <n>|all`) writes an Open Knowledge Format (OKF) v0.2 bundle of the first `<n>` datasets to `BUNDLES_DIR/<n>` (default `./bundles/<n>`, or `./bundles/full` for `all`), replacing only that directory. It needs no EIDC, data-package or GEMET access. Supporting files not converted yet are sent to the local Legilo and its Markdown is cached in the raw store, so rebuilding converts nothing again.
+3. **Load** (`scripts/load-bundle.py <bundle-dir>`) indexes a bundle in Redis; see below.
 
-After starting Redis run the ingestion pipeline:
+A bundle is plain markdown: one file per dataset, person, organisation, grant, theme and supporting document, linked to each other, plus `ontology/` files that explain the types, contributor roles and relations used.
+
+The raw store looks like this:
+
+```
+raw/
+  order.json                  every dataset ID in ingest order
+  metadata/<id>.json          EIDC record
+  supporting-docs/<id>/...    original supporting files (mounted into Legilo)
+  status/<id>.json            written last: the dataset is fully downloaded
+  markdown/<id>/<file>.md     Legilo's Markdown for each supporting file
+  markdown/<id>/_result.json  conversion done, with any per-file errors (scanned PDFs, bad encodings)
+  gemet/<hash>.json           GEMET broader concepts of one theme
+```
+
+The order is fixed by the first download: the IDs of an optional `--ids-file` first, then every other published dataset shuffled with a seed (`--seed`). So the first 20 datasets are always within the first 100, which are within the full collection. `--reorder` rebuilds it, after which earlier bundles no longer match the new prefixes.
+
+### Local Legilo
+
+Supporting files are converted by a local Legilo service built from a checkout of [NERC-CEH/legilo](https://github.com/NERC-CEH/legilo) on the `supporting-docs-md` branch. Set `LEGILO_SRC` in `.env` to that checkout (default `../legilo`) and start it:
 ```bash
-uv run scripts/ingest-data.py <n>
+docker compose --profile ingest up -d legilo
 ```
 
-Where `<n>` is the number of EIDC records to ingest. Ingesting all records (2,000+) can take several hours — use a small number (default: 10) for testing.
+It is published on `LEGILO_PORT` (default 8100) and reads `RAW_DIR/supporting-docs` read-only. Serka calls it at `LEGILO_URL` (default `http://localhost:8100`) with a `LEGILO_TIMEOUT` of 600 seconds per dataset. A build that needs a conversion stops with an error if Legilo is not running. A file Legilo cannot convert is recorded in `_result.json` and left out of the bundle, and is not retried unless you build with `--refresh`.
 
-To ingest specific datasets instead, pass a file of EIDC IDs (one per line): `uv run scripts/ingest-data.py --ids-file tests/smoke/datasets.txt`.
+### All stages in one command
 
-**Each run replaces the whole bundle.** Ingesting a subset (a small `<n>` or `--ids-file`) leaves only that subset in the bundle and, once loaded, in search. Re-ingesting is cheap because HTTP responses and embeddings are cached under `.cache/`.
+```bash
+uv run scripts/ingest-data.py <n>|all
+```
 
-Pass `--no-load` to write the bundle without loading it into Redis.
+This downloads, builds `bundles/<n>` and loads it. Pass `--no-load` to stop after the build, or `--ids-file tests/smoke/datasets.txt` to put specific datasets first in a new raw store's order. Downloading and converting all 2,000+ datasets takes a long time and a lot of disk; grow the store step by step.
 
 ### Load the search index
 
-Redis holds the search index, built from the bundle alone. To rebuild it from an existing bundle (for example after `--no-load`, or after editing bundle files), run:
+Redis holds the search index, built from the bundle alone. To build it from a bundle (for example after `build-bundle.py` or `--no-load`, or after editing bundle files), run:
 ```bash
-uv run scripts/load-bundle.py
+uv run scripts/load-bundle.py bundles/20
 ```
 
 Loading needs only Redis (`REDIS_URL`) and the Bedrock embedding model, not EIDC or Legilo. It splits every concept file into overlapping 150-word chunks, embeds them (embeddings are cached by content under `.cache/embeddings`, so an unchanged bundle makes no Bedrock calls), then drops and rebuilds the `idx:chunks` and `idx:relations` indexes and the stored concepts. Search is empty or partial while a load runs. Every load also clears the answer cache.
 
-To load a bundle kept somewhere else, such as a test sample, set `OKF_BUNDLE_DIR` for the run:
+Pass the bundle directory to load; with no argument it loads `OKF_BUNDLE_DIR` (default `./bundle`):
 ```bash
-OKF_BUNDLE_DIR=~/serka-test-data/random-100/bundle uv run scripts/load-bundle.py
+uv run scripts/load-bundle.py bundles/100
 ```
 
 The compose `redis` service keeps its data in the `redis-data` volume (or `REDIS_DATA_DIR`), saving RDB snapshots and again on shutdown, so the index survives `docker compose down` and restarts. Load again only when the bundle or the loader changes. `docker compose down -v` deletes the volume.
@@ -146,7 +171,7 @@ Queries are embedded with `MODELS_EMBEDDING` through the AWS credentials chain. 
 
 ## Smoke Test
 
-`uv run scripts/smoke-test.py` runs an end-to-end check. It starts a throwaway Redis container on port 16379, ingests the 10 datasets in `tests/smoke/datasets.txt` into a temporary bundle and loads it. It then starts the MCP server (port 8000) and API (port 19000), runs search, sorted search, read, plain search and AI Summary queries (including a repeat answered from the answer cache), and tears everything down. It needs Docker and AWS credentials for Bedrock; the supporting-document checks also need `LEGILO_PAT` and are skipped without it.
+`uv run scripts/smoke-test.py` runs an end-to-end check. It starts a throwaway Redis container on port 16379, downloads the 10 datasets in `tests/smoke/datasets.txt` into a temporary raw store, converts their supporting files with a throwaway Legilo container on port 18100, and builds and loads the bundle. It then starts the MCP server (port 8000) and API (port 19000), runs search, sorted search, read, plain search and AI Summary queries (including a repeat answered from the answer cache), and tears everything down. It needs Docker and AWS credentials for Bedrock; the supporting-document checks also need the Legilo image (`docker compose --profile ingest build legilo`) and are skipped without it.
 
 ## Contributing
 

@@ -47,6 +47,45 @@ services:
     networks:
       - internal
 
+  # Converts supporting files in the raw store to Markdown during ingest only:
+  # docker compose --profile ingest up -d legilo
+  legilo:
+    profiles: ["ingest"]
+    build:
+      # A checkout of NERC-CEH/legilo on the supporting-docs-md branch
+      context: ${LEGILO_SRC:-../legilo}
+      # Legilo's own Dockerfile pins uv 0.4.2, which cannot read the branch's uv.lock;
+      # these are its build steps with a current uv.
+      dockerfile_inline: |
+        FROM python:3.12-slim AS build
+        COPY --from=ghcr.io/astral-sh/uv:0.9.3 /uv /bin/uv
+        WORKDIR /app
+        ENV UV_PYTHON_DOWNLOADS=never UV_COMPILE_BYTECODE=1
+        COPY src/legilo/__init__.py /app/src/legilo/
+        COPY pyproject.toml uv.lock /app/
+        RUN uv sync --locked --no-dev --no-install-project
+        COPY src /app/src
+        RUN uv pip install --python=/app/.venv --no-deps .
+
+        FROM python:3.12-slim
+        WORKDIR /app
+        RUN groupadd -g 999 python && useradd -m -r -u 999 -g python python
+        COPY --chown=python:python --from=build /app/.venv /app/.venv
+        COPY --chown=python:python --from=build /app/src/legilo/main.py /app/src/legilo/main.py
+        USER python
+        ENV PATH="/app/.venv/bin:$PATH" VIRTUAL_ENV="/app/.venv"
+        EXPOSE 8000
+        CMD ["fastapi", "run", "src/legilo/main.py", "--host", "0.0.0.0", "--port", "8000"]
+    image: serka-legilo-image
+    ports:
+      - "${LEGILO_PORT:-8100}:8000"
+    environment:
+      - SUPPORTING_DOCS_DIR=/docs
+      # Required by legilo at startup but unused by the documents endpoint
+      - DATA_DIR=/tmp
+    volumes:
+      - ${RAW_DIR:-./raw}/supporting-docs:/docs:ro
+
   redis:
     image: redis:8.10.3
     ports:

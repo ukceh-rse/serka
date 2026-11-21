@@ -1,9 +1,8 @@
 import json
 from pathlib import Path
 
-from haystack import Document
 
-from serka.graph.extractors import DocumentTruncator, EntityExtractor
+from serka.graph.extractors import EntityExtractor
 
 
 # ---------------------------------------------------------------------------
@@ -138,20 +137,3 @@ def test_real_records_funding():
 def test_missing_bounding_box_is_not_an_error(caplog):
 	EntityExtractor().run(data=[_RECORD])
 	assert "boundingBoxes" not in caplog.text
-
-
-# ---------------------------------------------------------------------------
-# DocumentTruncator
-# ---------------------------------------------------------------------------
-
-
-def test_document_truncator_truncates_long_docs():
-	doc = Document(content="x" * 50_000, meta={"uri": "http://example.com"})
-	result = DocumentTruncator(max_chars=45_000).run(documents=[doc])
-	assert len(result["documents"][0].content or "") == 45_000
-
-
-def test_document_truncator_passes_short_docs_unchanged():
-	doc = Document(content="short content", meta={})
-	result = DocumentTruncator(max_chars=45_000).run(documents=[doc])
-	assert result["documents"][0].content == "short content"

@@ -1,4 +1,3 @@
-from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -7,8 +6,12 @@ class Settings(BaseSettings):
 	# Redis (search index and answer cache)
 	redis_url: str = "redis://localhost:6379"
 
-	# OKF bundle written by ingest and read by the loader
+	# OKF bundle loaded by default when no bundle directory is given
 	okf_bundle_dir: str = "./bundle"
+	# Raw store of downloaded EIDC metadata, original supporting files and converted Markdown
+	raw_dir: str = "./raw"
+	# Parent directory of built bundles, one subdirectory per size (20, 100, full)
+	bundles_dir: str = "./bundles"
 
 	# Answer cache (forced off in test mode)
 	answer_cache_enabled: bool = True
@@ -36,7 +39,9 @@ class Settings(BaseSettings):
 	models_evaluate: str = "eu.anthropic.claude-haiku-5-5"
 
 	# External services
-	legilo_pat: Optional[str] = None
+	# Local Legilo service (compose profile "ingest") that converts supporting files to Markdown
+	legilo_url: str = "http://localhost:8100"
+	legilo_timeout: int = 600
 
 	# Usage limits (per UTC day)
 	usage_ip_daily_limit: int = 30

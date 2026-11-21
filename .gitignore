@@ -177,6 +177,8 @@ cython_debug/
 .neo4j/
 /bundle/
 /bundle.*/
+/bundles/
+/raw/
 .neo4j.bak/
 
 # Terraform files

@@ -56,6 +56,11 @@ def test_redis_bundle_and_cache_defaults(monkeypatch: pytest.MonkeyPatch) -> Non
 	settings = Settings(_env_file=None)  # type: ignore[call-arg]
 	assert settings.redis_url == "redis://localhost:6379"
 	assert settings.okf_bundle_dir == "./bundle"
+	assert settings.raw_dir == "./raw"
+	assert settings.bundles_dir == "./bundles"
+	assert settings.legilo_url == "http://localhost:8100"
+	assert settings.legilo_timeout == 600
+	assert "legilo_pat" not in Settings.model_fields
 	assert settings.answer_cache_enabled is True
 	assert settings.answer_cache_distance_threshold == 0.05
 	assert settings.answer_cache_ttl_seconds == 604800

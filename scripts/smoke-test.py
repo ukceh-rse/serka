@@ -1,13 +1,14 @@
 """End-to-end smoke test for Serka.
 
-Starts a throwaway Redis container, ingests the datasets listed in
-tests/smoke/datasets.txt (EIDC + Legilo, via scripts/ingest-data.py) into a
-temporary OKF bundle and loads it into that Redis, starts the MCP server and the
-Serka API locally, then runs search, read, aggregate, plain search and AI Summary checks.
+Starts a throwaway Redis container, downloads the datasets listed in
+tests/smoke/datasets.txt into a temporary raw store, converts their supporting files
+with a throwaway local Legilo container, builds and loads the bundle (via
+scripts/ingest-data.py), starts the MCP server and the Serka API locally, then runs
+search, read, aggregate, plain search and AI Summary checks.
 
-Requires Docker and AWS credentials for Bedrock. Supporting-document checks need
-LEGILO_PAT (in .env or the environment) and are skipped without it. Your normal
-bundle and Redis are not touched.
+Requires Docker and AWS credentials for Bedrock. Supporting-document checks need the
+Legilo image (`docker compose --profile ingest build legilo`) and are skipped without
+it. Your normal raw store, bundles and Redis are not touched.
 
 	uv run scripts/smoke-test.py
 """
@@ -22,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,13 +33,17 @@ import yaml
 from fastmcp import Client
 
 from serka.prompts import MAX_ANSWER_WORDS, REFUSAL_MESSAGE
-from serka.settings import Settings
+from serka.raw import ConversionResult, RawStore
 
 ROOT = Path(__file__).resolve().parent.parent
 IDS_FILE = ROOT / "tests" / "smoke" / "datasets.txt"
 
 CONTAINER = "serka-smoke-redis"
 REDIS_PORT = 16379
+LEGILO_CONTAINER = "serka-smoke-legilo"
+LEGILO_IMAGE = "serka-legilo-image"  # built by `docker compose --profile ingest build legilo`
+LEGILO_PORT = 18100
+SMOKE_SIZE = "10"  # every dataset in IDS_FILE
 MCP_PORT = 8000  # hard-coded in mcp-server/src/serka-mcp/main.py
 API_PORT = 19000
 API = f"http://localhost:{API_PORT}"
@@ -100,6 +106,33 @@ def start_redis(runtime: str) -> None:
 		check=True,
 	)
 	wait_for(lambda: redis.Redis(port=REDIS_PORT).ping(), "Redis", timeout=60)
+
+
+def start_legilo(runtime: str, raw: Path) -> bool:
+	"""Starts a throwaway Legilo reading `raw`'s supporting files; False when its image is not built."""
+	if subprocess.run([runtime, "image", "inspect", LEGILO_IMAGE], capture_output=True).returncode != 0:
+		return False
+	subprocess.run([runtime, "rm", "-f", LEGILO_CONTAINER], capture_output=True)
+	subprocess.run(
+		[
+			runtime, "run", "-d", "--rm", "--name", LEGILO_CONTAINER, "-p", f"{LEGILO_PORT}:8000",
+			"-e", "SUPPORTING_DOCS_DIR=/docs", "-e", "DATA_DIR=/tmp",
+			"-v", f"{raw / 'supporting-docs'}:/docs:ro", LEGILO_IMAGE,
+		],
+		check=True,
+	)
+	wait_for(lambda: httpx.get(f"http://localhost:{LEGILO_PORT}/openapi.json").status_code == 200, "Legilo", timeout=120)
+	return True
+
+
+def skip_conversion(raw: Path) -> None:
+	"""Records every smoke dataset as converted with no documents, so the build needs no Legilo."""
+	store = RawStore(raw)
+	order = store.load_order()
+	assert order is not None
+	for dataset_id in order.first(int(SMOKE_SIZE)):
+		reason = {"(all files)": "skipped by the smoke test: Legilo image not built"}
+		store.save_conversion(dataset_id, ConversionResult(converted=datetime.now(timezone.utc), errors=reason))
 
 
 def frontmatter(path: Path) -> dict[str, Any]:
@@ -193,7 +226,7 @@ def has_inline_link(text: str) -> bool:
 	return re.search(r"\[[^\]]+\]\(https?://[^)]+\)", text) is not None
 
 
-def run_tests(bundle: Path) -> list[str]:
+def run_tests(bundle: Path, with_docs: bool) -> list[str]:
 	failures = []
 
 	def check(name: str, ok: bool, detail: str = "") -> None:
@@ -211,10 +244,10 @@ def run_tests(bundle: Path) -> list[str]:
 	datasets = {p.stem: frontmatter(p) for p in (bundle / "datasets").glob("*.md") if p.name != "index.md"}
 	check("10 datasets in the bundle", len(datasets) == 10, f"found {len(datasets)}")
 	docs = list((bundle / "datasets").glob("*/docs/*.md"))
-	if os.environ.get("LEGILO_PAT") or Settings().legilo_pat:
+	if with_docs:
 		check("Legilo supporting documents in the bundle", len(docs) > 0, f"found {len(docs)}")
 	else:
-		skip("Legilo supporting documents in the bundle", "LEGILO_PAT is not set")
+		skip("Legilo supporting documents in the bundle", f"{LEGILO_IMAGE} is not built")
 
 	tools = {t.name for t in mcp(lambda c: c.list_tools())}
 	check(
@@ -394,17 +427,21 @@ def main() -> int:
 	if not runtime:
 		log("docker is required")
 		return 1
-	for port in (REDIS_PORT, MCP_PORT, API_PORT):
+	for port in (REDIS_PORT, LEGILO_PORT, MCP_PORT, API_PORT):
 		if not port_free(port):
 			log(f"port {port} is already in use; stop whatever is using it and retry")
 			return 1
 
 	logs = Path(tempfile.mkdtemp(prefix="serka-smoke-"))
-	bundle = logs / "bundle"
+	raw = logs / "raw"
+	bundle = logs / "bundles" / SMOKE_SIZE
 	env = {
 		**os.environ,
 		"REDIS_URL": f"redis://localhost:{REDIS_PORT}",
+		"RAW_DIR": str(raw),
+		"BUNDLES_DIR": str(logs / "bundles"),
 		"OKF_BUNDLE_DIR": str(bundle),
+		"LEGILO_URL": f"http://localhost:{LEGILO_PORT}",
 		"MCP_HOST": "localhost",
 		"MCP_PORT": str(MCP_PORT),
 		"FEEDBACK_LOG_PATH": str(logs / "feedback.jsonl"),
@@ -417,11 +454,16 @@ def main() -> int:
 		log(f"starting Redis container ({runtime})")
 		start_redis(runtime)
 
-		log(f"ingesting datasets from {IDS_FILE.relative_to(ROOT)} into {bundle} and loading them")
-		subprocess.run(
-			["uv", "run", "scripts/ingest-data.py", "--ids-file", str(IDS_FILE)],
-			cwd=ROOT, env=env, check=True,
-		)
+		log(f"downloading datasets from {IDS_FILE.relative_to(ROOT)} into {raw}")
+		ids_args = [SMOKE_SIZE, "--ids-file", str(IDS_FILE)]
+		subprocess.run(["uv", "run", "scripts/download.py", *ids_args], cwd=ROOT, env=env, check=True)
+		with_docs = start_legilo(runtime, raw)
+		if not with_docs:
+			log(f"{LEGILO_IMAGE} is not built; supporting documents are left out")
+			skip_conversion(raw)
+
+		log(f"building {bundle} and loading it")
+		subprocess.run(["uv", "run", "scripts/ingest-data.py", *ids_args], cwd=ROOT, env=env, check=True)
 
 		log(f"starting MCP server and Serka API (logs in {logs})")
 		procs.append(subprocess.Popen(
@@ -435,7 +477,7 @@ def main() -> int:
 		wait_for(lambda: not port_free(MCP_PORT), "MCP server", timeout=180)
 		wait_for(lambda: httpx.get(f"{API}/health").status_code == 200, "Serka API")
 
-		failures = run_tests(bundle)
+		failures = run_tests(bundle, with_docs)
 	finally:
 		for p in procs:
 			p.terminate()
@@ -443,7 +485,7 @@ def main() -> int:
 				p.wait(timeout=10)
 			except subprocess.TimeoutExpired:
 				p.kill()
-		subprocess.run([runtime, "rm", "-f", CONTAINER], capture_output=True)
+		subprocess.run([runtime, "rm", "-f", CONTAINER, LEGILO_CONTAINER], capture_output=True)
 		# Here so a run that raises, as chat() does on RUN_ERROR, still reports its usage.
 		if (logs / "serka.log").exists():
 			report_token_usage(logs / "serka.log")

@@ -49,6 +49,12 @@ git config --global http.sslVerify false >> $LOG_FILE 2>&1
 
 git clone https://github.com/ukceh-rse/serka.git /home/ubuntu/serka >> $LOG_FILE 2>&1
 
+# Local Legilo converts supporting documents to Markdown during ingest (the supporting-docs-md branch)
+LEGILO_REF="${LEGILO_REF:-supporting-docs-md}"
+if ! git clone --branch "$LEGILO_REF" https://github.com/NERC-CEH/legilo.git /home/ubuntu/legilo >> $LOG_FILE 2>&1; then
+    echo "$(date +"%Y-%m-%d %H:%M:%S") - ERROR: could not clone legilo at $LEGILO_REF; supporting documents cannot be ingested" >> $LOG_FILE
+fi
+
 cd /home/ubuntu/serka
 
 touch .env
@@ -58,6 +64,7 @@ AWS_DEFAULT_REGION=eu-west-2
 MODELS_EMBEDDING=amazon.titan-embed-text-v2:0
 REDIS_DATA_DIR=/opt/serka/redis
 FEEDBACK_DATA_DIR=/opt/serka/feedback
+LEGILO_SRC=/home/ubuntu/legilo
 ENV_CONTENT
 
 mkdir -p /opt/serka/redis /opt/serka/feedback
@@ -67,6 +74,12 @@ EOF_UBUNTU
 
 cd /home/ubuntu/serka
 docker compose up -d >> $LOG_FILE 2>&1
+if [ -d /home/ubuntu/legilo ]; then
+    log "Starting local Legilo for ingest..."
+    docker compose --profile ingest up -d legilo >> $LOG_FILE 2>&1
+else
+    log "ERROR: /home/ubuntu/legilo is missing (see the clone error above); ingest will fail at the build stage"
+fi
 
 # Setup uv locally to run the data import script.
 # Note this is just for testing, data should be imported and processed sperately and then made accessible to the instance.

@@ -186,14 +186,15 @@ def load_bundle(
 	return counts
 
 
-def load_from_settings(settings: Settings) -> dict[str, int]:
+def load_from_settings(settings: Settings, bundle_dir: Path | None = None) -> dict[str, int]:
+	"""Loads `bundle_dir` (default: the configured OKF bundle directory) into the configured Redis."""
 	from serka.graph.embedders import CachedDocumentEmbedder
 
 	client = redis.Redis.from_url(settings.redis_url)
 	# Cleared whether or not lookups are enabled, so re-enabling never serves answers from an old index
 	cache = AnswerCache(lambda: answer_cache._semantic_cache(settings))
 	return load_bundle(
-		Path(settings.okf_bundle_dir),
+		bundle_dir or Path(settings.okf_bundle_dir),
 		client,
 		CachedDocumentEmbedder(model=settings.models_embedding),
 		cache,

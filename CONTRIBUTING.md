@@ -21,7 +21,7 @@ To run Redis and the MCP server only:
 docker compose up redis mcp -d
 ```
 
-Search needs data in Redis: write a bundle with `uv run scripts/ingest-data.py <n>`, or rebuild the index from an existing bundle with `uv run scripts/load-bundle.py`.
+Search needs data in Redis: run `uv run scripts/ingest-data.py <n>` (download, build and load; supporting documents need the local Legilo, see the README's [Ingest Data](README.md#ingest-data)), or load an existing bundle with `uv run scripts/load-bundle.py bundles/<n>`.
 
 To run the app locally for development instance:
 ```bash
