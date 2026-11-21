@@ -1,7 +1,7 @@
 """Search, aggregate and read over the OKF catalogue indexes in Redis (built by serka's bundle loader).
 
 Three search modes:
-  query, no sort_by    FT.HYBRID (BM25 + vector, RRF), one hit per chunk
+  query, no sort_by    FT.HYBRID (BM25 + vector, RRF), re-ranked in the same query, one hit per chunk
   sort_by, no query    FT.SEARCH on lead chunks, SORTBY, one hit per concept, exact
   query + sort_by      FT.HYBRID on lead chunks over a wider window, then SORTBY
 
@@ -38,6 +38,15 @@ RELATIONS_INDEX = "idx:relations"
 CONCEPT_PREFIX = "concept:"
 THEME_LABEL_PREFIX = "theme-label:"
 RRF_CONSTANT = 60
+# Re-ranking of fused hits, applied inside FT.HYBRID so it costs no extra round trip. A dataset's
+# lead chunk (title and description) and a well-cited dataset or document get a small lift.
+LEAD_DATASET_BOOST = 0.2
+CITATION_BOOST = 0.03
+# A field missing from any row makes Redis drop every row, so citations (absent on themes, people, ...) is guarded
+RERANK_EXPRESSION = (
+	f'@__score * (1 + {LEAD_DATASET_BOOST} * @lead * (@type == "dataset"))'
+	f" * (1 + {CITATION_BOOST} * log(1 + case(exists(@citations), @citations, 0)))"
+)
 DATASET_TYPES = ("dataset", "document")
 SortField = Literal["citations", "published"]
 Order = Literal["ascending", "descending"]
@@ -53,8 +62,8 @@ _STOPWORDS = frozenset(
 )
 _EPOCH = date(1970, 1, 1)
 _HIT_FIELDS = ("concept", "type", "title", "description", "resource", "text", "citations", "published_date")
-# Indexed attributes loaded with hybrid results, so SORTBY and the vector-only fallback can order them
-_SORT_LOADS = ("@citations", "@published")
+# Indexed attributes loaded with hybrid results, so re-ranking, SORTBY and the vector-only fallback can use them
+_SORT_LOADS = ("@citations", "@published", "@lead", "@type")
 # FT.AGGREGATE returns 10 rows unless given a LIMIT; years and types are few, so take them all
 _ALL_GROUPS = 10_000
 
@@ -240,7 +249,9 @@ class Catalogue:
 			),
 		)
 		post = HybridPostProcessingConfig().load("@__key", "@__score", *_SORT_LOADS, decode_field=True)
-		if sort is not None:
+		if sort is None:
+			post.apply(rank=RERANK_EXPRESSION).sort_by(SortbyField("@rank", asc=False))
+		else:
 			post.sort_by(sort)
 		post.limit(0, limit)
 		res = self.client.ft(INDEX).hybrid_search(
@@ -250,7 +261,7 @@ class Catalogue:
 			params_substitution={"vec": self._vector(query)},
 		)
 		rows = [{k: _decode(v) for k, v in r.items()} for r in res.results]
-		scores = [float(r.get("__score") or 0.0) for r in rows]
+		scores = [float(r.get("rank") or r.get("__score") or 0.0) for r in rows]
 		return rows, int(res.total_results), scores
 
 	def _vector_only(

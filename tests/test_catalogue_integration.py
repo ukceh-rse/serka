@@ -1,6 +1,7 @@
 """Search and read against a real Redis (TEST_REDIS_URL, default localhost:6380) holding a small
 bundle embedded with the Bedrock model, so full-text, vector and fused ranking are all real."""
 
+import math
 import os
 import sys
 from pathlib import Path
@@ -16,7 +17,8 @@ from serka.settings import Settings
 MCP_SRC = Path(__file__).resolve().parent.parent / "mcp-server" / "src" / "serka-mcp"
 sys.path.insert(0, str(MCP_SRC))
 
-from catalogue import Catalogue, CatalogueError, Filters  # noqa: E402
+import catalogue as catalogue_module  # noqa: E402
+from catalogue import CITATION_BOOST, LEAD_DATASET_BOOST, Catalogue, CatalogueError, Filters  # noqa: E402
 
 pytestmark = pytest.mark.integration
 
@@ -192,6 +194,23 @@ def test_type_filter_applies_to_both_sides(catalogue: Catalogue) -> None:
 	# The query names a person, so the nearest vectors and best text matches are the person concept
 	hits = catalogue.search("Jane Smith", filters=Filters(type="dataset"), limit=10).hits
 	assert hits and all(h["concept"]["type"] == "dataset" for h in hits)
+
+
+def test_reranking_lifts_a_dataset_lead_chunk_by_its_boost(catalogue: Catalogue, monkeypatch: pytest.MonkeyPatch) -> None:
+	def lead_score() -> float:
+		hits = catalogue.search("pike windermere", limit=10).hits
+		return next(h["score"] for h in hits if h["chunk_id"] == f"{PIKE}#0")
+
+	boosted = lead_score()
+	monkeypatch.setattr(catalogue_module, "RERANK_EXPRESSION", "@__score")
+	fused = lead_score()
+	# Pike in Windermere has 12 citations
+	assert boosted / fused == pytest.approx((1 + LEAD_DATASET_BOOST) * (1 + CITATION_BOOST * math.log(13)))
+
+
+def test_reranking_keeps_concepts_without_citations(catalogue: Catalogue) -> None:
+	# Redis drops every row when a re-rank field is missing, and people have no citations
+	assert catalogue.search("Jane Smith", filters=Filters(type="person"), limit=5).hits
 
 
 def test_no_matches_returns_an_empty_list(catalogue: Catalogue) -> None:

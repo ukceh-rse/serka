@@ -13,6 +13,7 @@ def search_args(
 	published_before: str | None = None,
 	sort_by: SortBy | None = None,
 	order: Order | None = None,
+	limit: int | None = None,
 ) -> dict[str, Any]:
 	"""The `search` tool's arguments, leaving out the ones not set."""
 	args: dict[str, Any] = {
@@ -22,5 +23,6 @@ def search_args(
 		"published_before": published_before,
 		"sort_by": sort_by,
 		"order": order,
+		"limit": limit,
 	}
 	return {k: v for k, v in args.items() if v}

@@ -40,8 +40,9 @@ async def get_mcp_search(settings: Settings = Depends(get_settings)) -> Callable
 		location: str | None = None,
 		published_after: str | None = None,
 		published_before: str | None = None,
+		limit: int | None = None,
 	) -> list:
-		args = search_args(q, type, published_after, published_before)
+		args = search_args(q, type, published_after, published_before, limit=limit)
 		async with Client(mcp_url) as client:
 			if location:
 				try:

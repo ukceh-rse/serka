@@ -76,20 +76,31 @@ def test_semantic_search_returns_search_hits_unchanged(client, real_search):
 	response = client.get("/v1/query/semantic", params={"q": "pike windermere"})
 	assert response.status_code == 200
 	assert response.json() == [HIT]
-	assert real_search == [("search", {"query": "pike windermere"})]
+	assert real_search == [("search", {"query": "pike windermere", "limit": 100})]
+
+
+def test_semantic_search_limit(client, real_search):
+	assert client.get("/v1/query/semantic", params={"q": "pike", "limit": 200}).status_code == 200
+	assert real_search == [("search", {"query": "pike", "limit": 200})]
+
+
+@pytest.mark.parametrize("limit", [0, 201])
+def test_semantic_search_limit_out_of_range_returns_422(client, real_search, limit):
+	assert client.get("/v1/query/semantic", params={"q": "pike", "limit": limit}).status_code == 422
+	assert real_search == []
 
 
 def test_semantic_search_type_filter(client, real_search):
 	response = client.get("/v1/query/semantic", params={"q": "pike", "type": "dataset", "published_after": "2015-01-01"})
 	assert response.status_code == 200
-	assert real_search == [("search", {"query": "pike", "type": "dataset", "published_after": "2015-01-01"})]
+	assert real_search == [("search", {"query": "pike", "type": "dataset", "published_after": "2015-01-01", "limit": 100})]
 
 
 def test_semantic_search_location_is_geocoded_to_a_bounding_box(client, real_search):
 	assert client.get("/v1/query/semantic", params={"q": "pike", "location": "Windermere"}).status_code == 200
 	assert real_search[1] == (
 		"search",
-		{"query": "pike", "bounding_box": {"south": 54.2, "north": 54.5, "west": -3.0, "east": -2.9}},
+		{"query": "pike", "limit": 100, "bounding_box": {"south": 54.2, "north": 54.5, "west": -3.0, "east": -2.9}},
 	)
 
 
@@ -101,7 +112,7 @@ def test_semantic_search_unknown_location_returns_422(client, real_search):
 
 def test_semantic_search_no_longer_takes_hops_or_return_type(client, real_search):
 	client.get("/v1/query/semantic", params={"q": "pike", "hops": 2, "return_type": "Dataset"})
-	assert real_search == [("search", {"query": "pike"})]
+	assert real_search == [("search", {"query": "pike", "limit": 100})]
 
 
 # --- test mode mock search ---

@@ -403,8 +403,9 @@ async def get_mock_mcp_search():
 		location: Optional[str] = None,
 		published_after: Optional[str] = None,
 		published_before: Optional[str] = None,
+		limit: Optional[int] = None,
 	) -> list:
-		return [h for h in _MOCK_HITS if not type or h["concept"]["type"] == type]
+		return [h for h in _MOCK_HITS if not type or h["concept"]["type"] == type][:limit]
 
 	return _search
 

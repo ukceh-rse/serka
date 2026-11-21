@@ -4,6 +4,10 @@ from serka.feedback import FeedbackLogger
 from serka.routers.dependencies import get_feedback_logger, get_mcp_search
 from serka.usage import MAX_QUERY_CHARS
 
+# Redis returns 200 re-ranked hits in under 20 ms; the cap bounds the response size (about 1.6 KB per hit)
+DEFAULT_LIMIT = 100
+MAX_LIMIT = 200
+
 router = APIRouter(prefix="/query", tags=["Query"])
 
 
@@ -21,6 +25,7 @@ async def semantic_search(
 	location: str | None = Query(None, description="UK place name to geographically filter datasets."),
 	published_after: str | None = Query(None, description="ISO date (YYYY-MM-DD); exclude older datasets."),
 	published_before: str | None = Query(None, description="ISO date (YYYY-MM-DD); exclude newer datasets."),
+	limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT, description="Maximum number of passages to return."),
 	mcp_search=Depends(get_mcp_search),
 	feedback_logger: FeedbackLogger = Depends(get_feedback_logger),
 ) -> list:
@@ -39,4 +44,5 @@ async def semantic_search(
 		location=location,
 		published_after=published_after,
 		published_before=published_before,
+		limit=limit,
 	)
