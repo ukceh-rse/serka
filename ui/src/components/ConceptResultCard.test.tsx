@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { groupHits, type Concept, type SearchHit } from '../stores/searchStore'
+import { groupHits, useSearchStore, type Concept, type SearchHit } from '../stores/searchStore'
 import { typeMeta } from '../typeMeta'
 
 // jsdom has no matchMedia, which the app store reads when it is created
 vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} }))
-const { default: ConceptResultCard, documentDataset, plainText } = await import('./ConceptResultCard')
+const { default: ConceptResultCard, documentDataset } = await import('./ConceptResultCard')
 const { TYPE_OPTIONS } = await import('./SearchBar')
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  useSearchStore.setState({ results: [] })
+})
 
 const dataset: Concept = {
   id: 'datasets/abc',
@@ -37,27 +40,47 @@ describe('ConceptResultCard', () => {
     expect(screen.getByRole('link', { name: 'Pike in Windermere' }).getAttribute('href')).toBe(dataset.resource)
     expect(screen.getByText('Dataset')).toBeTruthy()
     expect(screen.getByText('Annual pike counts.')).toBeTruthy()
-    expect(screen.getByText('Passage 0 about pike.')).toBeTruthy()
+    expect(screen.getByText(/Passage 0 about/).textContent).toBe('Passage 0 about pike.')
     expect(screen.queryByRole('button', { name: /more passage/ })).toBeNull()
   })
 
   it('collapses other passages behind a count, shown in score order when expanded', () => {
     card([hit(2, 0.5), hit(0, 0.9), hit(1, 0.7)])
-    expect(screen.getByText('Passage 0 about pike.')).toBeTruthy()
-    expect(screen.queryByText('Passage 1 about pike.')).toBeNull()
+    expect(screen.getByText(/Passage 0 about/)).toBeTruthy()
+    expect(screen.queryByText(/Passage 1 about/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '2 more passages' }))
     const more = screen.getAllByTestId('more-passage').map((el) => el.textContent)
     expect(more).toEqual(['Passage 1 about pike.', 'Passage 2 about pike.'])
   })
 
-  it('links a supporting document to its dataset', () => {
+  it('names a supporting document\'s dataset by ID and links to it', () => {
     const doc: Concept = { id: 'datasets/abc/docs/s1', type: 'document', title: 'methods.pdf', tags: [], resource: null }
     card([hit(0, 0.8, doc)])
     expect(screen.queryByRole('link', { name: 'methods.pdf' })).toBeNull()
     expect(screen.getByText('methods.pdf')).toBeTruthy()
-    const link = screen.getByRole('link', { name: 'Supporting document of this dataset' })
+    const link = screen.getByRole('link', { name: 'dataset abc' })
     expect(link.getAttribute('href')).toBe('https://catalogue.ceh.ac.uk/id/abc')
+    expect(link.parentElement?.textContent).toBe('Supporting document of dataset abc')
     expect(screen.getByText('Supporting document')).toBeTruthy()
+  })
+
+  it('names a supporting document\'s dataset by title when the dataset is in the results', () => {
+    const doc: Concept = { id: 'datasets/abc/docs/s1', type: 'document', title: 'methods.pdf', tags: [], resource: null }
+    useSearchStore.setState({ results: [hit(0, 0.8, doc), hit(1, 0.9)] })
+    card([hit(0, 0.8, doc)])
+    const link = screen.getByRole('link', { name: 'Pike in Windermere' })
+    expect(link.getAttribute('href')).toBe('https://catalogue.ceh.ac.uk/id/abc')
+  })
+
+  it('renders passage markdown, keeping only the text of bundle links', () => {
+    const md = '## Contributors\n\n- **Jane** [author](/ontology/roles/author)\n- [DOI](https://doi.org/10.1/x)'
+    card([{ chunk_id: 'datasets/abc#0', text: md, score: 0.9, concept: dataset }])
+    expect(screen.getByText('Contributors')).toBeTruthy()
+    expect(screen.getByText('Jane').tagName).toBe('STRONG')
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+    expect(screen.queryByRole('link', { name: 'author' })).toBeNull()
+    expect(screen.getByText('author')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'DOI' }).getAttribute('href')).toBe('https://doi.org/10.1/x')
   })
 
   it('shows an unknown type with a generic label', () => {
@@ -80,13 +103,8 @@ describe('types', () => {
 })
 
 describe('helpers', () => {
-  it('turns passage markdown into plain text', () => {
-    expect(plainText('## Contributors\n\n- [Jane \\[PI\\]](/people/x) — [author](/ontology/roles/author)'))
-      .toBe('Contributors Jane [PI] — author')
-  })
-
   it('derives a document\'s dataset', () => {
-    expect(documentDataset('datasets/abc/docs/s1')).toBe('https://catalogue.ceh.ac.uk/id/abc')
+    expect(documentDataset('datasets/abc/docs/s1')).toBe('abc')
     expect(documentDataset('datasets/abc')).toBeNull()
   })
 })

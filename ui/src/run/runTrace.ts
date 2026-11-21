@@ -114,10 +114,6 @@ function finish(trace: RunTrace, status: RunStatus, now: number, error?: string)
   return { ...trace, status, error, steps, finishedAt: now }
 }
 
-function noticeText(e: Evaluation): string {
-  return `Attempt ${e.attempt} didn't pass: ${e.feedback.trim().replace(/[.\s]+$/, '')}, retrying`
-}
-
 function reduceCustom(trace: RunTrace, name: string | undefined, value: unknown): RunTrace {
   const v = (value ?? {}) as Record<string, unknown>
   switch (name) {
@@ -229,13 +225,8 @@ function stagePhrase(step: RunStep): string {
   return phrase
 }
 
-/** The live progress line while the run is in progress. */
+/** The live progress line while the run is in progress: the current stage only, never drafts or evaluation feedback. */
 export function progressText(trace: RunTrace): string {
-  // A failed evaluation that will be retried is announced through the stage that follows it.
-  const evaluated = trace.steps.slice(-2).reverse().find((s) => s.evaluation)
-  const e = evaluated?.evaluation
-  const max = evaluated?.maxAttempts ?? null
-  if (e && !e.passed && max !== null && e.attempt < max) return noticeText(e)
   const step = trace.steps.at(-1)
   return step ? stagePhrase(step) : 'Starting'
 }

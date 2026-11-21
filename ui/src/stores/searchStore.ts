@@ -63,7 +63,7 @@ interface SearchState {
   setError: (e: string | null) => void
   setAiSummaryEnabled: (v: boolean) => void
   toggleAiSummary: () => void
-  appendAiSummary: (delta: string) => void
+  setAiSummary: (text: string) => void
   /** Starts a fresh run trace. */
   startAiRun: () => void
   applyAiEvent: (event: RunEvent) => void
@@ -88,7 +88,7 @@ export const useSearchStore = create<SearchState>()((set) => ({
   setError: (e) => set({ error: e }),
   setAiSummaryEnabled: (v) => set({ aiSummaryEnabled: v }),
   toggleAiSummary: () => set((s) => ({ aiSummaryEnabled: !s.aiSummaryEnabled })),
-  appendAiSummary: (delta) => set((s) => ({ aiSummary: s.aiSummary + delta })),
+  setAiSummary: (text) => set({ aiSummary: text }),
   startAiRun: () => set({ aiRun: emptyRun(Date.now()) }),
   applyAiEvent: (event) => set((s) => {
     if (!s.aiRun) return s

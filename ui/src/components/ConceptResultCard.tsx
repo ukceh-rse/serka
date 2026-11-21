@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Box, Button, Card, CardContent, Collapse, Link, Typography } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
@@ -11,21 +13,10 @@ import { TypeIcon } from "../typeMeta";
 
 const CATALOGUE = "https://catalogue.ceh.ac.uk/id/";
 
-/** A passage as plain text: markdown links keep only their text, headings and list markers go. */
-export function plainText(markdown: string): string {
-  return markdown
-    .replace(/\[((?:\\.|[^\]\\])*)\]\([^)]*\)/g, "$1")
-    .replace(/\\([[\]\\])/g, "$1")
-    .replace(/^\s*#{1,6}\s+/gm, "")
-    .replace(/^\s*[-*]\s+/gm, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** The catalogue page of the dataset a supporting document belongs to (datasets/<id>/docs/... -> <id>). */
+/** The EIDC ID of the dataset a supporting document belongs to (datasets/<id>/docs/... -> <id>). */
 export function documentDataset(conceptId: string): string | null {
   const match = /^datasets\/([^/]+)\/docs\//.exec(conceptId);
-  return match ? CATALOGUE + match[1] : null;
+  return match ? match[1] : null;
 }
 
 interface Props {
@@ -33,11 +24,44 @@ interface Props {
   index?: number;
 }
 
+const passageHeading = ({ children }: { children?: ReactNode }) => (
+  <Typography component="p" variant="body2" sx={{ fontSize: "0.8rem", fontWeight: 600, mt: 0.5 }}>
+    {children}
+  </Typography>
+);
+
+/** Passage markdown in the card's small type. Bundle-relative links have no page in the UI, so only their text is kept. */
+const passageComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
+  h1: passageHeading,
+  h2: passageHeading,
+  h3: passageHeading,
+  h4: passageHeading,
+  h5: passageHeading,
+  h6: passageHeading,
+  p: ({ children }) => (
+    <Typography variant="body2" sx={{ fontSize: "inherit", my: 0.5, "&:first-of-type": { mt: 0 }, "&:last-child": { mb: 0 } }}>
+      {children}
+    </Typography>
+  ),
+  ul: ({ children }) => <Box component="ul" sx={{ my: 0.5, pl: 2.5 }}>{children}</Box>,
+  ol: ({ children }) => <Box component="ol" sx={{ my: 0.5, pl: 2.5 }}>{children}</Box>,
+  a: ({ href, children }) =>
+    href && /^https?:\/\//.test(href) ? (
+      <Link href={href} target="_blank" rel="noopener noreferrer" underline="hover">
+        {children}
+      </Link>
+    ) : (
+      <>{children}</>
+    ),
+};
+
 function Passage({ text }: { text: string }) {
   return (
-    <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.8rem", lineHeight: 1.5 }}>
-      {plainText(text)}
-    </Typography>
+    <Box sx={{ fontSize: "0.8rem", lineHeight: 1.5, color: "text.secondary", overflowWrap: "anywhere" }}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={passageComponents}>
+        {text}
+      </ReactMarkdown>
+    </Box>
   );
 }
 
@@ -47,7 +71,11 @@ export default function ConceptResultCard({ group, index = 0 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const { concept, hits } = group;
   const [best, ...more] = hits;
-  const datasetUrl = concept.type === "document" ? documentDataset(concept.id) : null;
+  const datasetId = concept.type === "document" ? documentDataset(concept.id) : null;
+  // The search API doesn't return a document's dataset title; use it when the dataset is among the results.
+  const datasetTitle = useSearchStore(
+    (s) => s.results.find((h) => h.concept.id === `datasets/${datasetId}`)?.concept.title,
+  );
   const facts = [
     concept.published && `Published ${concept.published}`,
     concept.citations ? `${concept.citations} citation${concept.citations === 1 ? "" : "s"}` : null,
@@ -69,10 +97,11 @@ export default function ConceptResultCard({ group, index = 0 }: Props) {
                   concept.title
                 )}
               </Typography>
-              {datasetUrl && (
-                <Typography variant="body2" sx={{ fontSize: "0.72rem" }}>
-                  <Link href={datasetUrl} target="_blank" rel="noopener noreferrer" underline="hover" color="text.secondary">
-                    Supporting document of this dataset
+              {datasetId && (
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.72rem" }}>
+                  Supporting document of{" "}
+                  <Link href={CATALOGUE + datasetId} target="_blank" rel="noopener noreferrer" underline="hover" color="text.secondary">
+                    {datasetTitle ?? `dataset ${datasetId}`}
                   </Link>
                 </Typography>
               )}

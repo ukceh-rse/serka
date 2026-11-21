@@ -211,21 +211,14 @@ describe('reduceRun', () => {
   })
 })
 
-// ─── Retry notice ─────────────────────────────────────────────────────────────
+// ─── Progress during a retry ──────────────────────────────────────────────────
 
-describe('retry notice', () => {
-  it('shows on the next stage and clears one stage later', () => {
+describe('progress during a retry', () => {
+  it('shows only the stage, never the evaluation feedback', () => {
     const afterFail = replay(INSIGHT_RETRY.slice(0, INSIGHT_RETRY.findIndex((e) => e.type === 'CUSTOM' && e.name === 'serka.evaluation') + 1))
-    expect(progressText(afterFail)).toBe("Attempt 1 didn't pass: Missing date ranges, retrying")
-    const nextStage = atStep(INSIGHT_RETRY, 'synthesize', 2)
-    expect(progressText(nextStage)).toBe("Attempt 1 didn't pass: Missing date ranges, retrying")
-    const oneLater = atStep(INSIGHT_RETRY, 'evaluate', 2)
-    expect(progressText(oneLater)).toBe('Checking the answer (attempt 2 of 2)')
-  })
-
-  it('is not set when no attempts remain', () => {
-    const events = [...step('evaluate', 2, 2, 'haiku', [evaluation(2, false, 2, 'data', 'Still missing.')], false)]
-    expect(progressText(replay(events))).toBe('Checking the answer (attempt 2 of 2)')
+    expect(progressText(afterFail)).toBe('Checking the answer (attempt 1 of 2)')
+    expect(progressText(atStep(INSIGHT_RETRY, 'synthesize', 2))).toBe('Writing the answer (attempt 2 of 2)')
+    expect(progressText(atStep(INSIGHT_RETRY, 'evaluate', 2))).toBe('Checking the answer (attempt 2 of 2)')
   })
 })
 

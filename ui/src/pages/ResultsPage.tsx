@@ -63,7 +63,7 @@ export default function ResultsPage() {
     aiSummary,
     aiRun,
     setAiSummaryEnabled,
-    appendAiSummary,
+    setAiSummary,
     startAiRun,
     applyAiEvent,
     resetAiSummary,
@@ -88,14 +88,18 @@ export default function ResultsPage() {
     startAiRun();
     // Once aborted, this call's run has been superseded or abandoned: leave the store alone.
     const live = () => !controller.signal.aborted;
+    // Text is held back until the run finishes: a keyword answer streams as a draft that
+    // evaluation may still reject. Only the last message is the answer.
+    let answer = "";
     try {
       await streamSummary(
         queryStr,
         (event) => {
           if (!live()) return;
           applyAiEvent(event);
-          if (event.type === "TEXT_MESSAGE_CONTENT" && event.delta)
-            appendAiSummary(event.delta);
+          if (event.type === "TEXT_MESSAGE_START") answer = "";
+          if (event.type === "TEXT_MESSAGE_CONTENT" && event.delta) answer += event.delta;
+          if (event.type === "RUN_FINISHED") setAiSummary(answer);
         },
         controller.signal,
       );
