@@ -196,6 +196,8 @@ override.tf.json
 .terraformrc
 terraform.rc
 .terraform.lock.hcl
+# Redis snapshots uploaded by infra/
+*.rdb
 
 # Exclude all .tfplan files
 *.tfplan

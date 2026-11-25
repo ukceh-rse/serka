@@ -4,7 +4,7 @@ Serka (serĉi ekologio) is a prototype search tool for the UKCEH NCUK project. I
 It is built with [FastAPI](https://fastapi.tiangolo.com/), [Redis](https://redis.io/) (full-text and vector search), [Haystack](https://haystack.deepset.ai/), and [Pydantic AI](https://ai.pydantic.dev/), using Amazon Bedrock for LLM and embedding models. The catalogue is kept as an Open Knowledge Format (OKF) bundle of linked markdown files, which Redis indexes.
 
 ## AWS Deployment
-For AWS deployment instructions see [`terraform/README.md`](terraform/README.md).
+For AWS deployment instructions see [`infra/README.md`](infra/README.md).
 
 ## Running with Docker
 
