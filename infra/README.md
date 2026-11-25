@@ -58,7 +58,13 @@ connect_ip = "<CIDR allowed to reach the UI, e.g. 203.0.113.4/32>"
 vpc_id     = "<VPC_ID>"
 subnet_id  = "<SUBNET_ID>"
 # Optional
-# git_ref  = "main"
+# git_ref                = "main"
+# ssm_security_group_ids = ["<SG_ID>"]
+```
+If the VPC reaches Session Manager through VPC endpoints whose security group only allows listed groups, set `ssm_security_group_ids` to one of those groups so the instance can register with SSM. Find them with:
+```
+aws ec2 describe-vpc-endpoints --filters Name=vpc-id,Values=<VPC_ID> Name=service-name,Values=com.amazonaws.eu-west-2.ssm --query 'VpcEndpoints[].Groups[].GroupId'
+aws ec2 describe-security-groups --group-ids <ENDPOINT_SG_ID> --query 'SecurityGroups[].IpPermissions[].UserIdGroupPairs[].GroupId'
 ```
 
 ## Deploy
@@ -78,7 +84,7 @@ terraform apply -var deployment=test -replace=aws_instance.app_server
 ```
 
 ## Connect
-Open a shell with [Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-debian-and-ubuntu.html):
+Open a shell with [Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-debian-and-ubuntu.html). The instance registers with SSM a few minutes after boot; if it never appears in `aws ssm describe-instance-information`, check `ssm_security_group_ids`:
 ```
 aws ssm start-session --target <instance_id>
 ```

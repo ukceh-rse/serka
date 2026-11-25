@@ -117,7 +117,7 @@ resource "aws_instance" "app_server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = local.settings.instance_type
   subnet_id              = var.subnet_id
-  vpc_security_group_ids = [aws_security_group.app.id]
+  vpc_security_group_ids = concat([aws_security_group.app.id], var.ssm_security_group_ids)
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
 
   root_block_device {

@@ -28,3 +28,9 @@ variable "git_ref" {
   type        = string
   default     = "main"
 }
+
+variable "ssm_security_group_ids" {
+  description = "Existing security groups to attach so the instance can reach the VPC's SSM endpoints, when those endpoints only allow listed groups"
+  type        = list(string)
+  default     = []
+}
